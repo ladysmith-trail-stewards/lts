@@ -57,10 +57,14 @@
   <section class="bg-green-100 py-16 px-4 md:px-0">
     <div class="container mx-auto max-w-xl">
       <h2 class="text-2xl font-bold mb-4">Contact Us</h2>
-      <form action="mailto:info@ladysmithtrailstewards.com" method="POST" enctype="text/plain" class="space-y-4">
-        <input type="text" name="name" placeholder="Your Name" required class="w-full border border-gray-300 p-2 rounded" />
-        <input type="email" name="email" placeholder="Your Email" required class="w-full border border-gray-300 p-2 rounded" />
-        <textarea name="message" placeholder="Your Message" required rows="4" class="w-full border border-gray-300 p-2 rounded"></textarea>
+      <form
+        action="https://formspree.io/f/mvgrpqrz"
+        method="POST"
+        class="space-y-4"
+      >
+        <input placeholder="Your Email" type="email" name="email" class="w-full border border-gray-300 p-2 rounded">
+        <textarea placeholder="Your Message" name="message" class="w-full border border-gray-300 p-2 rounded"></textarea>
+        <!-- your other form fields go here -->
         <button type="submit" class="bg-green-700 text-white px-4 py-2 rounded hover:bg-green-800">Send</button>
       </form>
     </div>
