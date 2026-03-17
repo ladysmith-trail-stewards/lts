@@ -2,12 +2,14 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/figtree";
+@plugin "@tailwindcss/typography";
 
 @custom-variant dark (&:is(.dark *));
 
 @layer base {
   html {
     height: 100%;
+    overflow-y: scroll;
     @apply font-sans;
   }
 
@@ -135,4 +137,13 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+
+  /* Pacific Northwest / Arbutus palette */
+  --color-pnw-madrone-bark:   #8B3E2F;
+  --color-pnw-arbutus-copper: #BF6A4F;
+  --color-pnw-salish-sea:     #005F6A;
+  --color-pnw-oyster-shell:   #EAE3D9;
+  --color-pnw-forest-shadow:  #2C4C3E;
+  --color-pnw-pacific-mist:   #9DBBB0;
+  --color-pnw-storm-slate:    #1E2D3D;
 }

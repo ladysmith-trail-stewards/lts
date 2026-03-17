@@ -11,10 +11,10 @@ function App() {
   const isMapPage = location.pathname === '/map';
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50 text-gray-900">
-      <Header />
-      <main className="flex-1 overflow-y-auto">
-        <div className="flex flex-col min-h-full">
+    <div className="flex flex-col min-h-screen bg-gray-50 text-gray-900">
+      <main className="flex-1 flex flex-col">
+        <Header />
+        <div className="flex flex-col flex-1">
           <div className="flex-1">
             <Routes>
               <Route path="/" element={<HomePage />} />

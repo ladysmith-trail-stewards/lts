@@ -8,7 +8,7 @@ import {
 
 function Mission() {
   return (
-    <section className="py-12 px-4 md:px-0 bg-gray-50">
+    <section className="px-4 md:px-0 bg-gray-50">
       <div className="container mx-auto max-w-6xl">
         <Card className="shadow-sm border-slate-200">
           <CardHeader className="text-center">

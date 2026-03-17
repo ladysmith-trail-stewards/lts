@@ -18,6 +18,12 @@ const buttonVariants = cva(
         destructive:
           "bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40",
         link: "text-primary underline-offset-4 hover:underline",
+        "madrone-bark": "bg-pnw-madrone-bark text-pnw-oyster-shell hover:bg-[#7a3628] focus-visible:ring-pnw-madrone-bark/50",
+        "forest-shadow": "bg-pnw-forest-shadow text-pnw-oyster-shell hover:bg-[#223d31] focus-visible:ring-pnw-forest-shadow/50",
+        "arbutus-copper": "bg-pnw-arbutus-copper text-pnw-oyster-shell hover:bg-[#a85c42] focus-visible:ring-pnw-arbutus-copper/50",
+        "salish-sea": "bg-pnw-salish-sea text-pnw-oyster-shell hover:bg-[#004d57] focus-visible:ring-pnw-salish-sea/50",
+        "barnacle": "bg-pnw-barnacle text-pnw-oyster-shell hover:bg-[#4d5356] focus-visible:ring-pnw-barnacle/50",
+        "storm-slate": "bg-pnw-storm-slate text-pnw-oyster-shell hover:bg-[#162333] focus-visible:ring-pnw-storm-slate/50",
       },
       size: {
         default:

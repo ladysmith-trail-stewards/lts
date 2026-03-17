@@ -3,7 +3,7 @@ import { Input } from '@/components/ui/input';
 
 export default function Contact() {
   return (
-    <section id="newsletter" className="py-12 bg-gray-50">
+    <section id="newsletter" className="bg-gray-50">
       <div className="container mx-auto px-4">
         <div className="max-w-2xl mx-auto text-center">
           <h2 className="text-3xl font-bold text-slate-800 mb-4">

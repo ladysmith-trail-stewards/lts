@@ -23,7 +23,7 @@ function Gallery() {
   ];
 
   return (
-    <section className="bg-white py-4">
+    <section className="bg-white">
       <div className="container mx-auto px-4">
         <div className="max-w-6xl mx-auto">
           <Carousel className="w-full" opts={{

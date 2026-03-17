@@ -1,6 +1,6 @@
 export default function Charter() {
   return (
-    <main className="container mx-auto px-4 py-16 max-w-3xl">
+    <main className="container mx-auto px-4 py-8 max-w-3xl">
       <h1 className="text-3xl font-bold mb-6 text-slate-800">Charter of the Ladysmith Trail Stewards</h1>
 
       <section className="mb-6">
