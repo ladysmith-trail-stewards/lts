@@ -1,93 +1,14 @@
-<!DOCTYPE html>
-<html lang="en" class="h-full">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Ladysmith Trail Stewards</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    body { font-family: sans-serif; }
-  </style>
-  <!-- MailerLite Universal -->
-  <script>
-      (function(w,d,e,u,f,l,n){w[f]=w[f]||function(){(w[f].q=w[f].q||[])
-      .push(arguments);},l=d.createElement(e),l.async=1,l.src=u,
-      n=d.getElementsByTagName(e)[0],n.parentNode.insertBefore(l,n);})
-      (window,document,'script','https://assets.mailerlite.com/js/universal.js','ml');
-      ml('account', '1525555');
-  </script>
-  <!-- End MailerLite Universal -->
-</head>
-<body class="flex flex-col min-h-full bg-green-50 text-gray-900">
-  <!-- Navigation -->
-  <header class="bg-green-700 text-white shadow">
-    <div class="container mx-auto flex justify-between items-center p-4">
-      <div class="flex items-center space-x-2">
-        <img src="images/logo.jpg" alt="Ladysmith Logo" class="h-10 w-auto" />
-        <span class="text-xl font-bold">Ladysmith Trail Stewards</span>
-      </div>
-      <nav>
-        <a href="charter.html" class="hover:underline">Charter</a>
-      </nav>
-    </div>
-  </header>
-
-  <!-- Hero -->
-  <section class="bg-green-800 text-white py-20 text-center">
-    <div class="container mx-auto">
-      <h1 class="text-4xl font-bold mb-4">Ladysmith Trail Stewards</h1>
-      <p class="text-xl">Planning for sustainable trail system in Ladysmith, BC</p>
-    </div>
-  </section>
-
-  <!-- Mission Section -->
-  <section class="py-16 px-4 md:px-0">
-    <div class="container mx-auto max-w-3xl">
-      <h2 class="text-2xl font-bold mb-4">Our Mission</h2>
-      <p class="text-lg text-gray-700 mb-8">
-        Ladysmith Trail Stewards is a volunteer-driven organization committed to planning, maintaining, and advocating for sustainable, inclusive, and enjoyable trail experiences in and around Ladysmith, BC. We collaborate with the town and local community to ensure our trails support recreation, conservation, and economic development.
-      </p>
-      <p class="text-lg text-gray-700">
-        We welcome new members! To get involved and find out about events, please use the contact form below, or join the <a class="text-[green] underline" href="https://www.facebook.com/groups/762166175047717">Ladysmith Trail Stewards Facebook Group</a>.
-      </p>
-    </div>
-  </section>
-
-  <!-- Image Gallery -->
-  <section class="bg-white py-12">
-    <div class="container mx-auto px-4 grid grid-cols-1 sm:grid-cols-1 md:grid-cols-3 gap-4">
-      <img src="images/forest-1.jpg" alt="Forest scene 1" class="rounded shadow" />
-      <img src="images/tools-1.jpg" alt="Trailbuilding tools" class="rounded shadow" />
-      <img src="images/forest-3.jpg" alt="Forest scene 3" class="rounded shadow" />
-    </div>
-  </section>
-
-  <section class="bg-green-100 py-12">
-    <div class="container mx-auto max-w-xl">
-      <div class="ml-embedded" data-form="yAGWse"></div>
-    </div>
-  </section>
-  
-  <!-- Contact Form -->
-  <section class="bg-green-100 py-16 px-4 md:px-0">
-    <div class="container mx-auto max-w-xl">
-      <h2 class="text-2xl font-bold mb-4">Contact Us</h2>
-      <form
-        action="https://formspree.io/f/mvgrpqrz"
-        method="POST"
-        class="space-y-4"
-      >
-        <input placeholder="Your Email" type="email" name="email" class="w-full border border-gray-300 p-2 rounded">
-        <textarea placeholder="Your Message" name="message" class="w-full border border-gray-300 p-2 rounded"></textarea>
-        <!-- your other form fields go here -->
-        <button type="submit" class="bg-green-700 text-white px-4 py-2 rounded hover:bg-green-800">Send</button>
-      </form>
-    </div>
-  </section>
-
-  <!-- Footer -->
-  <footer class="bg-green-700 text-white py-4 text-center mt-auto">
-    <p>&copy; 2025 Ladysmith Trail Stewards. All rights reserved.</p>
-  </footer>
-</body>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/jpeg" href="/images/logo.jpg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ladysmith Trail Stewards - Trail Planner</title>
+    <meta name="description" content="Trail planning application for Ladysmith Trail Stewards organization in Ladysmith, BC, Canada" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
 </html>
