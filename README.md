@@ -1,4 +1,4 @@
-# Camp Six Collective
+# Ladysmith Trail Stewards
 
 Ladysmith Trail Stewards organization in Ladysmith, BC, Canada Web page.
 
@@ -8,4 +8,4 @@ For questions about this website or the Ladysmith Trail Stewards organization, p
 
 ---
 
-© 2026 Camp Six Collective. All rights reserved.
+© 2026 Ladysmith Trail Stewards. All rights reserved.
