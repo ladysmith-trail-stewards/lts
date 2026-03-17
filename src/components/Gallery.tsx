@@ -1,22 +1,51 @@
+import {
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  CarouselNext,
+  CarouselPrevious,
+} from '@/components/ui/carousel';
+
 function Gallery() {
+  const images = [
+    {
+      src: '/images/forest-1.jpg',
+      alt: 'Forest scene 1',
+    },
+    {
+      src: '/images/tools-1.jpg',
+      alt: 'Trailbuilding tools',
+    },
+    {
+      src: '/images/forest-3.jpg',
+      alt: 'Forest scene 3',
+    },
+  ];
+
   return (
-    <section className="bg-white py-12">
-      <div className="container mx-auto px-4 grid grid-cols-1 sm:grid-cols-1 md:grid-cols-3 gap-4">
-        <img
-          src="/images/forest-1.jpg"
-          alt="Forest scene 1"
-          className="rounded shadow"
-        />
-        <img
-          src="/images/tools-1.jpg"
-          alt="Trailbuilding tools"
-          className="rounded shadow"
-        />
-        <img
-          src="/images/forest-3.jpg"
-          alt="Forest scene 3"
-          className="rounded shadow"
-        />
+    <section className="bg-white py-4">
+      <div className="container mx-auto px-4">
+        <div className="max-w-4xl mx-auto">
+          <Carousel className="w-full">
+            <CarouselContent>
+              {images.map((image, index) => (
+                <CarouselItem key={index}>
+                  <div className="p-1">
+                    <div className="relative">
+                      <img
+                        src={image.src}
+                        alt={image.alt}
+                        className="w-full h-96 object-cover rounded-lg shadow-lg"
+                      />
+                    </div>
+                  </div>
+                </CarouselItem>
+              ))}
+            </CarouselContent>
+            <CarouselPrevious />
+            <CarouselNext />
+          </Carousel>
+        </div>
       </div>
     </section>
   );

@@ -1,9 +1,8 @@
 function Hero() {
   return (
-    <section className="bg-green-800 text-white py-20 text-center">
+    <section className="bg-slate-700 text-white py-6 text-center">
       <div className="container mx-auto">
-        <h1 className="text-4xl font-bold mb-4">Ladysmith Trail Stewards</h1>
-        <p className="text-xl">
+        <p className="text-lg font-light">
           Planning for sustainable trail system in Ladysmith, BC
         </p>
       </div>

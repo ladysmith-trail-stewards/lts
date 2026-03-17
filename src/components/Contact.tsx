@@ -1,55 +1,52 @@
-function Contact() {
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    // Form will be handled by Formspree
-    const form = e.target as HTMLFormElement;
-    form.submit();
-  };
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 
+export default function Contact() {
   return (
-    <>
-      {/* MailerLite Section */}
-      <section className="bg-green-100 py-12">
-        <div className="container mx-auto max-w-xl">
-          <div className="ml-embedded" data-form="yAGWse"></div>
-        </div>
-      </section>
-
-      {/* Contact Form */}
-      <section className="bg-green-100 py-16 px-4 md:px-0">
-        <div className="container mx-auto max-w-xl">
-          <h2 className="text-2xl font-bold mb-4">Contact Us</h2>
-          <form
-            action="https://formspree.io/f/mvgrpqrz"
-            method="POST"
+    <section id="newsletter" className="py-12 bg-gray-50">
+      <div className="container mx-auto px-4">
+        <div className="max-w-2xl mx-auto text-center">
+          <h2 className="text-3xl font-bold text-slate-800 mb-4">
+            Stay Connected
+          </h2>
+          <p className="text-slate-600 mb-8">
+            Get updates on trail conditions, volunteer opportunities, and community events
+          </p>
+          
+          <form 
+            action="https://assets.mailerlite.com/jsonp/946503/forms/152081781058893003/subscribe"
+            method="post"
             className="space-y-4"
-            onSubmit={handleSubmit}
           >
-            <input
-              placeholder="Your Email"
-              type="email"
-              name="email"
-              required
-              className="w-full border border-gray-300 p-2 rounded"
-            />
-            <textarea
-              placeholder="Your Message"
-              name="message"
-              required
-              rows={4}
-              className="w-full border border-gray-300 p-2 rounded"
-            />
-            <button
-              type="submit"
-              className="bg-green-700 text-white px-4 py-2 rounded hover:bg-green-800 transition-colors"
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Input
+                  type="text"
+                  name="fields[name]"
+                  placeholder="Your name"
+                  className="border-slate-300 focus:border-blue-500 focus:ring-blue-500"
+                  required
+                />
+              </div>
+              <div>
+                <Input
+                  type="email"
+                  name="fields[email]"
+                  placeholder="your.email@example.com"
+                  className="border-slate-300 focus:border-blue-500 focus:ring-blue-500"
+                  required
+                />
+              </div>
+            </div>
+            <Button 
+              type="submit" 
+              className="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white px-8 py-3"
             >
-              Send
-            </button>
+              Subscribe to Newsletter
+            </Button>
           </form>
         </div>
-      </section>
-    </>
+      </div>
+    </section>
   );
 }
-
-export default Contact;
