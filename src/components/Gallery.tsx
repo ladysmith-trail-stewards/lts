@@ -25,8 +25,12 @@ function Gallery() {
   return (
     <section className="bg-white py-4">
       <div className="container mx-auto px-4">
-        <div className="max-w-4xl mx-auto">
-          <Carousel className="w-full">
+        <div className="max-w-6xl mx-auto">
+          <Carousel className="w-full" opts={{
+            align: "start",
+            loop: true,
+          }}>
+
             <CarouselContent>
               {images.map((image, index) => (
                 <CarouselItem key={index}>
@@ -35,7 +39,7 @@ function Gallery() {
                       <img
                         src={image.src}
                         alt={image.alt}
-                        className="w-full h-96 object-cover rounded-lg shadow-lg"
+                        className="w-full h-[500px] object-cover rounded-lg shadow-lg"
                       />
                     </div>
                   </div>

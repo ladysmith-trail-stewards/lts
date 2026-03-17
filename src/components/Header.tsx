@@ -15,22 +15,32 @@ function Header() {
             alt="Ladysmith Logo"
             className="h-10 w-auto"
           />
-          <span className="text-xl font-bold">Ladysmith Trail Stewards</span>
+          <Link to="/" className="text-xl font-bold hover:text-slate-200 transition-colors">
+            Ladysmith Trail Stewards
+          </Link>
         </div>
         <NavigationMenu>
-          <NavigationMenuList>
+          <NavigationMenuList className="gap-2">
             <NavigationMenuItem>
               <Link
                 to="/charter"
-                className="group inline-flex h-10 w-max items-center justify-center rounded-md bg-transparent px-4 py-2 text-sm font-medium transition-colors hover:bg-slate-600 hover:text-white focus:bg-slate-600 focus:text-white focus:outline-none disabled:pointer-events-none disabled:opacity-50"
+                className="inline-flex h-10 items-center justify-center rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-slate-600 focus:bg-slate-600 focus:outline-none border border-slate-600 hover:border-slate-500"
               >
                 Charter
               </Link>
             </NavigationMenuItem>
             <NavigationMenuItem>
               <Link
+                to="/map"
+                className="inline-flex h-10 items-center justify-center rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-slate-600 focus:bg-slate-600 focus:outline-none border border-slate-600 hover:border-slate-500"
+              >
+                Map
+              </Link>
+            </NavigationMenuItem>
+            <NavigationMenuItem>
+              <Link
                 to="/contact"
-                className="group inline-flex h-10 w-max items-center justify-center rounded-md bg-transparent px-4 py-2 text-sm font-medium transition-colors hover:bg-slate-600 hover:text-white focus:bg-slate-600 focus:text-white focus:outline-none disabled:pointer-events-none disabled:opacity-50"
+                className="inline-flex h-10 items-center justify-center rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-slate-600 focus:bg-slate-600 focus:outline-none border border-slate-600 hover:border-slate-500"
               >
                 Contact
               </Link>
