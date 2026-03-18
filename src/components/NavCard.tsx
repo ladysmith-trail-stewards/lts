@@ -12,12 +12,12 @@ export interface NavCardProps extends VariantProps<typeof buttonVariants> {
 
 export default function NavCard({ title, description, to, label, variant, size }: NavCardProps) {
   return (
-    <Card className="border-slate-200 hover:shadow-lg transition-shadow">
-      <CardHeader>
-        <CardTitle className="text-xl text-slate-800">{title}</CardTitle>
+    <Card className="hover:shadow-lg transition-shadow flex flex-col h-full">
+      <CardHeader className="flex-1">
+        <CardTitle className="text-lg">{title}</CardTitle>
         <CardDescription>{description}</CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="mt-auto">
         <Link to={to} className={buttonVariants({ variant, size, className: 'w-full' })}>
           {label}
         </Link>

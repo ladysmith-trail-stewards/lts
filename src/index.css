@@ -1,7 +1,7 @@
 @import 'tailwindcss';
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/figtree";
+@import "@fontsource-variable/cabin";
 @plugin "@tailwindcss/typography";
 
 @custom-variant dark (&:is(.dark *));
@@ -10,11 +10,12 @@
   html {
     height: 100%;
     overflow-y: scroll;
+    font-size: 16px;
     @apply font-sans;
   }
 
   body {
-    font-family: sans-serif;
+    font-family: 'Cabin Variable', sans-serif;
     height: 100%;
     margin: 0;
     @apply bg-background text-foreground;
@@ -98,7 +99,7 @@
 }
 
 @theme inline {
-  --font-sans: 'Figtree Variable', sans-serif;
+  --font-sans: 'Cabin Variable', sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);

@@ -23,8 +23,8 @@ function HeaderMenu() {
     <NavigationMenu.Root className="relative" delay={0} closeDelay={150}>
       <NavigationMenu.List className="flex">
         <NavigationMenu.Item>
-          <NavigationMenu.Trigger className="w-12 h-12 rounded-full bg-slate-700 hover:bg-slate-600 border border-slate-600 hover:border-slate-500 flex items-center justify-center text-white shadow-lg transition-colors">
-            <Menu size={20} />
+          <NavigationMenu.Trigger className="w-9 h-9 rounded-full bg-slate-700 hover:bg-slate-600 border border-slate-600 hover:border-slate-500 flex items-center justify-center text-white shadow-lg transition-colors">
+            <Menu size={16} />
           </NavigationMenu.Trigger>
           <NavigationMenu.Content>
             {menuRoutes.map(({ to, title, description, icon: Icon }) => {
@@ -78,8 +78,8 @@ function HeaderMenu() {
 function Header() {
   return (
     <div className="sticky top-0 z-50 w-full bg-slate-800/85 backdrop-blur-sm shadow-lg">
-      <div className="flex items-center justify-between px-6 h-16 text-white">
-        <Link to="/" className="text-xl font-bold hover:text-slate-200 transition-colors whitespace-nowrap">
+      <div className="flex items-center justify-between px-4 h-16 text-white">
+        <Link to="/" className="text-2xl font-bold hover:text-slate-200 transition-colors whitespace-nowrap">
           Ladysmith Trail Stewards
         </Link>
         <HeaderMenu />

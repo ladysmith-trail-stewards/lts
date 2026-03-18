@@ -14,20 +14,27 @@ export default function ContactPage() {
   return (
     <section className="py-16 bg-gray-50">
       <div className="container mx-auto px-4">
-        <Card className="max-w-2xl mx-auto border-slate-200">
+        <Card className="max-w-2xl mx-auto">
           <CardHeader className="text-center">
-            <CardTitle className="text-3xl font-bold text-slate-800">
-              Get In Touch
-            </CardTitle>
-            <CardDescription className="text-slate-600">
-              Have questions, ideas, or want to get involved? We'd love to hear from you!
+            <CardTitle>Get In Touch</CardTitle>
+            <CardDescription>
+              We welcome new members! To get involved and find out about events, send us a message below or join the{' '}
+              <a
+                className="text-blue-600 hover:text-blue-800 underline font-medium transition-colors"
+                href="https://www.facebook.com/groups/762166175047717"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Ladysmith Trail Stewards Facebook Group
+              </a>
+              .
             </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label htmlFor="contact-name" className="block text-sm font-medium text-slate-700 mb-1">
+                  <label htmlFor="contact-name" className="block text-sm font-medium text-muted-foreground mb-1">
                     Name *
                   </label>
                   <Input
@@ -35,12 +42,13 @@ export default function ContactPage() {
                     id="contact-name"
                     name="name"
                     placeholder="Your full name"
-                    className="border-slate-300 focus:border-blue-500 focus:ring-blue-500"
+
+
                     required
                   />
                 </div>
                 <div>
-                  <label htmlFor="contact-email" className="block text-sm font-medium text-slate-700 mb-1">
+                  <label htmlFor="contact-email" className="block text-sm font-medium text-muted-foreground mb-1">
                     Email *
                   </label>
                   <Input
@@ -48,14 +56,15 @@ export default function ContactPage() {
                     id="contact-email"
                     name="email"
                     placeholder="your.email@example.com"
-                    className="border-slate-300 focus:border-blue-500 focus:ring-blue-500"
+
+
                     required
                   />
                 </div>
               </div>
 
               <div>
-                <label htmlFor="contact-subject" className="block text-sm font-medium text-slate-700 mb-1">
+                <label htmlFor="contact-subject" className="block text-sm font-medium text-muted-foreground mb-1">
                   Subject
                 </label>
                 <Input
@@ -68,7 +77,7 @@ export default function ContactPage() {
               </div>
 
               <div>
-                <label htmlFor="contact-message" className="block text-sm font-medium text-slate-700 mb-1">
+                <label htmlFor="contact-message" className="block text-sm font-medium text-muted-foreground mb-1">
                   Message *
                 </label>
                 <Textarea
@@ -81,17 +90,17 @@ export default function ContactPage() {
                 />
               </div>
 
-              <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700">
+              <Button type="submit" variant="salish-sea" className="w-full">
                 Send Message
               </Button>
             </form>
 
             <div className="mt-8 pt-8 border-t border-slate-200">
               <div className="text-center space-y-2">
-                <p className="text-slate-600">
+                <p className="text-muted-foreground">
                   <strong>Email:</strong> info@ladysmithtrailstewards.org
                 </p>
-                <p className="text-slate-600">
+                <p className="text-muted-foreground">
                   <strong>Facebook:</strong>{" "}
                   <a 
                     href="https://www.facebook.com/groups/762166175047717"

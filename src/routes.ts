@@ -46,7 +46,7 @@ export const routes: RouteConfig[] = [
   },
   {
     to: '/contact',
-    title: 'Get Involved',
+    title: 'Contact Us',
     description: 'Contact us to volunteer, share ideas, or learn about upcoming trail projects',
     icon: Users,
     includeInMenu: true,

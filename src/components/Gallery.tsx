@@ -23,35 +23,26 @@ function Gallery() {
   ];
 
   return (
-    <section className="bg-white">
-      <div className="container mx-auto px-4">
-        <div className="max-w-6xl mx-auto">
-          <Carousel className="w-full" opts={{
-            align: "start",
-            loop: true,
-          }}>
-
-            <CarouselContent>
-              {images.map((image, index) => (
-                <CarouselItem key={index}>
-                  <div className="p-1">
-                    <div className="relative">
-                      <img
-                        src={image.src}
-                        alt={image.alt}
-                        className="w-full h-[500px] object-cover rounded-lg shadow-lg"
-                      />
-                    </div>
-                  </div>
-                </CarouselItem>
-              ))}
-            </CarouselContent>
-            <CarouselPrevious />
-            <CarouselNext />
-          </Carousel>
-        </div>
-      </div>
-    </section>
+    <Carousel className="w-full rounded-lg shadow-lg py-16 px-4 bg-card" opts={{
+      align: "start",
+      loop: true,
+    }}>
+      <CarouselContent>
+        {images.map((image, index) => (
+          <CarouselItem key={index}>
+            <div className="p-1">
+              <img
+                src={image.src}
+                alt={image.alt}
+                className="w-full max-h-[800px] object-contain rounded-lg"
+              />
+            </div>
+          </CarouselItem>
+        ))}
+      </CarouselContent>
+      <CarouselPrevious className="left-4" />
+      <CarouselNext className="right-4" />
+    </Carousel>
   );
 }
 
