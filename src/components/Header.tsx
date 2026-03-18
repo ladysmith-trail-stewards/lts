@@ -11,7 +11,11 @@ function RouterLink(props: NavigationMenu.Link.Props & { to: string }) {
   return (
     <NavigationMenuLink
       render={<a href={to} />}
-      onClick={(e) => { e.preventDefault(); navigate(to); }}
+      onClick={(e) => {
+        if (e.button !== 0 || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+        e.preventDefault();
+        navigate(to);
+      }}
       closeOnClick
       {...rest}
     />

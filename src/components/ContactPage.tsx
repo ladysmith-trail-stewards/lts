@@ -1,15 +1,34 @@
+import { useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
+const FORMSPREE_ENDPOINT = import.meta.env.VITE_FORMSPREE_ENDPOINT as string | undefined;
+
 export default function ContactPage() {
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
-    // Form will be handled by Formspree
-    const form = e.target as HTMLFormElement
-    form.submit()
-  }
+  const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle');
+
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!FORMSPREE_ENDPOINT) return;
+    const form = e.target as HTMLFormElement;
+    try {
+      const response = await fetch(FORMSPREE_ENDPOINT, {
+        method: 'POST',
+        body: new FormData(form),
+        headers: { Accept: 'application/json' },
+      });
+      if (response.ok) {
+        form.reset();
+        setStatus('success');
+      } else {
+        setStatus('error');
+      }
+    } catch {
+      setStatus('error');
+    }
+  };
 
   return (
     <section className="py-16 bg-gray-50">
@@ -93,6 +112,17 @@ export default function ContactPage() {
               <Button type="submit" variant="salish-sea" className="w-full">
                 Send Message
               </Button>
+
+              {status === 'success' && (
+                <p className="text-sm text-green-600 text-center">
+                  Message sent successfully! We'll be in touch soon.
+                </p>
+              )}
+              {status === 'error' && (
+                <p className="text-sm text-red-600 text-center">
+                  Something went wrong. Please try again or contact us directly.
+                </p>
+              )}
             </form>
 
             <div className="mt-8 pt-8 border-t border-slate-200">
