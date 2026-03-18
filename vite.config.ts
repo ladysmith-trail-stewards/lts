@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig } from 'vitest/config'
 import react, { reactCompilerPreset } from '@vitejs/plugin-react'
 import babel from '@rolldown/plugin-babel'
 import tailwindcss from '@tailwindcss/vite'
@@ -15,5 +15,27 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src'),
     },
+  },
+  // Load .env so VITE_* vars are available in tests
+  envDir: '.',
+  test: {
+    globals: true,
+    projects: [
+      {
+        test: {
+          name: 'unit',
+          environment: 'node',
+          include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+          exclude: ['src/**/*.integration.test.ts'],
+        },
+      },
+      {
+        test: {
+          name: 'integration',
+          environment: 'node',
+          include: ['src/**/*.integration.test.ts'],
+        },
+      },
+    ],
   },
 })

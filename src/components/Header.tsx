@@ -1,9 +1,12 @@
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Menu } from 'lucide-react';
+import { LogIn, Menu, User } from 'lucide-react';
 import { NavigationMenu } from '@base-ui/react/navigation-menu';
 import { Tooltip } from '@base-ui/react/tooltip';
 import { NavigationMenuLink } from '@/components/ui/navigation-menu';
 import { menuRoutes } from '@/routes';
+import { supabase } from '@/lib/supa-client';
+import type { User as SupabaseUser } from '@supabase/supabase-js';
 
 function RouterLink(props: NavigationMenu.Link.Props & { to: string }) {
   const navigate = useNavigate();
@@ -19,6 +22,23 @@ function RouterLink(props: NavigationMenu.Link.Props & { to: string }) {
 }
 
 function HeaderMenu() {
+  const [user, setUser] = useState<SupabaseUser | null>(null)
+  const [isAdmin, setIsAdmin] = useState(false)
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setUser(data.user ?? null))
+    supabase.rpc('is_admin').then(({ data }) => setIsAdmin(data === true))
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null)
+      supabase.rpc('is_admin').then(({ data }) => setIsAdmin(data === true))
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
+
+  const visibleRoutes = menuRoutes.filter((r) => r.access !== 'ADMIN' || isAdmin)
+
   return (
     <NavigationMenu.Root className="relative" delay={0} closeDelay={150}>
       <NavigationMenu.List className="flex">
@@ -27,8 +47,20 @@ function HeaderMenu() {
             <Menu size={16} />
           </NavigationMenu.Trigger>
           <NavigationMenu.Content>
-            {menuRoutes.map(({ to, title, description, icon: Icon }) => {
-              const linkContent = (
+            {visibleRoutes.map(({ to, title, description, icon: Icon, access }) => {
+              const disabled = access === 'USER' && !user
+
+              const linkContent = disabled ? (
+                <div
+                  key={to}
+                  className="flex flex-row items-center gap-3 rounded-lg px-3 py-2.5 w-full cursor-not-allowed opacity-40"
+                >
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-400">
+                    <Icon size={16} />
+                  </div>
+                  <span className="text-base text-slate-400">{title}</span>
+                </div>
+              ) : (
                 <RouterLink
                   key={to}
                   to={to}
@@ -75,6 +107,44 @@ function HeaderMenu() {
   );
 }
 
+function HeaderUser() {
+  const [user, setUser] = useState<SupabaseUser | null>(null)
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setUser(data.user))
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null)
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
+
+  if (!user) {
+    return (
+      <Link
+        to="/login"
+        className="flex items-center gap-1.5 rounded-full bg-slate-700 hover:bg-slate-600 border border-slate-600 hover:border-slate-500 px-3 h-9 text-sm text-white transition-colors"
+      >
+        <LogIn size={14} />
+        <span>Login</span>
+      </Link>
+    )
+  }
+
+  return (
+    <Link
+      to="/protected"
+      className="flex items-center gap-2 rounded-full bg-slate-700 hover:bg-slate-600 border border-slate-600 hover:border-slate-500 pl-1 pr-3 h-9 text-sm text-white transition-colors"
+    >
+      <div className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-500 text-white">
+        <User size={14} />
+      </div>
+      <span className="max-w-[120px] truncate">{user.user_metadata?.full_name || user.email?.split('@')[0]}</span>
+    </Link>
+  )
+}
+
 function Header() {
   return (
     <div className="sticky top-0 z-50 w-full bg-slate-800/85 backdrop-blur-sm shadow-lg">
@@ -82,7 +152,10 @@ function Header() {
         <Link to="/" className="text-2xl font-bold hover:text-slate-200 transition-colors whitespace-nowrap">
           Ladysmith Trail Stewards
         </Link>
-        <HeaderMenu />
+        <div className="flex items-center gap-2">
+          <HeaderUser />
+          <HeaderMenu />
+        </div>
       </div>
     </div>
   );

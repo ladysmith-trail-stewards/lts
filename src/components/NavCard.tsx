@@ -8,9 +8,10 @@ export interface NavCardProps extends VariantProps<typeof buttonVariants> {
   description: string;
   to: string;
   label: string;
+  disabled?: boolean;
 }
 
-export default function NavCard({ title, description, to, label, variant, size }: NavCardProps) {
+export default function NavCard({ title, description, to, label, variant, size, disabled }: NavCardProps) {
   return (
     <Card className="hover:shadow-lg transition-shadow flex flex-col h-full">
       <CardHeader className="flex-1">
@@ -18,9 +19,15 @@ export default function NavCard({ title, description, to, label, variant, size }
         <CardDescription>{description}</CardDescription>
       </CardHeader>
       <CardContent className="mt-auto">
-        <Link to={to} className={buttonVariants({ variant, size, className: 'w-full' })}>
-          {label}
-        </Link>
+        {disabled ? (
+          <span className={buttonVariants({ variant, size, className: 'w-full pointer-events-none opacity-40' })}>
+            {label}
+          </span>
+        ) : (
+          <Link to={to} className={buttonVariants({ variant, size, className: 'w-full' })}>
+            {label}
+          </Link>
+        )}
       </CardContent>
     </Card>
   );

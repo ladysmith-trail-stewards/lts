@@ -1,6 +1,8 @@
-import { Home, ScrollText, Map, Users, type LucideIcon } from 'lucide-react';
+import { Home, ScrollText, Map, Users, UserCog, type LucideIcon } from 'lucide-react';
 import { type VariantProps } from 'class-variance-authority';
 import { buttonVariants } from '@/components/ui/button';
+
+export type RouteAccess = 'PUBLIC' | 'USER' | 'ADMIN';
 
 export interface RouteConfig {
   to: string;
@@ -8,6 +10,7 @@ export interface RouteConfig {
   description: string | null;
   icon: LucideIcon;
   includeInMenu: boolean;
+  access: RouteAccess;
   linkProps?: {
     label: string;
     variant?: VariantProps<typeof buttonVariants>['variant'];
@@ -21,6 +24,7 @@ export const routes: RouteConfig[] = [
     description: null,
     icon: Home,
     includeInMenu: true,
+    access: 'PUBLIC',
   },
   {
     to: '/charter',
@@ -28,6 +32,7 @@ export const routes: RouteConfig[] = [
     description: 'Learn about our mission, governance, and activities for sustainable trail development',
     icon: ScrollText,
     includeInMenu: true,
+    access: 'PUBLIC',
     linkProps: {
       label: 'View Charter',
       variant: 'madrone-bark',
@@ -39,6 +44,7 @@ export const routes: RouteConfig[] = [
     description: 'Explore interactive maps of trails in the Ladysmith area with satellite and outdoor views',
     icon: Map,
     includeInMenu: true,
+    access: 'USER',
     linkProps: {
       label: 'Explore Maps',
       variant: 'forest-shadow',
@@ -50,10 +56,19 @@ export const routes: RouteConfig[] = [
     description: 'Contact us to volunteer, share ideas, or learn about upcoming trail projects',
     icon: Users,
     includeInMenu: true,
+    access: 'PUBLIC',
     linkProps: {
       label: 'Contact Us',
       variant: 'storm-slate',
     },
+  },
+  {
+    to: '/users',
+    title: 'Manage Users',
+    description: null,
+    icon: UserCog,
+    includeInMenu: true,
+    access: 'ADMIN',
   },
 ];
 
