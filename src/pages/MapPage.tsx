@@ -2,12 +2,15 @@ import { useEffect, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 
-// Set your Mapbox access token
-mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN || '';
+const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN as string | undefined;
+
+if (MAPBOX_TOKEN) {
+  mapboxgl.accessToken = MAPBOX_TOKEN;
+}
 
 const mapStyles = {
   outdoors: 'mapbox://styles/mapbox/outdoors-v12',
-  satellite: 'mapbox://styles/mapbox/satellite-streets-v12'
+  satellite: 'mapbox://styles/mapbox/satellite-streets-v12',
 };
 
 export default function MapPage() {
@@ -16,7 +19,7 @@ export default function MapPage() {
   const [currentStyle, setCurrentStyle] = useState<'outdoors' | 'satellite'>('outdoors');
 
   useEffect(() => {
-    if (!mapContainerRef.current) return;
+    if (!MAPBOX_TOKEN || !mapContainerRef.current) return;
 
     // Initialize map
     mapRef.current = new mapboxgl.Map({
@@ -39,10 +42,22 @@ export default function MapPage() {
 
   const handleStyleChange = (style: 'outdoors' | 'satellite') => {
     if (!mapRef.current) return;
-    
+
     mapRef.current.setStyle(mapStyles[style]);
     setCurrentStyle(style);
   };
+
+  if (!MAPBOX_TOKEN) {
+    return (
+      <div className="flex items-center justify-center h-96 text-center px-4">
+        <p className="text-muted-foreground">
+          Map requires a Mapbox access token. Set{' '}
+          <code className="font-mono bg-muted px-1 rounded">VITE_MAPBOX_ACCESS_TOKEN</code>{' '}
+          in your <code className="font-mono bg-muted px-1 rounded">.env</code> file.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="relative">
