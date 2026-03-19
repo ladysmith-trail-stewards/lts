@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Supabase types
+        run: pnpm run db:types
+
+      - name: Ensure generated types are committed
+        run: |
+          if [ -n "$(git status --porcelain src/lib/supa-client/database.types.ts)" ]; then
+            echo "database.types.ts changed. Please commit generated types before merging."
+            git --no-pager diff -- src/lib/supa-client/database.types.ts || true
+            exit 1
+          fi
+
+      - name: Format code
+        run: pnpm run format
+
+      - name: Ensure formatting is committed
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "Formatting changes detected. Please run 'pnpm run format' and commit the results."
+            git --no-pager diff || true
+            exit 1
+          fi
+
+      - name: Lint
+        run: pnpm run lint
+
+      - name: Build
+        run: pnpm build
