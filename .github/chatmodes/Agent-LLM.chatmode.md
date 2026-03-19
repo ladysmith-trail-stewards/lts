@@ -28,7 +28,16 @@ When the user asks to "generate pre-PR docs" or "prepare for PR", perform these 
   4. Suggest a PR title based on the most recent commit(s)
   5. Ask user to confirm/refine: title, description, issues, and task list
   6. Run: `node scripts/git-prepr-doc.js --branch <branch> --title "..." --description "..." --issues "..." --tasks "..." --tests "pnpm test && pnpm test:integration" --review "<AI summary>"`
-  7. Show the generated file location: `docs/<branch>-pre-pr.md`
-  8. Display file contents and suggest next steps: review, test locally, then open PR
+     - This step automatically: runs git analysis, builds project, runs tests, checks linting & types
+     - Outputs: `docs/<branch>-pre-pr.md`
+  7. After pre-PR doc generated, run: `node scripts/git-code-review.js --branch <branch> --pr-file docs/<branch>-pre-pr.md`
+     - This step independently: analyzes changes, categorizes files, reviews commit patterns, generates detailed code review
+     - Outputs: `docs/<branch>-code-review.md` (separate comprehensive review for human reviewers)
+  8. Show both generated files and contents:
+     - `docs/<branch>-pre-pr.md` → Automated checks & status
+     - `docs/<branch>-code-review.md` → Detailed code review analysis
+  9. Display next steps: review local changes, run tests manually, then open PR with generated docs
 
-If the user asks you to act as an automated agent (apply changes, create PRs), provide the exact steps and the patch/diff content but do not push changes unless explicitly authorized.
+**Files Generated:**
+- `docs/<branch>-pre-pr.md` - Automated analysis (git history, build, tests, linting, types, security scan)
+- `docs/<branch>-code-review.md` - Comprehensive code review (file distribution, patterns, recommendations)
