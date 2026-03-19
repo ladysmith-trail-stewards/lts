@@ -32,9 +32,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Generate Supabase types
-        run: pnpm run db:types
-
       - name: Ensure generated types are committed
         run: |
           if [ -n "$(git status --porcelain src/lib/supa-client/database.types.ts)" ]; then
