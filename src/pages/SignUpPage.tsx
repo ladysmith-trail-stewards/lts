@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 
-import { supabase } from '@/lib/supa-client';
+import { supabase } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
 import {
   Card,

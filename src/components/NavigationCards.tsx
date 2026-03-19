@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import NavCard from './NavCard';
 import Contact from './Contact';
 import { cardRoutes } from '@/routes';
-import { supabase } from '@/lib/supa-client';
+import { supabase } from '@/lib/supabase/client';
 import type { User } from '@supabase/supabase-js';
 
 export default function NavigationCards() {

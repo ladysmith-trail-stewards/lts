@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 
-import { supabase } from '@/lib/supa-client';
+import { supabase } from '@/lib/supabase/client';
 
 export default function RequireAuth({
   children,

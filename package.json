@@ -14,7 +14,7 @@
     "db:reset": "supabase db reset",
     "db:status": "supabase status",
     "db:studio": "supabase studio",
-    "db:types": "supabase gen types typescript --local --schema public > src/lib/supa-client/database.types.ts",
+    "db:types": "supabase gen types typescript --local --schema public > src/lib/supabase/database.types.ts",
     "test": "vitest run --project unit",
     "test:watch": "vitest --project unit",
     "test:integration": "vitest run --project integration",

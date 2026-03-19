@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supa-client';
-import type { Database } from '@/lib/supa-client/database.types';
+import { supabase } from '@/lib/supabase/client';
+import type { Database } from '@/lib/supabase/database.types';
 
 type TrailRow =
   Database['public']['Functions']['get_trails']['Returns'][number];

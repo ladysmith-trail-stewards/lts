@@ -5,7 +5,7 @@ import { NavigationMenu } from '@base-ui/react/navigation-menu';
 import { Tooltip } from '@base-ui/react/tooltip';
 import { NavigationMenuLink } from '@/components/ui/navigation-menu';
 import { menuRoutes } from '@/routes';
-import { supabase } from '@/lib/supa-client';
+import { supabase } from '@/lib/supabase/client';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 
 function RouterLink(props: NavigationMenu.Link.Props & { to: string }) {

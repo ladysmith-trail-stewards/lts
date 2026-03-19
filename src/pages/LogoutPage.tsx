@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import { supabase } from '@/lib/supa-client';
+import { supabase } from '@/lib/supabase/client';
 
 export default function LogoutPage() {
   const navigate = useNavigate();

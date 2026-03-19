@@ -7,7 +7,7 @@ import {
 } from '@tanstack/react-table';
 import { Check, X } from 'lucide-react';
 
-import { supabase } from '@/lib/supa-client';
+import { supabase } from '@/lib/supabase/client';
 import {
   Table,
   TableBody,

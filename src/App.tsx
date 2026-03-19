@@ -12,7 +12,6 @@ import UpdatePasswordPage from './pages/UpdatePasswordPage';
 import AuthConfirmPage from './pages/AuthConfirmPage';
 import AuthErrorPage from './pages/AuthErrorPage';
 import LogoutPage from './pages/LogoutPage';
-import ProtectedPage from './pages/ProtectedPage';
 import UsersPage from './pages/UsersPage';
 import RequireAdmin from './components/RequireAdmin';
 import RequireAuth from './components/RequireAuth';
@@ -46,7 +45,6 @@ function App() {
               <Route path="/auth/confirm" element={<AuthConfirmPage />} />
               <Route path="/auth/error" element={<AuthErrorPage />} />
               <Route path="/logout" element={<LogoutPage />} />
-              <Route path="/protected" element={<ProtectedPage />} />
               <Route
                 path="/users"
                 element={
