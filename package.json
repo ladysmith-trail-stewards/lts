@@ -19,7 +19,9 @@
     "test:watch": "vitest --project unit",
     "test:integration": "vitest run --project integration",
     "test:all": "vitest run",
-    "prepare": "husky"
+    "prepare": "husky",
+    "git-commit-doc": "node scripts/git-commit-doc.js",
+    "git-prepr-doc": "node scripts/git-prepr-doc.js"
   },
   "dependencies": {
     "@base-ui/react": "^1.3.0",

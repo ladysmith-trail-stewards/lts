@@ -1,0 +1,3 @@
+# After commit hook: generate commit docs for the current branch
+BRANCH=$(git rev-parse --abbrev-ref HEAD)
+pnpm git-commit-doc --branch "$BRANCH" --commits "[]" || true
