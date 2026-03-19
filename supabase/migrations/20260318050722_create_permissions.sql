@@ -37,6 +37,9 @@ create trigger permissions_set_updated_at
 create function public.handle_new_profile()
 returns trigger language plpgsql security definer as $$
 begin
+  -- Pin search_path to avoid search_path hijacking when running as SECURITY DEFINER
+  PERFORM set_config('search_path', 'public,auth,extensions', true);
+
   insert into public.permissions (profile_id)
   values (new.id);
   return new;

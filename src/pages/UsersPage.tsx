@@ -94,17 +94,32 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  type RpcResult = { data: AdminUser[] | null; error: { message: string } | null }
+
   useEffect(() => {
-    supabase
-      .rpc('get_admin_users')
-      .then(({ data, error }) => {
-        if (error) {
-          setError(error.message)
+    let mounted = true
+
+    ;(async () => {
+      try {
+        const res = (await supabase.rpc('get_admin_users')) as unknown as RpcResult
+        if (!mounted) return
+        if (res.error) {
+          setError(res.error.message)
         } else {
-          setData(data ?? [])
+          setData(res.data ?? [])
         }
-        setLoading(false)
-      })
+      } catch (err) {
+        if (!mounted) return
+        const message = err instanceof Error ? err.message : String(err)
+        setError(message)
+      } finally {
+        if (mounted) setLoading(false)
+      }
+    })()
+
+    return () => {
+      mounted = false
+    }
   }, [])
 
   const table = useReactTable({

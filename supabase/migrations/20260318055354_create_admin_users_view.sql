@@ -1,6 +1,8 @@
--- Admin-only view joining profiles, permissions, and auth.users (for email).
--- RLS does not apply to views, so we secure access via the is_admin() check
--- baked into the view definition with security_invoker = true on the function.
+-- Admin-only RPC joining profiles, permissions, and auth.users (for email).
+-- Uses SECURITY DEFINER to access auth.users (normally restricted), with an
+-- explicit is_admin() guard so only admins can retrieve results.
+-- EXECUTE is revoked from PUBLIC and granted only to authenticated users;
+-- the is_admin() check inside the function enforces the admin-only restriction.
 
 create or replace function public.get_admin_users()
 returns table (
@@ -21,6 +23,7 @@ language sql
 security definer
 stable
 as $$
+
   select
     p.id          as profile_id,
     p.auth_user_id::uuid,
@@ -40,3 +43,6 @@ as $$
   where public.is_admin()  -- only admins can call this
   order by p.created_at desc;
 $$;
+
+revoke execute on function public.get_admin_users() from public;
+grant execute on function public.get_admin_users() to authenticated;

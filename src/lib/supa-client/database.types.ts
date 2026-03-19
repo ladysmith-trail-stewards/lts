@@ -237,6 +237,7 @@ export type Database = {
       }
     }
     Functions: {
+<<<<<<< HEAD
       _postgis_deprecate: {
         Args: { newname: string; oldname: string; version: string }
         Returns: undefined
@@ -495,6 +496,8 @@ export type Database = {
         Returns: boolean
       }
       geomfromewkt: { Args: { "": string }; Returns: unknown }
+=======
+>>>>>>> 60a4d47803eaacf7f89ac662da4fc75f6d6030e3
       get_admin_users: {
         Args: never
         Returns: {
@@ -512,6 +515,7 @@ export type Database = {
           user_type: string
         }[]
       }
+<<<<<<< HEAD
       get_trails: {
         Args: { hidden?: boolean }
         Returns: {
@@ -531,6 +535,8 @@ export type Database = {
         }[]
       }
       gettransactionid: { Args: never; Returns: unknown }
+=======
+>>>>>>> 60a4d47803eaacf7f89ac662da4fc75f6d6030e3
       is_admin: { Args: never; Returns: boolean }
       is_attributed_to_trail: { Args: { trail_id: number }; Returns: boolean }
       longtransactionsenabled: { Args: never; Returns: boolean }

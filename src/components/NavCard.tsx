@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { buttonVariants } from '@/components/ui/button';
+import { buttonVariants } from '@/components/ui/button-variants';
 import { type VariantProps } from 'class-variance-authority';
 
 export interface NavCardProps extends VariantProps<typeof buttonVariants> {
@@ -20,7 +20,12 @@ export default function NavCard({ title, description, to, label, variant, size, 
       </CardHeader>
       <CardContent className="mt-auto">
         {disabled ? (
-          <span className={buttonVariants({ variant, size, className: 'w-full pointer-events-none opacity-40' })}>
+          <span
+            role="button"
+            aria-disabled="true"
+            tabIndex={-1}
+            className={buttonVariants({ variant, size, className: 'w-full opacity-40' })}
+          >
             {label}
           </span>
         ) : (
