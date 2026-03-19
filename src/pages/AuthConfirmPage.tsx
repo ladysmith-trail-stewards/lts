@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import type { EmailOtpType } from '@supabase/supabase-js'
 
@@ -7,7 +7,6 @@ import { supabase } from '@/lib/supa-client'
 export default function AuthConfirmPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     const tokenHash = searchParams.get('token_hash')
@@ -29,14 +28,6 @@ export default function AuthConfirmPage() {
         }
       })
   }, [searchParams, navigate])
-
-  if (error) {
-    return (
-      <div className="flex min-h-svh w-full items-center justify-center p-6">
-        <p className="text-sm text-red-500">{error}</p>
-      </div>
-    )
-  }
 
   return (
     <div className="flex min-h-svh w-full items-center justify-center p-6">
