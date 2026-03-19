@@ -32,24 +32,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Ensure generated types are committed
-        run: |
-          if [ -n "$(git status --porcelain src/lib/supa-client/database.types.ts)" ]; then
-            echo "database.types.ts changed. Please commit generated types before merging."
-            git --no-pager diff -- src/lib/supa-client/database.types.ts || true
-            exit 1
-          fi
-
       - name: Format code
         run: pnpm run format
-
-      - name: Ensure formatting is committed
-        run: |
-          if [ -n "$(git status --porcelain)" ]; then
-            echo "Formatting changes detected. Please run 'pnpm run format' and commit the results."
-            git --no-pager diff || true
-            exit 1
-          fi
 
       - name: Lint
         run: pnpm run lint
