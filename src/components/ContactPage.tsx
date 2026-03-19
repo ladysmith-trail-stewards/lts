@@ -2,9 +2,17 @@ import { useState, type FormEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 
-const FORMSPREE_ENDPOINT = import.meta.env.VITE_FORMSPREE_ENDPOINT as string | undefined;
+const FORMSPREE_ENDPOINT = import.meta.env.VITE_FORMSPREE_ENDPOINT as
+  | string
+  | undefined;
 
 export default function ContactPage() {
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle');
@@ -37,7 +45,8 @@ export default function ContactPage() {
           <CardHeader className="text-center">
             <CardTitle>Get In Touch</CardTitle>
             <CardDescription>
-              We welcome new members! To get involved and find out about events, send us a message below or join the{' '}
+              We welcome new members! To get involved and find out about events,
+              send us a message below or join the{' '}
               <a
                 className="text-blue-600 hover:text-blue-800 underline font-medium transition-colors"
                 href="https://www.facebook.com/groups/762166175047717"
@@ -53,7 +62,10 @@ export default function ContactPage() {
             <form onSubmit={handleSubmit} className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label htmlFor="contact-name" className="block text-sm font-medium text-muted-foreground mb-1">
+                  <label
+                    htmlFor="contact-name"
+                    className="block text-sm font-medium text-muted-foreground mb-1"
+                  >
                     Name *
                   </label>
                   <Input
@@ -61,13 +73,14 @@ export default function ContactPage() {
                     id="contact-name"
                     name="name"
                     placeholder="Your full name"
-
-
                     required
                   />
                 </div>
                 <div>
-                  <label htmlFor="contact-email" className="block text-sm font-medium text-muted-foreground mb-1">
+                  <label
+                    htmlFor="contact-email"
+                    className="block text-sm font-medium text-muted-foreground mb-1"
+                  >
                     Email *
                   </label>
                   <Input
@@ -75,15 +88,16 @@ export default function ContactPage() {
                     id="contact-email"
                     name="email"
                     placeholder="your.email@example.com"
-
-
                     required
                   />
                 </div>
               </div>
 
               <div>
-                <label htmlFor="contact-subject" className="block text-sm font-medium text-muted-foreground mb-1">
+                <label
+                  htmlFor="contact-subject"
+                  className="block text-sm font-medium text-muted-foreground mb-1"
+                >
                   Subject
                 </label>
                 <Input
@@ -96,7 +110,10 @@ export default function ContactPage() {
               </div>
 
               <div>
-                <label htmlFor="contact-message" className="block text-sm font-medium text-muted-foreground mb-1">
+                <label
+                  htmlFor="contact-message"
+                  className="block text-sm font-medium text-muted-foreground mb-1"
+                >
                   Message *
                 </label>
                 <Textarea
@@ -131,8 +148,8 @@ export default function ContactPage() {
                   <strong>Email:</strong> info@ladysmithtrailstewards.org
                 </p>
                 <p className="text-muted-foreground">
-                  <strong>Facebook:</strong>{" "}
-                  <a 
+                  <strong>Facebook:</strong>{' '}
+                  <a
                     href="https://www.facebook.com/groups/762166175047717"
                     target="_blank"
                     rel="noopener noreferrer"

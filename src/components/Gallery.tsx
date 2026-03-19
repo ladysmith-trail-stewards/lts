@@ -23,10 +23,13 @@ function Gallery() {
   ];
 
   return (
-    <Carousel className="w-full rounded-lg shadow-lg py-16 px-4 bg-card" opts={{
-      align: "start",
-      loop: true,
-    }}>
+    <Carousel
+      className="w-full rounded-lg shadow-lg py-16 px-4 bg-card"
+      opts={{
+        align: 'start',
+        loop: true,
+      }}
+    >
       <CarouselContent>
         {images.map((image, index) => (
           <CarouselItem key={index}>

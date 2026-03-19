@@ -1,41 +1,44 @@
-import { useState, type FormEvent } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useState, type FormEvent } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 
-import { supabase } from '@/lib/supa-client'
-import { Button } from '@/components/ui/button'
+import { supabase } from '@/lib/supa-client';
+import { Button } from '@/components/ui/button';
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+} from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 export default function LoginPage() {
-  const navigate = useNavigate()
-  const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
+  const navigate = useNavigate();
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    setError(null)
-    setLoading(true)
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
 
-    const formData = new FormData(e.currentTarget)
-    const email = formData.get('email') as string
-    const password = formData.get('password') as string
+    const formData = new FormData(e.currentTarget);
+    const email = formData.get('email') as string;
+    const password = formData.get('password') as string;
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
 
     if (error) {
-      setError(error.message)
-      setLoading(false)
-      return
+      setError(error.message);
+      setLoading(false);
+      return;
     }
 
-    navigate('/')
+    navigate('/');
   }
 
   return (
@@ -45,7 +48,9 @@ export default function LoginPage() {
           <Card>
             <CardHeader>
               <CardTitle className="text-2xl">Login</CardTitle>
-              <CardDescription>Enter your email below to login to your account</CardDescription>
+              <CardDescription>
+                Enter your email below to login to your account
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit}>
@@ -70,7 +75,12 @@ export default function LoginPage() {
                         Forgot your password?
                       </Link>
                     </div>
-                    <Input id="password" type="password" name="password" required />
+                    <Input
+                      id="password"
+                      type="password"
+                      name="password"
+                      required
+                    />
                   </div>
                   {error && <p className="text-sm text-red-500">{error}</p>}
                   <Button type="submit" className="w-full" disabled={loading}>
@@ -89,5 +99,5 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
-  )
+  );
 }

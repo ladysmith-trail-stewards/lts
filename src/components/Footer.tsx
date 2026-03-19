@@ -6,7 +6,6 @@ function Footer() {
     <footer className="bg-slate-800 text-white py-5 mt-auto">
       <div className="container mx-auto px-4">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-
           {/* Brand */}
           <div>
             <div className="flex items-center space-x-2 mb-2">
@@ -15,7 +14,9 @@ function Footer() {
                 alt="Ladysmith Logo"
                 className="h-6 w-auto"
               />
-              <span className="text-sm font-semibold tracking-tight">Trail Stewards</span>
+              <span className="text-sm font-semibold tracking-tight">
+                Trail Stewards
+              </span>
             </div>
             <p className="text-xs text-slate-400 leading-5">
               Building sustainable trails for our community in Ladysmith, BC.
@@ -24,7 +25,9 @@ function Footer() {
 
           {/* Quick Links */}
           <div>
-            <h3 className="text-sm font-semibold tracking-tight mb-2">Quick Links</h3>
+            <h3 className="text-sm font-semibold tracking-tight mb-2">
+              Quick Links
+            </h3>
             <ul className="my-0 ml-0 list-none space-y-1">
               {menuRoutes.map(({ to, title }) => (
                 <li key={to}>
@@ -41,7 +44,9 @@ function Footer() {
 
           {/* Connect */}
           <div>
-            <h3 className="text-sm font-semibold tracking-tight mb-2">Connect</h3>
+            <h3 className="text-sm font-semibold tracking-tight mb-2">
+              Connect
+            </h3>
             <ul className="my-0 ml-0 list-none space-y-1">
               <li>
                 <a
@@ -60,7 +65,6 @@ function Footer() {
               </li>
             </ul>
           </div>
-
         </div>
 
         <div className="border-t border-slate-700 mt-4 pt-3 text-center">

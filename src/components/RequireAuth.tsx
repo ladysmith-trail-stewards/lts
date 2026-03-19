@@ -3,8 +3,14 @@ import { Navigate } from 'react-router-dom';
 
 import { supabase } from '@/lib/supa-client';
 
-export default function RequireAuth({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<'loading' | 'authorized' | 'unauthorized'>('loading');
+export default function RequireAuth({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const [state, setState] = useState<'loading' | 'authorized' | 'unauthorized'>(
+    'loading'
+  );
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data, error }) => {

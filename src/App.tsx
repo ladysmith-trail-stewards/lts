@@ -31,7 +31,14 @@ function App() {
               <Route path="/" element={<HomePage />} />
               <Route path="/charter" element={<CharterPage />} />
               <Route path="/contact" element={<ContactPage />} />
-              <Route path="/map" element={<RequireAuth><MapPage /></RequireAuth>} />
+              <Route
+                path="/map"
+                element={
+                  <RequireAuth>
+                    <MapPage />
+                  </RequireAuth>
+                }
+              />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/sign-up" element={<SignUpPage />} />
               <Route path="/forgot-password" element={<ForgotPasswordPage />} />
@@ -40,7 +47,14 @@ function App() {
               <Route path="/auth/error" element={<AuthErrorPage />} />
               <Route path="/logout" element={<LogoutPage />} />
               <Route path="/protected" element={<ProtectedPage />} />
-              <Route path="/users" element={<RequireAdmin><UsersPage /></RequireAdmin>} />
+              <Route
+                path="/users"
+                element={
+                  <RequireAdmin>
+                    <UsersPage />
+                  </RequireAdmin>
+                }
+              />
             </Routes>
           </div>
           {isMapPage ? (
