@@ -69,7 +69,7 @@ try {
   // 3. COMMIT MESSAGE ANALYSIS
   console.log('📝 Analyzing commit messages...');
   const commits = execSync('git log main..HEAD --oneline', { encoding: 'utf8' }).trim();
-  const commitCount = commits.split('\n').length;
+  const commitCount = commits.split('\n').filter(line => line.trim()).length;
   
   // 4. RUN BUILD
   console.log('\n🔨 Running build...');
@@ -151,8 +151,10 @@ if (!fs.existsSync(docsDir)) fs.mkdirSync(docsDir);
 
 const filename = path.join(docsDir, `${argv.branch}-pre-pr.md`);
 
-// Build review section
-const reviewSection = argv.review || autoReview || '(No review provided)';
+// Build review section - always include auto-review, then custom review
+const reviewSection = autoReview 
+  ? (argv.review ? `${autoReview}\n\n### Custom Review\n${argv.review}` : autoReview)
+  : argv.review || '(No review provided)';
 
 // Generate content based on PRE_PR_TEMPLATE structure
 const content = `Branch: ${argv.branch}
