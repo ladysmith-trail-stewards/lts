@@ -1,5 +1,13 @@
 #!/bin/sh
 . "$(dirname -- "$0")/_/husky.sh"
 
+run_script() {
+	if command -v pnpm >/dev/null 2>&1; then
+		pnpm run "$1"
+	else
+		npm run "$1"
+	fi
+}
+
 echo "Running integration tests before push..."
-pnpm run test:integration
+run_script test:integration
