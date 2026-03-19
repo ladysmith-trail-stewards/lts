@@ -46,7 +46,7 @@ export default function SignUpPage() {
       email,
       password,
       options: {
-        emailRedirectTo: `${window.location.origin}/protected`,
+        emailRedirectTo: `${window.location.origin}/auth/confirm`,
       },
     })
 

@@ -23,6 +23,7 @@ language sql
 security definer
 stable
 as $$
+
   select
     p.id          as profile_id,
     p.auth_user_id::uuid,

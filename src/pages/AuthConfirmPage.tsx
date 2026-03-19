@@ -14,19 +14,23 @@ export default function AuthConfirmPage() {
     const next = searchParams.get('next')?.startsWith('/') ? searchParams.get('next')! : '/'
 
     if (!tokenHash || !type) {
-      navigate(`/auth/error?error=No token hash or type`)
+      navigate('/auth/error?error=' + encodeURIComponent('No token hash or type'))
       return
     }
 
-    supabase.auth
-      .verifyOtp({ type, token_hash: tokenHash })
-      .then(({ error }) => {
+    ;(async () => {
+      try {
+        const { error } = await supabase.auth.verifyOtp({ type, token_hash: tokenHash })
         if (error) {
-          navigate(`/auth/error?error=${error.message}`)
+          navigate('/auth/error?error=' + encodeURIComponent(error.message))
         } else {
           navigate(next)
         }
-      })
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        navigate('/auth/error?error=' + encodeURIComponent(message))
+      }
+    })()
   }, [searchParams, navigate])
 
   return (

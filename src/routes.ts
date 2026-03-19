@@ -1,6 +1,6 @@
 import { Home, ScrollText, Map, Users, UserCog, type LucideIcon } from 'lucide-react';
 import { type VariantProps } from 'class-variance-authority';
-import { buttonVariants } from '@/components/ui/button';
+import { buttonVariants } from '@/components/ui/button-variants';
 
 export type RouteAccess = 'PUBLIC' | 'USER' | 'ADMIN';
 
