@@ -15,11 +15,13 @@ After you commit changes to a feature branch and before opening a PR, you can as
    ```
 
 3. **The agent will**:
-   - Extract branch name and recent work
-   - Parse commit messages for task references (e.g., #5, closes #12)
-   - Generate a structured pre-PR markdown template
+   - Extract branch name and recent commits
+   - Parse commit messages for task/issue references (e.g., #5, closes #12)
+   - Suggest a PR title based on your work
+   - Confirm with you: title, description, issues, tasks
+   - Auto-generate the pre-PR markdown template
    - Write to `docs/<branch>-pre-pr.md`
-   - Show you the file path
+   - Show you the file and next steps
 
 ## What the template includes
 
@@ -33,10 +35,11 @@ After you commit changes to a feature branch and before opening a PR, you can as
 
 ## Integration with PRs
 
-After generating the pre-PR doc, copy the content into your GitHub PR description:
-- Review the suggested title and description
-- Validate linked issues and tasks
-- Run the test steps locally before pushing
+After generating the pre-PR doc, you'll have a file at `docs/<branch>-pre-pr.md`:
+- Review the auto-generated content
+- Make any refinements to title/description
+- Copy into your GitHub PR description
+- Run the suggested test steps locally before pushing
 - Use the checklist as your pre-merge gate
 
 ## Notes

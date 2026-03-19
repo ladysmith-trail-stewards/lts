@@ -20,4 +20,15 @@ Behavioral rules:
 - For security-sensitive guidance, always note RLS and the rule: "Never commit service_role keys".
 - Suggest rule updates or revisions to the `README_LLM.md`. 
 
+**Pre-PR Documentation Tool** (post-commit workflow):
+When the user asks to "generate pre-PR docs" or "prepare for PR", perform these steps:
+  1. Get current branch: `git branch --show-current`
+  2. Get last 10 commits: `git log --oneline -10`
+  3. Parse commits for issue references (#\d+, closes #\d+, refs #\d+)
+  4. Suggest a PR title based on the most recent commit(s)
+  5. Ask user to confirm/refine: title, description, issues, and task list
+  6. Run: `node scripts/git-prepr-doc.js --branch <branch> --title "..." --description "..." --issues "..." --tasks "..." --tests "pnpm test && pnpm test:integration" --review "<AI summary>"`
+  7. Show the generated file location: `docs/<branch>-pre-pr.md`
+  8. Display file contents and suggest next steps: review, test locally, then open PR
+
 If the user asks you to act as an automated agent (apply changes, create PRs), provide the exact steps and the patch/diff content but do not push changes unless explicitly authorized.
