@@ -1,6 +1,6 @@
-# Post-Commit Workflow: Agent-LLM Commit Analysis
+# Post-Commit Workflow: Pre-PR Documentation
 
-After you commit changes to a feature branch, you can ask **Agent-LLM** to analyze and document the commits.
+After you commit changes to a feature branch and before opening a PR, you can ask **Agent-LLM** to generate pre-PR documentation.
 
 ## Usage
 
@@ -9,54 +9,41 @@ After you commit changes to a feature branch, you can ask **Agent-LLM** to analy
    git commit -m "Add user profile form (#5)"
    ```
 
-2. **Ask the Agent to analyze commits** in VS Code Copilot Chat:
+2. **Ask the Agent to generate pre-PR docs** in VS Code Copilot Chat:
    ```
-   @Agent-LLM Analyze the commits on this branch and generate a commit doc.
-   ```
-
-   Or with a specific count:
-   ```
-   @Agent-LLM Analyze the last 5 commits and generate a commit doc.
+   @Agent-LLM Generate pre-PR documentation for this branch.
    ```
 
 3. **The agent will**:
-   - Extract recent commits from `git log`
-   - Parse commit messages and extract task references (e.g., #5, closes #12)
-   - Generate a markdown table summarizing commits + tasks
-   - Write to `docs/<branch>-commits.md`
+   - Extract branch name and recent work
+   - Parse commit messages for task references (e.g., #5, closes #12)
+   - Generate a structured pre-PR markdown template
+   - Write to `docs/<branch>-pre-pr.md`
    - Show you the file path
 
-## What the agent extracts
+## What the template includes
 
-- **Commit ID**: First 6 characters of the hash
-- **Message**: First 60 characters of the commit message
-- **Tasks**: References like `#5`, `closes #12`, `refs #8` extracted from the message
-
-## Example output
-
-```markdown
-# Commit summary for my-feature-branch
-
-| Commit | Message (first 60) | Tasks |
-|--------|-------------------|-------|
-| abc123 | Add user profile form with validation | #5 ; closes #12 |
-| def456 | Update ProfileForm component styles | #5 |
-| ghi789 | Add E2E tests for profile update | #5 |
-```
+- **PR Title**: Auto-suggested based on branch work
+- **PR Description**: Context and rationale
+- **Linked issues**: GitHub issue references from commits
+- **Tasks**: What this PR accomplishes
+- **LLM Review Summary**: AI-generated summary of changes
+- **Test steps**: Validation commands to run
+- **Checklist**: Pre-merge verification items
 
 ## Integration with PRs
 
-After generating the commit doc, you can reference it in your PR description:
-- Check `docs/<branch>-commits.md` to see all commits and linked tasks
-- Use the commit table in your PR body to explain the work
-- Reference the doc in comments: "See docs/my-branch-commits.md for details"
+After generating the pre-PR doc, copy the content into your GitHub PR description:
+- Review the suggested title and description
+- Validate linked issues and tasks
+- Run the test steps locally before pushing
+- Use the checklist as your pre-merge gate
 
 ## Notes
 
 - The **pre-commit hook** enforces format/lint (runs `pnpm format && pnpm lint`)
-- The **post-commit hook** is reserved (currently a no-op; commit analysis is manual via Agent-LLM)
-- Task extraction looks for GitHub issue references in commit messages
-- If the agent can't find references, it will still generate the table with empty "Tasks" column
+- Pre-PR docs help catch issues before opening the PR
+- The template is a guide—adjust as needed for your specific work
 
 ---
 
