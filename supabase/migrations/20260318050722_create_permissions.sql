@@ -35,7 +35,9 @@ create trigger permissions_set_updated_at
 
 -- Auto-create a default permissions row whenever a profile is created
 create function public.handle_new_profile()
-returns trigger language plpgsql security definer as $$
+returns trigger language plpgsql security definer
+set search_path = ''
+as $$
 begin
   insert into public.permissions (profile_id)
   values (new.id);

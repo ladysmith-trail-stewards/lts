@@ -22,7 +22,8 @@ create policy "permissions: authenticated cannot insert"
 create policy "permissions: authenticated cannot update"
   on public.permissions for update
   to authenticated
-  using (false);
+  using (true)
+  with check (false);
 
 create policy "permissions: authenticated cannot delete"
   on public.permissions for delete

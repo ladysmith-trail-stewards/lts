@@ -8,7 +8,9 @@
 
 -- Helper function: returns true if the calling user has is_admin = true
 create or replace function public.is_admin()
-returns boolean language sql security definer stable as $$
+returns boolean language sql security definer stable
+set search_path = ''
+as $$
   select exists (
     select 1
     from public.profiles  p

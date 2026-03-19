@@ -22,6 +22,7 @@ returns table (
 language sql
 security definer
 stable
+set search_path = ''
 as $$
   select
     p.id          as profile_id,
