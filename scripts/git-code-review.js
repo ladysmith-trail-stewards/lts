@@ -285,11 +285,28 @@ Branch: ${argv.branch} | Commits: ${metrics.commits} | Files: ${metrics.filesCha
 const docsDir = path.resolve(process.cwd(), 'docs');
 if (!fs.existsSync(docsDir)) fs.mkdirSync(docsDir);
 
-const reviewFile = path.join(docsDir, `${argv.branch}-code-review.md`);
-fs.writeFileSync(reviewFile, codeReview, 'utf8');
+// If a pre-PR file was provided and exists, append the detailed code review there
+if (prFile && fs.existsSync(prFile)) {
+  try {
+    const existing = fs.readFileSync(prFile, 'utf8');
+    const appended = existing + '\n\n---\n\n' + codeReview;
+    fs.writeFileSync(prFile, appended, 'utf8');
+    console.log('✅ Code review complete!\n');
+    console.log(`📄 Appended code review to: ${prFile}\n`);
+  } catch (err) {
+    console.error('⚠️ Failed to append to pre-PR file, writing separate review file instead:', err.message);
+    const reviewFile = path.join(docsDir, `${argv.branch}-code-review.md`);
+    fs.writeFileSync(reviewFile, codeReview, 'utf8');
+    console.log('✅ Code review complete!\n');
+    console.log(`📄 Review written to: ${reviewFile}\n`);
+  }
+} else {
+  const reviewFile = path.join(docsDir, `${argv.branch}-code-review.md`);
+  fs.writeFileSync(reviewFile, codeReview, 'utf8');
+  console.log('✅ Code review complete!\n');
+  console.log(`📄 Review written to: ${reviewFile}\n`);
+}
 
-console.log('✅ Code review complete!\n');
-console.log(`📄 Review written to: ${reviewFile}\n`);
 console.log('Key findings:');
 console.log(`  - Commits: ${metrics.commits}`);
 console.log(`  - Files: ${metrics.filesChanged}`);
