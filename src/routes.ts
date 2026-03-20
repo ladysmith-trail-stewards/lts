@@ -1,4 +1,11 @@
-import { Home, ScrollText, Map, Users, UserCog, type LucideIcon } from 'lucide-react';
+import {
+  Home,
+  ScrollText,
+  Map,
+  Users,
+  UserCog,
+  type LucideIcon,
+} from 'lucide-react';
 import { type VariantProps } from 'class-variance-authority';
 import { buttonVariants } from '@/components/ui/button-variants';
 
@@ -29,7 +36,8 @@ export const routes: RouteConfig[] = [
   {
     to: '/charter',
     title: 'Our Charter',
-    description: 'Learn about our mission, governance, and activities for sustainable trail development',
+    description:
+      'Learn about our mission, governance, and activities for sustainable trail development',
     icon: ScrollText,
     includeInMenu: true,
     access: 'PUBLIC',
@@ -41,7 +49,8 @@ export const routes: RouteConfig[] = [
   {
     to: '/map',
     title: 'Trail Maps',
-    description: 'Explore interactive maps of trails in the Ladysmith area with satellite and outdoor views',
+    description:
+      'Explore interactive maps of trails in the Ladysmith area with satellite and outdoor views',
     icon: Map,
     includeInMenu: true,
     access: 'USER',
@@ -53,7 +62,8 @@ export const routes: RouteConfig[] = [
   {
     to: '/contact',
     title: 'Contact Us',
-    description: 'Contact us to volunteer, share ideas, or learn about upcoming trail projects',
+    description:
+      'Contact us to volunteer, share ideas, or learn about upcoming trail projects',
     icon: Users,
     includeInMenu: true,
     access: 'PUBLIC',
@@ -76,7 +86,11 @@ export const routes: RouteConfig[] = [
 export const menuRoutes = routes.filter((r) => r.includeInMenu);
 
 /** Narrowed type for routes that have linkProps */
-export type CardRoute = RouteConfig & { linkProps: NonNullable<RouteConfig['linkProps']> };
+export type CardRoute = RouteConfig & {
+  linkProps: NonNullable<RouteConfig['linkProps']>;
+};
 
 /** Routes that appear as nav cards on the home page (must have linkProps) */
-export const cardRoutes = routes.filter((r): r is CardRoute => r.linkProps != null);
+export const cardRoutes = routes.filter(
+  (r): r is CardRoute => r.linkProps != null
+);

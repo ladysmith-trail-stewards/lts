@@ -1,4 +1,10 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
@@ -8,7 +14,8 @@ export default function Contact() {
       <CardHeader>
         <CardTitle>Stay Connected</CardTitle>
         <CardDescription>
-          Get updates on trail conditions, volunteer opportunities, and community events
+          Get updates on trail conditions, volunteer opportunities, and
+          community events
         </CardDescription>
       </CardHeader>
       <CardContent className="mt-auto">
@@ -21,21 +28,15 @@ export default function Contact() {
             type="text"
             name="fields[name]"
             placeholder="Your name"
-
             required
           />
           <Input
             type="email"
             name="fields[email]"
             placeholder="your.email@example.com"
-
             required
           />
-          <Button
-            type="submit"
-            className="w-full"
-            variant="salish-sea"
-          >
+          <Button type="submit" className="w-full" variant="salish-sea">
             Subscribe
           </Button>
         </form>

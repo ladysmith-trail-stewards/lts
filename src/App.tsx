@@ -12,7 +12,6 @@ import UpdatePasswordPage from './pages/UpdatePasswordPage';
 import AuthConfirmPage from './pages/AuthConfirmPage';
 import AuthErrorPage from './pages/AuthErrorPage';
 import LogoutPage from './pages/LogoutPage';
-import ProtectedPage from './pages/ProtectedPage';
 import UsersPage from './pages/UsersPage';
 import RequireAdmin from './components/RequireAdmin';
 import RequireAuth from './components/RequireAuth';
@@ -31,7 +30,14 @@ function App() {
               <Route path="/" element={<HomePage />} />
               <Route path="/charter" element={<CharterPage />} />
               <Route path="/contact" element={<ContactPage />} />
-              <Route path="/map" element={<RequireAuth><MapPage /></RequireAuth>} />
+              <Route
+                path="/map"
+                element={
+                  <RequireAuth>
+                    <MapPage />
+                  </RequireAuth>
+                }
+              />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/sign-up" element={<SignUpPage />} />
               <Route path="/forgot-password" element={<ForgotPasswordPage />} />
@@ -39,8 +45,14 @@ function App() {
               <Route path="/auth/confirm" element={<AuthConfirmPage />} />
               <Route path="/auth/error" element={<AuthErrorPage />} />
               <Route path="/logout" element={<LogoutPage />} />
-              <Route path="/protected" element={<ProtectedPage />} />
-              <Route path="/users" element={<RequireAdmin><UsersPage /></RequireAdmin>} />
+              <Route
+                path="/users"
+                element={
+                  <RequireAdmin>
+                    <UsersPage />
+                  </RequireAdmin>
+                }
+              />
             </Routes>
           </div>
           {isMapPage ? (

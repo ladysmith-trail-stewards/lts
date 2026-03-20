@@ -1,13 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react';
 import {
   flexRender,
   getCoreRowModel,
   useReactTable,
   type ColumnDef,
-} from '@tanstack/react-table'
-import { Check, X } from 'lucide-react'
+} from '@tanstack/react-table';
+import { Check, X } from 'lucide-react';
 
-import { supabase } from '@/lib/supa-client'
+import { supabase } from '@/lib/supabase/client';
 import {
   Table,
   TableBody,
@@ -15,21 +15,21 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table'
+} from '@/components/ui/table';
 
 interface AdminUser {
-  profile_id: number
-  auth_user_id: string
-  email: string
-  name: string
-  user_type: string
-  phone: string | null
-  bio: string | null
-  is_admin: boolean
-  can_read: boolean
-  can_write: boolean
-  can_delete: boolean
-  created_at: string
+  profile_id: number;
+  auth_user_id: string;
+  email: string;
+  name: string;
+  user_type: string;
+  phone: string | null;
+  bio: string | null;
+  is_admin: boolean;
+  can_read: boolean;
+  can_write: boolean;
+  can_delete: boolean;
+  created_at: string;
 }
 
 function BoolIcon({ value }: { value: boolean }) {
@@ -37,7 +37,7 @@ function BoolIcon({ value }: { value: boolean }) {
     <Check size={16} className="text-green-600" />
   ) : (
     <X size={16} className="text-muted-foreground/40" />
-  )
+  );
 }
 
 const columns: ColumnDef<AdminUser>[] = [
@@ -87,46 +87,51 @@ const columns: ColumnDef<AdminUser>[] = [
     header: 'Delete',
     cell: ({ row }) => <BoolIcon value={row.original.can_delete} />,
   },
-]
+];
 
 export default function UsersPage() {
-  const [data, setData] = useState<AdminUser[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [data, setData] = useState<AdminUser[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  type RpcResult = { data: AdminUser[] | null; error: { message: string } | null }
+  type RpcResult = {
+    data: AdminUser[] | null;
+    error: { message: string } | null;
+  };
 
   useEffect(() => {
-    let mounted = true
+    let mounted = true;
 
-    ;(async () => {
+    (async () => {
       try {
-        const res = (await supabase.rpc('get_admin_users')) as unknown as RpcResult
-        if (!mounted) return
+        const res = (await supabase.rpc(
+          'get_admin_users'
+        )) as unknown as RpcResult;
+        if (!mounted) return;
         if (res.error) {
-          setError(res.error.message)
+          setError(res.error.message);
         } else {
-          setData(res.data ?? [])
+          setData(res.data ?? []);
         }
       } catch (err) {
-        if (!mounted) return
-        const message = err instanceof Error ? err.message : String(err)
-        setError(message)
+        if (!mounted) return;
+        const message = err instanceof Error ? err.message : String(err);
+        setError(message);
       } finally {
-        if (mounted) setLoading(false)
+        if (mounted) setLoading(false);
       }
-    })()
+    })();
 
     return () => {
-      mounted = false
-    }
-  }, [])
+      mounted = false;
+    };
+  }, []);
 
   const table = useReactTable({
     data,
     columns,
     getCoreRowModel: getCoreRowModel(),
-  })
+  });
 
   return (
     <div className="container mx-auto py-10 px-4">
@@ -146,7 +151,10 @@ export default function UsersPage() {
                     <TableHead key={header.id}>
                       {header.isPlaceholder
                         ? null
-                        : flexRender(header.column.columnDef.header, header.getContext())}
+                        : flexRender(
+                            header.column.columnDef.header,
+                            header.getContext()
+                          )}
                     </TableHead>
                   ))}
                 </TableRow>
@@ -158,14 +166,20 @@ export default function UsersPage() {
                   <TableRow key={row.id}>
                     {row.getVisibleCells().map((cell) => (
                       <TableCell key={cell.id}>
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        {flexRender(
+                          cell.column.columnDef.cell,
+                          cell.getContext()
+                        )}
                       </TableCell>
                     ))}
                   </TableRow>
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={columns.length} className="h-24 text-center">
+                  <TableCell
+                    colSpan={columns.length}
+                    className="h-24 text-center"
+                  >
                     No users found.
                   </TableCell>
                 </TableRow>
@@ -175,5 +189,5 @@ export default function UsersPage() {
         </div>
       )}
     </div>
-  )
+  );
 }

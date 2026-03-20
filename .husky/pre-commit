@@ -1,14 +1,5 @@
 #!/bin/sh
-. "$(dirname -- "$0")/_/husky.sh"
+. "$(dirname "$0")/_/husky.sh"
 
-run_script() {
-	if command -v pnpm >/dev/null 2>&1; then
-		pnpm run "$1"
-	else
-		npm run "$1"
-	fi
-}
-
-echo "Running prettier and eslint..."
-run_script format
-run_script lint
+pnpm run format
+pnpm run lint

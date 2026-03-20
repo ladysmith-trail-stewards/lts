@@ -1,44 +1,44 @@
-import { useState, type FormEvent } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useState, type FormEvent } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 
-import { supabase } from '@/lib/supa-client'
-import { Button } from '@/components/ui/button'
+import { supabase } from '@/lib/supabase/client';
+import { Button } from '@/components/ui/button';
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+} from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 export default function ForgotPasswordPage() {
-  const [searchParams, setSearchParams] = useSearchParams()
-  const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  const success = searchParams.has('success')
+  const success = searchParams.has('success');
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    setError(null)
-    setLoading(true)
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
 
-    const formData = new FormData(e.currentTarget)
-    const email = formData.get('email') as string
+    const formData = new FormData(e.currentTarget);
+    const email = formData.get('email') as string;
 
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/update-password`,
-    })
+    });
 
     if (error) {
-      setError(error.message)
-      setLoading(false)
-      return
+      setError(error.message);
+      setLoading(false);
+      return;
     }
 
-    setSearchParams({ success: '' })
+    setSearchParams({ success: '' });
   }
 
   return (
@@ -49,12 +49,14 @@ export default function ForgotPasswordPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-2xl">Check Your Email</CardTitle>
-                <CardDescription>Password reset instructions sent</CardDescription>
+                <CardDescription>
+                  Password reset instructions sent
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <p className="text-sm text-muted-foreground">
-                  If you registered using your email and password, you will receive a password reset
-                  email.
+                  If you registered using your email and password, you will
+                  receive a password reset email.
                 </p>
               </CardContent>
             </Card>
@@ -63,7 +65,8 @@ export default function ForgotPasswordPage() {
               <CardHeader>
                 <CardTitle className="text-2xl">Reset Your Password</CardTitle>
                 <CardDescription>
-                  Type in your email and we&apos;ll send you a link to reset your password
+                  Type in your email and we&apos;ll send you a link to reset
+                  your password
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -97,5 +100,5 @@ export default function ForgotPasswordPage() {
         </div>
       </div>
     </div>
-  )
+  );
 }

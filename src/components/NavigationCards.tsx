@@ -2,21 +2,23 @@ import { useEffect, useState } from 'react';
 import NavCard from './NavCard';
 import Contact from './Contact';
 import { cardRoutes } from '@/routes';
-import { supabase } from '@/lib/supa-client';
+import { supabase } from '@/lib/supabase/client';
 import type { User } from '@supabase/supabase-js';
 
 export default function NavigationCards() {
-  const [user, setUser] = useState<User | null>(null)
+  const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setUser(data.user ?? null))
+    supabase.auth.getUser().then(({ data }) => setUser(data.user ?? null));
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null)
-    })
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
 
-    return () => subscription.unsubscribe()
-  }, [])
+    return () => subscription.unsubscribe();
+  }, []);
 
   return (
     <div className="flex flex-col gap-4">
