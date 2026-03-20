@@ -17,29 +17,18 @@ const SERVICE_ROLE_KEY = import.meta.env.VITE_SUPABASE_SECRET_KEY as string;
 describe('Seed data verification', () => {
   const client = createClient<Database>(url, SERVICE_ROLE_KEY ?? anonKey);
 
-  type ProfileWithPermissions = {
-    name: string;
-    user_type: string;
-    permissions: {
-      can_read: boolean;
-      can_write: boolean;
-      can_delete: boolean;
-      is_admin: boolean;
-    } | null;
-  };
+  type ProfileRow = Database['public']['Tables']['profiles']['Row'];
 
-  let profiles: ProfileWithPermissions[];
+  let profiles: ProfileRow[];
 
   beforeAll(async () => {
     const { data, error } = await client
       .from('profiles')
-      .select(
-        'name, user_type, permissions(can_read, can_write, can_delete, is_admin)'
-      )
+      .select('*')
       .order('name');
 
     expect(error, `Failed to fetch profiles: ${error?.message}`).toBeNull();
-    profiles = (data ?? []) as ProfileWithPermissions[];
+    profiles = data ?? [];
   });
 
   it('has exactly 2 seed profiles', () => {
@@ -47,7 +36,7 @@ describe('Seed data verification', () => {
   });
 
   describe('Test User (user@test.com)', () => {
-    let user: ProfileWithPermissions;
+    let user: ProfileRow;
 
     beforeAll(() => {
       user = profiles.find((p) => p.name === 'Test User')!;
@@ -57,20 +46,17 @@ describe('Seed data verification', () => {
       expect(user, 'Test User profile not found').toBeDefined();
     });
 
-    it('has user_type "member"', () => {
-      expect(user.user_type).toBe('member');
+    it('has role "user"', () => {
+      expect(user.role).toBe('user');
     });
 
-    it('has read permission only', () => {
-      expect(user.permissions?.can_read).toBe(true);
-      expect(user.permissions?.can_write).toBe(false);
-      expect(user.permissions?.can_delete).toBe(false);
-      expect(user.permissions?.is_admin).toBe(false);
+    it('has region_id 1', () => {
+      expect(user.region_id).toBe(1);
     });
   });
 
   describe('Admin User (admin@test.com)', () => {
-    let admin: ProfileWithPermissions;
+    let admin: ProfileRow;
 
     beforeAll(() => {
       admin = profiles.find((p) => p.name === 'Admin User')!;
@@ -80,15 +66,24 @@ describe('Seed data verification', () => {
       expect(admin, 'Admin User profile not found').toBeDefined();
     });
 
-    it('has user_type "admin"', () => {
-      expect(admin.user_type).toBe('admin');
+    it('has role "admin"', () => {
+      expect(admin.role).toBe('admin');
     });
 
-    it('has all permissions including is_admin', () => {
-      expect(admin.permissions?.can_read).toBe(true);
-      expect(admin.permissions?.can_write).toBe(true);
-      expect(admin.permissions?.can_delete).toBe(true);
-      expect(admin.permissions?.is_admin).toBe(true);
+    it('has region_id 1', () => {
+      expect(admin.region_id).toBe(1);
+    });
+  });
+
+  describe('Regions', () => {
+    it('has the default Ladysmith region', async () => {
+      const { data, error } = await client
+        .from('regions')
+        .select('*')
+        .eq('name', 'Ladysmith');
+      expect(error).toBeNull();
+      expect(data).toHaveLength(1);
+      expect(data![0].id).toBe(1);
     });
   });
 

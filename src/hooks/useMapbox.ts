@@ -67,7 +67,7 @@ export function useMapbox(): UseMapboxReturn {
           id: t.id,
           name: t.name,
           trail_class: t.trail_class,
-          restriction: t.restriction,
+          visibility: t.visibility,
           hidden: t.hidden,
           planned: t.planned,
           connector: t.connector,

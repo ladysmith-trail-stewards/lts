@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { LogIn, Menu, User } from 'lucide-react';
+import { LogIn, LogOut, Menu } from 'lucide-react';
 import { NavigationMenu } from '@base-ui/react/navigation-menu';
 import { Tooltip } from '@base-ui/react/tooltip';
 import { NavigationMenuLink } from '@/components/ui/navigation-menu';
@@ -119,6 +119,7 @@ function HeaderMenu() {
 }
 
 function HeaderUser() {
+  const navigate = useNavigate();
   const [user, setUser] = useState<SupabaseUser | null>(null);
 
   useEffect(() => {
@@ -146,17 +147,21 @@ function HeaderUser() {
   }
 
   return (
-    <Link
-      to="/protected"
+    <button
+      type="button"
+      onClick={async () => {
+        await supabase.auth.signOut();
+        navigate('/');
+      }}
       className="flex items-center gap-2 rounded-full bg-slate-700 hover:bg-slate-600 border border-slate-600 hover:border-slate-500 pl-1 pr-3 h-9 text-sm text-white transition-colors"
     >
       <div className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-500 text-white">
-        <User size={14} />
+        <LogOut size={14} />
       </div>
       <span className="max-w-[120px] truncate">
         {user.user_metadata?.full_name || user.email?.split('@')[0]}
       </span>
-    </Link>
+    </button>
   );
 }
 

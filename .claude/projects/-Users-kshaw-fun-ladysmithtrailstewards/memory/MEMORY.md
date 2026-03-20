@@ -1,0 +1,1 @@
+- [feedback_migrations.md](feedback_migrations.md) — Migrations should be schema-only, no data inserts
