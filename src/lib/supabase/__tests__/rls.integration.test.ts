@@ -49,14 +49,12 @@ describe('RLS — profiles table', () => {
       const { error } = await client.from('profiles').insert({
         auth_user_id: '00000000-0000-0000-0000-000000000099',
         name: 'Intruder',
-        user_type: 'member',
+        region_id: 1,
       });
       expect(error).not.toBeNull();
     });
 
     it('cannot delete profiles', async () => {
-      // RLS on DELETE silently filters — no error is thrown, but 0 rows are affected.
-      // Verify by checking the row still exists afterwards.
       await client.from('profiles').delete().eq('name', 'Test User');
 
       const serviceClient = createClient<Database>(url, secretKey);
@@ -75,7 +73,7 @@ describe('RLS — profiles table', () => {
       client = await signedInClient('admin@test.com', 'password123');
     });
 
-    it('can read all profiles', async () => {
+    it('can read all local profiles', async () => {
       const { data, error } = await client
         .from('profiles')
         .select('name')
@@ -103,58 +101,28 @@ describe('RLS — profiles table', () => {
   });
 });
 
-describe('RLS — permissions table', () => {
-  describe('regular user (user@test.com)', () => {
-    let client: Awaited<ReturnType<typeof signedInClient>>;
-
-    beforeAll(async () => {
-      client = await signedInClient('user@test.com', 'password123');
-    });
-
-    it('can read their own permissions', async () => {
-      const { data, error } = await client
-        .from('permissions')
-        .select('id, profile_id, can_read, can_write, can_delete, is_admin');
-      expect(error).toBeNull();
-      expect(data).toHaveLength(1);
-      expect(data![0].is_admin).toBe(false);
-    });
-
-    it('cannot see admin permissions', async () => {
-      const { data, error } = await client
-        .from('permissions')
-        .select('id, profile_id, can_read, can_write, can_delete, is_admin');
-      expect(error).toBeNull();
-      // Should only ever see 1 row — their own
-      expect(data!.every((p) => p.is_admin === false)).toBe(true);
-    });
-
-    it('cannot elevate their own permissions', async () => {
-      // RLS blocks UPDATE but PostgREST returns null error (0 rows affected silently).
-      // Verify by confirming is_admin is still false via service role.
-      await client
-        .from('permissions')
-        .update({ is_admin: true })
-        .eq('is_admin', false);
-
-      const serviceClient = createClient<Database>(url, secretKey);
-      const { data } = await serviceClient
-        .from('permissions')
-        .select('is_admin')
-        .eq('is_admin', true);
-      // Only the admin seed user should have is_admin=true — not the regular user
-      expect(data).toHaveLength(1);
-    });
+describe('RLS — role checks', () => {
+  it('regular user is_admin() returns false', async () => {
+    const client = await signedInClient('user@test.com', 'password123');
+    const { data } = await client.rpc('is_admin');
+    expect(data).toBe(false);
   });
 
-  describe('service role bypasses RLS', () => {
-    it('can see all permissions rows', async () => {
-      const serviceClient = createClient<Database>(url, secretKey);
-      const { data, error } = await serviceClient
-        .from('permissions')
-        .select('*');
-      expect(error).toBeNull();
-      expect(data!.length).toBeGreaterThanOrEqual(2);
-    });
+  it('admin user is_admin() returns true', async () => {
+    const client = await signedInClient('admin@test.com', 'password123');
+    const { data } = await client.rpc('is_admin');
+    expect(data).toBe(true);
+  });
+
+  it('regular user get_my_role() returns user', async () => {
+    const client = await signedInClient('user@test.com', 'password123');
+    const { data } = await client.rpc('get_my_role');
+    expect(data).toBe('user');
+  });
+
+  it('admin user get_my_role() returns admin', async () => {
+    const client = await signedInClient('admin@test.com', 'password123');
+    const { data } = await client.rpc('get_my_role');
+    expect(data).toBe('admin');
   });
 });

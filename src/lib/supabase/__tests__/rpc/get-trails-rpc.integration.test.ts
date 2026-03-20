@@ -7,15 +7,10 @@ import type { Database } from '../../database.types';
  *   1. `supabase start` (Docker running)
  *   2. `supabase db reset` (migrations + seed applied)
  *
- * Strategy: each suite creates its own fixture trails via the service
- * role client and cleans them up in afterAll — no dependency on seed data.
- *
  * Access-control cases covered:
- *   - anon can see public trails, not hidden, not admin_only
- *   - regular user can see public trails, not hidden, not admin_only
- *   - attributed user can see their user-restricted trail
- *   - non-attributed user cannot see user-restricted trail
- *   - admin can see everything including admin_only and hidden
+ *   - anon can see public trails, not hidden, not private
+ *   - regular user can see all public trails, not hidden by default
+ *   - admin can see everything including hidden
  *   - hidden=true arg includes hidden trails for those who have access
  */
 
@@ -49,7 +44,8 @@ async function createTrail(
     .insert({
       type: 'trail',
       geometry: SAMPLE_GEOMETRY as unknown as string,
-      restriction: 'public',
+      visibility: 'public',
+      region_id: 1,
       ...overrides,
     })
     .select('id')
@@ -84,17 +80,6 @@ async function trailNames(
   return (data ?? []).map((t) => t.name);
 }
 
-/** Look up a profile id by name (service role). */
-async function profileIdByName(name: string): Promise<number> {
-  const { data, error } = await serviceClient
-    .from('profiles')
-    .select('id')
-    .eq('name', name)
-    .single();
-  if (error) throw new Error(`profileIdByName failed: ${error.message}`);
-  return data.id;
-}
-
 // ---------------------------------------------------------------------------
 // Fixture trail names — unique prefix avoids collisions with other test runs
 // ---------------------------------------------------------------------------
@@ -102,8 +87,7 @@ const PREFIX = '__rpc_test__';
 const T = {
   public: `${PREFIX}public`,
   hidden: `${PREFIX}hidden`,
-  adminOnly: `${PREFIX}admin_only`,
-  userRestr: `${PREFIX}user_restricted`,
+  private: `${PREFIX}private`,
 };
 
 // ---------------------------------------------------------------------------
@@ -112,25 +96,12 @@ const T = {
 let trailIds: number[] = [];
 
 beforeAll(async () => {
-  const [publicId, hiddenId, adminOnlyId, userRestrId] = await Promise.all([
-    createTrail({ name: T.public, restriction: 'public', hidden: false }),
-    createTrail({ name: T.hidden, restriction: 'public', hidden: true }),
-    createTrail({
-      name: T.adminOnly,
-      restriction: 'admin_only',
-      hidden: false,
-    }),
-    createTrail({ name: T.userRestr, restriction: 'user', hidden: false }),
+  const [publicId, hiddenId, privateId] = await Promise.all([
+    createTrail({ name: T.public, visibility: 'public', hidden: false }),
+    createTrail({ name: T.hidden, visibility: 'public', hidden: true }),
+    createTrail({ name: T.private, visibility: 'private', hidden: false }),
   ]);
-  trailIds = [publicId, hiddenId, adminOnlyId, userRestrId];
-
-  // Attribute the user-restricted trail to the regular seed user
-  const regularUserId = await profileIdByName('Test User');
-  const { error } = await serviceClient
-    .from('trail_attribution')
-    .insert({ trail_id: userRestrId, profile_id: regularUserId });
-  if (error)
-    throw new Error(`trail_attribution insert failed: ${error.message}`);
+  trailIds = [publicId, hiddenId, privateId];
 });
 
 afterAll(async () => {
@@ -153,30 +124,21 @@ describe('get_trails() — anon caller', () => {
     expect(names).not.toContain(T.hidden);
   });
 
-  it('does NOT return admin_only trails', async () => {
+  it('does NOT return private trails', async () => {
     const names = await trailNames(anonClient);
-    expect(names).not.toContain(T.adminOnly);
+    expect(names).not.toContain(T.private);
   });
 
-  it('does NOT return user-restricted trails', async () => {
-    const names = await trailNames(anonClient);
-    expect(names).not.toContain(T.userRestr);
-  });
-
-  it('hidden=true arg does NOT expose hidden trails to anon', async () => {
-    // hidden arg controls the WHERE filter in the function, but RLS still
-    // only allows 'public' trails — so passing hidden=true only surfaces
-    // public+hidden rows, not admin_only or user ones.
+  it('hidden=true arg exposes hidden public trails to anon', async () => {
     const names = await trailNames(anonClient, { hidden: true });
     expect(names).toContain(T.public);
-    expect(names).toContain(T.hidden); // public restriction, just hidden=true
-    expect(names).not.toContain(T.adminOnly);
-    expect(names).not.toContain(T.userRestr);
+    expect(names).toContain(T.hidden);
+    expect(names).not.toContain(T.private);
   });
 });
 
 // ---------------------------------------------------------------------------
-// Regular authenticated user (non-admin, attributed to userRestr trail)
+// Regular authenticated user
 // ---------------------------------------------------------------------------
 describe('get_trails() — regular user (user@test.com)', () => {
   let client: Awaited<ReturnType<typeof signedInClient>>;
@@ -195,84 +157,14 @@ describe('get_trails() — regular user (user@test.com)', () => {
     expect(names).not.toContain(T.hidden);
   });
 
-  it('does NOT return admin_only trails', async () => {
-    const names = await trailNames(client);
-    expect(names).not.toContain(T.adminOnly);
-  });
-
-  it('returns the user-restricted trail they are attributed to', async () => {
-    const names = await trailNames(client);
-    expect(names).toContain(T.userRestr);
-  });
-
   it('hidden=true exposes hidden public trails', async () => {
     const names = await trailNames(client, { hidden: true });
     expect(names).toContain(T.hidden);
   });
 
-  it('hidden=true still does NOT expose admin_only trails', async () => {
-    const names = await trailNames(client, { hidden: true });
-    expect(names).not.toContain(T.adminOnly);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Regular user who is NOT attributed to the user-restricted trail
-// ---------------------------------------------------------------------------
-describe('get_trails() — non-attributed user (admin@test.com acting as non-attributed)', () => {
-  // We need a second non-admin, non-attributed user.  Rather than a new seed
-  // user, we create a temporary auth user + profile for this suite only.
-  let client: Awaited<ReturnType<typeof signedInClient>>;
-  let tempAuthUserId: string;
-  let tempProfileId: number;
-
-  beforeAll(async () => {
-    // Create temp auth user
-    const { data: authData, error: authErr } =
-      await serviceClient.auth.admin.createUser({
-        email: 'nonattributed@test.com',
-        password: 'password123',
-        email_confirm: true,
-      });
-    if (authErr) throw new Error(`createUser failed: ${authErr.message}`);
-    tempAuthUserId = authData.user.id;
-
-    // Create profile (triggers default permissions row)
-    const { data: profileData, error: profileErr } = await serviceClient
-      .from('profiles')
-      .insert({
-        auth_user_id: tempAuthUserId,
-        name: `${PREFIX}non_attributed_user`,
-        user_type: 'member',
-      })
-      .select('id')
-      .single();
-    if (profileErr)
-      throw new Error(`profile insert failed: ${profileErr.message}`);
-    tempProfileId = profileData.id;
-
-    client = await signedInClient('nonattributed@test.com', 'password123');
-  });
-
-  afterAll(async () => {
-    // Clean up profile (cascade deletes permissions), then auth user
-    await serviceClient.from('profiles').delete().eq('id', tempProfileId);
-    await serviceClient.auth.admin.deleteUser(tempAuthUserId);
-  });
-
-  it('can see public trails', async () => {
+  it('can see all public trails (user role sees all trails)', async () => {
     const names = await trailNames(client);
     expect(names).toContain(T.public);
-  });
-
-  it('cannot see the user-restricted trail they are NOT attributed to', async () => {
-    const names = await trailNames(client);
-    expect(names).not.toContain(T.userRestr);
-  });
-
-  it('cannot see admin_only trails', async () => {
-    const names = await trailNames(client);
-    expect(names).not.toContain(T.adminOnly);
   });
 });
 
@@ -291,14 +183,9 @@ describe('get_trails() — admin user (admin@test.com)', () => {
     expect(names).toContain(T.public);
   });
 
-  it('returns admin_only trails', async () => {
+  it('returns private trails', async () => {
     const names = await trailNames(client);
-    expect(names).toContain(T.adminOnly);
-  });
-
-  it('returns user-restricted trails', async () => {
-    const names = await trailNames(client);
-    expect(names).toContain(T.userRestr);
+    expect(names).toContain(T.private);
   });
 
   it('does NOT return hidden trails by default', async () => {
@@ -306,24 +193,9 @@ describe('get_trails() — admin user (admin@test.com)', () => {
     expect(names).not.toContain(T.hidden);
   });
 
-  it('hidden=true returns hidden public trails', async () => {
+  it('hidden=true returns hidden trails', async () => {
     const names = await trailNames(client, { hidden: true });
     expect(names).toContain(T.hidden);
-  });
-
-  it('hidden=true also returns hidden admin_only trails', async () => {
-    // Create a hidden admin_only trail just for this check
-    const hiddenAdminId = await createTrail({
-      name: `${PREFIX}hidden_admin_only`,
-      restriction: 'admin_only',
-      hidden: true,
-    });
-    try {
-      const names = await trailNames(client, { hidden: true });
-      expect(names).toContain(`${PREFIX}hidden_admin_only`);
-    } finally {
-      await deleteTrails(hiddenAdminId);
-    }
   });
 });
 

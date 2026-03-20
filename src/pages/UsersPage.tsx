@@ -5,8 +5,6 @@ import {
   useReactTable,
   type ColumnDef,
 } from '@tanstack/react-table';
-import { Check, X } from 'lucide-react';
-
 import { supabase } from '@/lib/supabase/client';
 import {
   Table,
@@ -22,22 +20,11 @@ interface AdminUser {
   auth_user_id: string;
   email: string;
   name: string;
-  user_type: string;
+  role: string;
+  region_name: string;
   phone: string | null;
   bio: string | null;
-  is_admin: boolean;
-  can_read: boolean;
-  can_write: boolean;
-  can_delete: boolean;
   created_at: string;
-}
-
-function BoolIcon({ value }: { value: boolean }) {
-  return value ? (
-    <Check size={16} className="text-green-600" />
-  ) : (
-    <X size={16} className="text-muted-foreground/40" />
-  );
 }
 
 const columns: ColumnDef<AdminUser>[] = [
@@ -50,8 +37,12 @@ const columns: ColumnDef<AdminUser>[] = [
     header: 'Email',
   },
   {
-    accessorKey: 'user_type',
-    header: 'Type',
+    accessorKey: 'role',
+    header: 'Role',
+  },
+  {
+    accessorKey: 'region_name',
+    header: 'Region',
   },
   {
     accessorKey: 'phone',
@@ -66,26 +57,6 @@ const columns: ColumnDef<AdminUser>[] = [
         {row.original.bio ?? '—'}
       </span>
     ),
-  },
-  {
-    accessorKey: 'is_admin',
-    header: 'Admin',
-    cell: ({ row }) => <BoolIcon value={row.original.is_admin} />,
-  },
-  {
-    accessorKey: 'can_read',
-    header: 'Read',
-    cell: ({ row }) => <BoolIcon value={row.original.can_read} />,
-  },
-  {
-    accessorKey: 'can_write',
-    header: 'Write',
-    cell: ({ row }) => <BoolIcon value={row.original.can_write} />,
-  },
-  {
-    accessorKey: 'can_delete',
-    header: 'Delete',
-    cell: ({ row }) => <BoolIcon value={row.original.can_delete} />,
   },
 ];
 

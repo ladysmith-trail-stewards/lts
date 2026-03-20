@@ -9,47 +9,6 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      permissions: {
-        Row: {
-          can_delete: boolean;
-          can_read: boolean;
-          can_write: boolean;
-          created_at: string;
-          id: number;
-          is_admin: boolean;
-          profile_id: number;
-          updated_at: string;
-        };
-        Insert: {
-          can_delete?: boolean;
-          can_read?: boolean;
-          can_write?: boolean;
-          created_at?: string;
-          id?: number;
-          is_admin?: boolean;
-          profile_id: number;
-          updated_at?: string;
-        };
-        Update: {
-          can_delete?: boolean;
-          can_read?: boolean;
-          can_write?: boolean;
-          created_at?: string;
-          id?: number;
-          is_admin?: boolean;
-          profile_id?: number;
-          updated_at?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: 'permissions_profile_id_fkey';
-            columns: ['profile_id'];
-            isOneToOne: true;
-            referencedRelation: 'profiles';
-            referencedColumns: ['id'];
-          },
-        ];
-      };
       profiles: {
         Row: {
           auth_user_id: string;
@@ -58,7 +17,8 @@ export type Database = {
           id: number;
           name: string;
           phone: string | null;
-          user_type: string;
+          region_id: number;
+          role: Database['public']['Enums']['app_role'];
         };
         Insert: {
           auth_user_id: string;
@@ -67,7 +27,8 @@ export type Database = {
           id?: number;
           name: string;
           phone?: string | null;
-          user_type?: string;
+          region_id: number;
+          role?: Database['public']['Enums']['app_role'];
         };
         Update: {
           auth_user_id?: string;
@@ -76,7 +37,31 @@ export type Database = {
           id?: number;
           name?: string;
           phone?: string | null;
-          user_type?: string;
+          region_id?: number;
+          role?: Database['public']['Enums']['app_role'];
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'profiles_region_id_fkey';
+            columns: ['region_id'];
+            isOneToOne: false;
+            referencedRelation: 'regions';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      regions: {
+        Row: {
+          id: number;
+          name: string;
+        };
+        Insert: {
+          id?: number;
+          name: string;
+        };
+        Update: {
+          id?: number;
+          name?: string;
         };
         Relationships: [];
       };
@@ -104,39 +89,6 @@ export type Database = {
         };
         Relationships: [];
       };
-      trail_attribution: {
-        Row: {
-          id: number;
-          profile_id: number;
-          trail_id: number;
-        };
-        Insert: {
-          id?: number;
-          profile_id: number;
-          trail_id: number;
-        };
-        Update: {
-          id?: number;
-          profile_id?: number;
-          trail_id?: number;
-        };
-        Relationships: [
-          {
-            foreignKeyName: 'trail_attribution_profile_id_fkey';
-            columns: ['profile_id'];
-            isOneToOne: false;
-            referencedRelation: 'profiles';
-            referencedColumns: ['id'];
-          },
-          {
-            foreignKeyName: 'trail_attribution_trail_id_fkey';
-            columns: ['trail_id'];
-            isOneToOne: false;
-            referencedRelation: 'trails';
-            referencedColumns: ['id'];
-          },
-        ];
-      };
       trails: {
         Row: {
           activity_types: string[] | null;
@@ -149,11 +101,12 @@ export type Database = {
           id: number;
           name: string;
           planned: boolean;
-          restriction: string;
+          region_id: number;
           tf_popularity: number | null;
           trail_class: string | null;
           type: string;
           updated_at: string;
+          visibility: string;
         };
         Insert: {
           activity_types?: string[] | null;
@@ -166,11 +119,12 @@ export type Database = {
           id?: number;
           name: string;
           planned?: boolean;
-          restriction?: string;
+          region_id: number;
           tf_popularity?: number | null;
           trail_class?: string | null;
           type: string;
           updated_at?: string;
+          visibility?: string;
         };
         Update: {
           activity_types?: string[] | null;
@@ -183,13 +137,22 @@ export type Database = {
           id?: number;
           name?: string;
           planned?: boolean;
-          restriction?: string;
+          region_id?: number;
           tf_popularity?: number | null;
           trail_class?: string | null;
           type?: string;
           updated_at?: string;
+          visibility?: string;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: 'trails_region_id_fkey';
+            columns: ['region_id'];
+            isOneToOne: false;
+            referencedRelation: 'regions';
+            referencedColumns: ['id'];
+          },
+        ];
       };
     };
     Views: {
@@ -509,17 +472,19 @@ export type Database = {
         Returns: {
           auth_user_id: string;
           bio: string;
-          can_delete: boolean;
-          can_read: boolean;
-          can_write: boolean;
           created_at: string;
           email: string;
-          is_admin: boolean;
           name: string;
           phone: string;
           profile_id: number;
-          user_type: string;
+          region_name: string;
+          role: Database['public']['Enums']['app_role'];
         }[];
+      };
+      get_my_region_id: { Args: never; Returns: number };
+      get_my_role: {
+        Args: never;
+        Returns: Database['public']['Enums']['app_role'];
       };
       get_trails: {
         Args: { hidden?: boolean };
@@ -533,15 +498,15 @@ export type Database = {
           id: number;
           name: string;
           planned: boolean;
-          restriction: string;
+          region_id: number;
           tf_popularity: number;
           trail_class: string;
           type: string;
+          visibility: string;
         }[];
       };
       gettransactionid: { Args: never; Returns: unknown };
       is_admin: { Args: never; Returns: boolean };
-      is_attributed_to_trail: { Args: { trail_id: number }; Returns: boolean };
       longtransactionsenabled: { Args: never; Returns: boolean };
       populate_geometry_columns:
         | { Args: { tbl_oid: unknown; use_typmod?: boolean }; Returns: number }
@@ -1222,7 +1187,7 @@ export type Database = {
       };
     };
     Enums: {
-      [_ in never]: never;
+      app_role: 'super_admin' | 'admin' | 'super_user' | 'user';
     };
     CompositeTypes: {
       geometry_dump: {
@@ -1360,6 +1325,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ['super_admin', 'admin', 'super_user', 'user'],
+    },
   },
 } as const;
