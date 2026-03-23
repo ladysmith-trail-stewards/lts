@@ -1,26 +1,16 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Database } from '@/lib/supabase/database.types';
+import type { Database, TablesInsert } from '@/lib/supabase/database.types';
+import { toJson } from '@/lib/utils';
 
-// ---------------------------------------------------------------------------
-// GeoJSON input shape
-// ---------------------------------------------------------------------------
+type TrailInsert = TablesInsert<'trails'>;
 
-export interface TrailFeatureProperties {
-  /** Present for updates, omit for inserts. */
+export type TrailFeatureProperties = Omit<
+  TrailInsert,
+  'geometry' | 'created_at' | 'updated_at'
+> & {
   id?: number | null;
-  name: string;
-  type?: string;
-  trail_class?: string | null;
-  activity_types?: string[] | null;
-  direction?: string | null;
-  hidden?: boolean;
-  planned?: boolean;
-  connector?: boolean;
-  bike?: boolean;
-  tf_popularity?: number | null;
   visibility?: 'public' | 'private' | 'shared';
-  region_id: number;
-}
+};
 
 export interface TrailFeature {
   type: 'Feature';
@@ -31,29 +21,16 @@ export interface TrailFeature {
   properties: TrailFeatureProperties;
 }
 
-// ---------------------------------------------------------------------------
-// Result shape
-// ---------------------------------------------------------------------------
+type UpsertTrailRpcRow =
+  Database['public']['Functions']['upsert_trails']['Returns'][number];
 
-/** Per-row result returned by the `upsert_trails` RPC. */
-export interface UpsertTrailResult {
-  ok: boolean;
-  id: number | null;
-  message: string | null;
-}
+export type UpsertTrailResult = UpsertTrailRpcRow & { message: string | null };
 
 export interface UpsertTrailsDbResult {
-  /** Per-row outcomes — always present even when some rows failed. */
   results: UpsertTrailResult[];
-  /** True when every row succeeded. */
   allOk: boolean;
-  /** Top-level RPC error (network / auth), distinct from per-row failures. */
   error: Error | null;
 }
-
-// ---------------------------------------------------------------------------
-// Service function
-// ---------------------------------------------------------------------------
 
 /**
  * Upserts one or more trails via the `upsert_trails` RPC.
@@ -73,9 +50,8 @@ export async function upsertTrailsDb(
 ): Promise<UpsertTrailsDbResult> {
   const featureArray = Array.isArray(features) ? features : [features];
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (client as any).rpc('upsert_trails', {
-    features: featureArray,
+  const { data, error } = await client.rpc('upsert_trails', {
+    features: toJson(featureArray),
   });
 
   if (error) {
