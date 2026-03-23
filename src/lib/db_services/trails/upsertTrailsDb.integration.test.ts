@@ -49,7 +49,10 @@ describe('upsertTrailsDb — anon (denied)', () => {
 describe('upsertTrailsDb — user role (denied)', () => {
   it('returns a top-level error', async () => {
     const client = await signedInClient(SEED_USER.email, SEED_USER.password);
-    const { results, allOk, error } = await upsertTrailsDb(client, trailFeature('user'));
+    const { results, allOk, error } = await upsertTrailsDb(
+      client,
+      trailFeature('user')
+    );
     expect(error).not.toBeNull();
     expect(allOk).toBe(false);
     expect(results).toHaveLength(0);
@@ -167,8 +170,16 @@ describe('upsertTrailsDb — invalid geometry', () => {
   it('returns a top-level error and inserts nothing', async () => {
     const { results, allOk, error } = await upsertTrailsDb(serviceClient, {
       type: 'Feature',
-      geometry: { type: 'Point' as unknown as 'LineString', coordinates: [[-123.83, 48.99]] },
-      properties: { name: `${P}bad-geom`, type: 'trail', visibility: 'public', region_id: 1 },
+      geometry: {
+        type: 'Point' as unknown as 'LineString',
+        coordinates: [[-123.83, 48.99]],
+      },
+      properties: {
+        name: `${P}bad-geom`,
+        type: 'trail',
+        visibility: 'public',
+        region_id: 1,
+      },
     });
 
     expect(error).not.toBeNull();

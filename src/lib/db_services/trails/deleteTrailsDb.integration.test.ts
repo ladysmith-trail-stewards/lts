@@ -70,12 +70,22 @@ describe('deleteTrailsDb — admin (permitted for own region)', () => {
 
 describe('deleteTrailsDb — super_user (permitted for own region)', () => {
   it('deletes a trail and row no longer exists', async () => {
-    const id = await fixtureCreateTrail({ name: `${P}super-user-target`, region_id: 1 });
-    const client = await signedInClient(SEED_SUPER_USER.email, SEED_SUPER_USER.password);
+    const id = await fixtureCreateTrail({
+      name: `${P}super-user-target`,
+      region_id: 1,
+    });
+    const client = await signedInClient(
+      SEED_SUPER_USER.email,
+      SEED_SUPER_USER.password
+    );
     const { error } = await deleteTrailsDb(client, id);
     expect(error).toBeNull();
 
-    const { data: row } = await serviceClient.from('trails').select('id').eq('id', id).maybeSingle();
+    const { data: row } = await serviceClient
+      .from('trails')
+      .select('id')
+      .eq('id', id)
+      .maybeSingle();
     expect(row).toBeNull();
   });
 });
@@ -83,11 +93,18 @@ describe('deleteTrailsDb — super_user (permitted for own region)', () => {
 describe('deleteTrailsDb — super_admin (permitted for any trail)', () => {
   it('deletes a trail and row no longer exists', async () => {
     const id = await fixtureCreateTrail({ name: `${P}super-admin-target` });
-    const client = await signedInClient(SEED_SUPER_ADMIN.email, SEED_SUPER_ADMIN.password);
+    const client = await signedInClient(
+      SEED_SUPER_ADMIN.email,
+      SEED_SUPER_ADMIN.password
+    );
     const { error } = await deleteTrailsDb(client, id);
     expect(error).toBeNull();
 
-    const { data: row } = await serviceClient.from('trails').select('id').eq('id', id).maybeSingle();
+    const { data: row } = await serviceClient
+      .from('trails')
+      .select('id')
+      .eq('id', id)
+      .maybeSingle();
     expect(row).toBeNull();
   });
 });
@@ -117,4 +134,3 @@ describe('deleteTrailsDb — non-existent id', () => {
     expect(error).toBeNull();
   });
 });
-
