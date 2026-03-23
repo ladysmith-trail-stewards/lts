@@ -1,0 +1,178 @@
+import { describe, it, expect, afterEach } from 'vitest';
+import { upsertTrailsDb } from './upsertTrailsDb';
+import type { TrailFeature } from './upsertTrailsDb';
+import {
+  anonClient,
+  serviceClient,
+  signedInClient,
+  SEED_USER,
+  SEED_ADMIN,
+  SEED_SUPER_USER,
+  SEED_SUPER_ADMIN,
+} from '../supabaseTestClients';
+import { fixtureDeleteTrails, SAMPLE_GEOMETRY } from './testHelpers';
+
+const P = '__upsert_test__';
+
+const created: number[] = [];
+
+afterEach(async () => {
+  await fixtureDeleteTrails(...created.splice(0));
+});
+
+function trailFeature(nameSuffix: string, id?: number): TrailFeature {
+  return {
+    type: 'Feature',
+    geometry: SAMPLE_GEOMETRY as TrailFeature['geometry'],
+    properties: {
+      ...(id != null ? { id } : {}),
+      name: `${P}${nameSuffix}`,
+      type: 'trail',
+      visibility: 'public',
+      region_id: 1,
+    },
+  };
+}
+
+describe('upsertTrailsDb — anon (denied)', () => {
+  it('returns a top-level error, no rows inserted', async () => {
+    const { results, allOk, error } = await upsertTrailsDb(
+      anonClient,
+      trailFeature('anon')
+    );
+    expect(error).not.toBeNull();
+    expect(allOk).toBe(false);
+    expect(results).toHaveLength(0);
+  });
+});
+
+describe('upsertTrailsDb — user role (denied)', () => {
+  it('returns a top-level error', async () => {
+    const client = await signedInClient(SEED_USER.email, SEED_USER.password);
+    const { results, allOk, error } = await upsertTrailsDb(client, trailFeature('user'));
+    expect(error).not.toBeNull();
+    expect(allOk).toBe(false);
+    expect(results).toHaveLength(0);
+  });
+});
+
+describe('upsertTrailsDb — admin insert (permitted for own region)', () => {
+  it('inserts a trail and returns ok=true with an id', async () => {
+    const client = await signedInClient(SEED_ADMIN.email, SEED_ADMIN.password);
+    const { results, allOk, error } = await upsertTrailsDb(
+      client,
+      trailFeature('admin-insert')
+    );
+
+    expect(error).toBeNull();
+    expect(allOk).toBe(true);
+    expect(results).toHaveLength(1);
+    expect(results[0].ok).toBe(true);
+    expect(typeof results[0].id).toBe('number');
+
+    created.push(results[0].id!);
+  });
+});
+
+describe('upsertTrailsDb — super_user insert', () => {
+  it('inserts and returns ok=true', async () => {
+    const client = await signedInClient(
+      SEED_SUPER_USER.email,
+      SEED_SUPER_USER.password
+    );
+    const { results, allOk, error } = await upsertTrailsDb(
+      client,
+      trailFeature('super-user-insert')
+    );
+
+    expect(error).toBeNull();
+    expect(allOk).toBe(true);
+    created.push(results[0].id!);
+  });
+});
+
+describe('upsertTrailsDb — super_admin insert', () => {
+  it('inserts and returns ok=true', async () => {
+    const client = await signedInClient(
+      SEED_SUPER_ADMIN.email,
+      SEED_SUPER_ADMIN.password
+    );
+    const { results, allOk, error } = await upsertTrailsDb(
+      client,
+      trailFeature('super-admin-insert')
+    );
+
+    expect(error).toBeNull();
+    expect(allOk).toBe(true);
+    created.push(results[0].id!);
+  });
+});
+
+describe('upsertTrailsDb — update existing trail', () => {
+  it('updates by id and persists the new name', async () => {
+    const client = await signedInClient(SEED_ADMIN.email, SEED_ADMIN.password);
+
+    const { results: insertResults } = await upsertTrailsDb(
+      serviceClient,
+      trailFeature('to-update')
+    );
+    const id = insertResults[0].id!;
+    created.push(id);
+
+    const newName = `${P}updated-name`;
+    const { results, allOk, error } = await upsertTrailsDb(client, {
+      ...trailFeature('to-update', id),
+      properties: {
+        id,
+        name: newName,
+        type: 'trail',
+        visibility: 'public',
+        region_id: 1,
+      },
+    });
+
+    expect(error).toBeNull();
+    expect(allOk).toBe(true);
+    expect(results[0].id).toBe(id);
+
+    const { data: row } = await serviceClient
+      .from('trails')
+      .select('name')
+      .eq('id', id)
+      .single();
+    expect(row!.name).toBe(newName);
+  });
+});
+
+describe('upsertTrailsDb — bulk insert', () => {
+  it('inserts three trails and returns all ok=true', async () => {
+    const { results, allOk, error } = await upsertTrailsDb(serviceClient, [
+      trailFeature('bulk-1'),
+      trailFeature('bulk-2'),
+      trailFeature('bulk-3'),
+    ]);
+
+    expect(error).toBeNull();
+    expect(allOk).toBe(true);
+    expect(results).toHaveLength(3);
+    results.forEach((r) => {
+      expect(r.ok).toBe(true);
+      expect(typeof r.id).toBe('number');
+      created.push(r.id!);
+    });
+  });
+});
+
+describe('upsertTrailsDb — invalid geometry', () => {
+  it('returns a top-level error and inserts nothing', async () => {
+    const { results, allOk, error } = await upsertTrailsDb(serviceClient, {
+      type: 'Feature',
+      geometry: { type: 'Point' as unknown as 'LineString', coordinates: [[-123.83, 48.99]] },
+      properties: { name: `${P}bad-geom`, type: 'trail', visibility: 'public', region_id: 1 },
+    });
+
+    expect(error).not.toBeNull();
+    expect(allOk).toBe(false);
+    expect(results).toHaveLength(0);
+  });
+});
