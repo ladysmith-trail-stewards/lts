@@ -4,8 +4,10 @@
  * Requires local Supabase running (`pnpm db:start`) with migrations + seed applied.
  *
  * Seed users (password: "password123"):
- *   user@test.com  → role: user
- *   admin@test.com → role: admin
+ *   user@test.com        → role: user
+ *   super_user@test.com  → role: super_user
+ *   admin@test.com       → role: admin
+ *   super_admin@test.com → role: super_admin
  */
 
 import { createClient } from '@supabase/supabase-js';
