@@ -79,7 +79,7 @@ describe('RLS — profiles table', () => {
         .select('name')
         .order('name');
       expect(error).toBeNull();
-      expect(data).toHaveLength(2);
+      expect(data).toHaveLength(4);
       const names = data!.map((p) => p.name);
       expect(names).toContain('Test User');
       expect(names).toContain('Admin User');

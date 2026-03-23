@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase/client';
+import { getTrailsDb } from '@/lib/db_services/trails/getTrailsDb';
 import type { Database } from '@/lib/supabase/database.types';
 
 type TrailRow =
@@ -33,7 +34,7 @@ export function useTrails(opts: { hidden?: boolean } = {}) {
     async function fetch() {
       setState((s) => ({ ...s, loading: true, error: null }));
 
-      const { data, error } = await supabase.rpc('get_trails', {
+      const { data, error } = await getTrailsDb(supabase, {
         hidden: opts.hidden ?? false,
       });
 
