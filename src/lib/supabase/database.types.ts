@@ -506,7 +506,7 @@ export type Database = {
           activity_types: string[];
           bike: boolean;
           connector: boolean;
-          description: string;
+          description: string | null;
           direction: string;
           geometry: Json;
           hidden: boolean;
@@ -514,7 +514,7 @@ export type Database = {
           name: string;
           planned: boolean;
           region_id: number;
-          tf_popularity: number;
+          tf_popularity: number | null;
           trail_class: string;
           type: string;
           visibility: string;
