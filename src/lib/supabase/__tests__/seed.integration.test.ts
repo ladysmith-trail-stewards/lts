@@ -31,8 +31,8 @@ describe('Seed data verification', () => {
     profiles = data ?? [];
   });
 
-  it('has exactly 2 seed profiles', () => {
-    expect(profiles).toHaveLength(2);
+  it('has exactly 4 seed profiles', () => {
+    expect(profiles).toHaveLength(4);
   });
 
   describe('Test User (user@test.com)', () => {

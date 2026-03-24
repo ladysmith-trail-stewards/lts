@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeAll } from 'vitest';
-import { createClient } from '@supabase/supabase-js';
-import type { Database } from '../database.types';
+import {
+  signedInClient,
+  serviceClient,
+} from '../../db_services/supabaseTestClients';
 
 /**
  * RLS integration tests — requires:
@@ -10,18 +12,6 @@ import type { Database } from '../database.types';
  * Strategy: sign in as each seed user, then query using their
  * session JWT so Postgres evaluates RLS as that user.
  */
-
-const url = import.meta.env.VITE_SUPABASE_URL as string;
-const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY as string;
-const secretKey = import.meta.env.VITE_SUPABASE_SECRET_KEY as string;
-
-/** Sign in and return a client authenticated as that user. */
-async function signedInClient(email: string, password: string) {
-  const client = createClient<Database>(url, anonKey);
-  const { error } = await client.auth.signInWithPassword({ email, password });
-  expect(error, `Sign-in failed for ${email}: ${error?.message}`).toBeNull();
-  return client;
-}
 
 describe('RLS — profiles table', () => {
   describe('regular user (user@test.com)', () => {
@@ -57,7 +47,6 @@ describe('RLS — profiles table', () => {
     it('cannot delete profiles', async () => {
       await client.from('profiles').delete().eq('name', 'Test User');
 
-      const serviceClient = createClient<Database>(url, secretKey);
       const { data } = await serviceClient
         .from('profiles')
         .select('name')
@@ -79,7 +68,7 @@ describe('RLS — profiles table', () => {
         .select('name')
         .order('name');
       expect(error).toBeNull();
-      expect(data).toHaveLength(2);
+      expect(data).toHaveLength(4);
       const names = data!.map((p) => p.name);
       expect(names).toContain('Test User');
       expect(names).toContain('Admin User');

@@ -52,6 +52,36 @@ insert into auth.users (
     '{}',
     false,
     '', '', '', ''
+  ),
+  (
+    '00000000-0000-0000-0000-000000000003',
+    '00000000-0000-0000-0000-000000000000',
+    'super_user@test.com',
+    crypt('password123', gen_salt('bf')),
+    now(),
+    'authenticated',
+    'authenticated',
+    now(),
+    now(),
+    '{"provider":"email","providers":["email"]}',
+    '{}',
+    false,
+    '', '', '', ''
+  ),
+  (
+    '00000000-0000-0000-0000-000000000004',
+    '00000000-0000-0000-0000-000000000000',
+    'super_admin@test.com',
+    crypt('password123', gen_salt('bf')),
+    now(),
+    'authenticated',
+    'authenticated',
+    now(),
+    now(),
+    '{"provider":"email","providers":["email"]}',
+    '{}',
+    false,
+    '', '', '', ''
   );
 
 -- ============================================================
@@ -66,8 +96,10 @@ select setval('public.regions_id_seq', greatest(1, (select max(id) from public.r
 -- Inserted with service_role bypass (seed runs as superuser)
 -- ============================================================
 insert into public.profiles (auth_user_id, name, role, region_id) values
-  ('00000000-0000-0000-0000-000000000001', 'Test User',  'user',  1),
-  ('00000000-0000-0000-0000-000000000002', 'Admin User', 'admin', 1);
+  ('00000000-0000-0000-0000-000000000001', 'Test User',       'user',        1),
+  ('00000000-0000-0000-0000-000000000002', 'Admin User',      'admin',       1),
+  ('00000000-0000-0000-0000-000000000003', 'Super User',      'super_user',  1),
+  ('00000000-0000-0000-0000-000000000004', 'Super Admin User','super_admin', 1);
 -- ============================================================
 -- Trails (seeded from trails.geojson)
 -- ============================================================

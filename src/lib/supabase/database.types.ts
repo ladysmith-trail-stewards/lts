@@ -486,6 +486,17 @@ export type Database = {
         Args: never;
         Returns: Database['public']['Enums']['app_role'];
       };
+      get_rls_policies: {
+        Args: never;
+        Returns: {
+          check_expr: string;
+          command: string;
+          policy_name: string;
+          roles: string;
+          table_name: string;
+          using_expr: string;
+        }[];
+      };
       get_trails: {
         Args: { hidden?: boolean };
         Returns: {
@@ -1184,6 +1195,14 @@ export type Database = {
           table_name: string;
         };
         Returns: string;
+      };
+      upsert_trails: {
+        Args: { features: Json };
+        Returns: {
+          id: number;
+          message: string;
+          ok: boolean;
+        }[];
       };
     };
     Enums: {
