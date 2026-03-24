@@ -5,6 +5,7 @@ alter table public.trails
 comment on column public.trails.description is 'Optional human-readable description of the trail segment';
 
 -- Update get_trails RPC to return description
+drop function if exists public.get_trails(boolean);
 create or replace function public.get_trails(hidden boolean default false)
 returns table (
   id             bigint,

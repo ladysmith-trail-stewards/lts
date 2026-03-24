@@ -501,12 +501,12 @@ export type Database = {
         }[];
       };
       get_trails: {
-        Args: { hidden?: boolean; ids?: number[] | null };
+        Args: { hidden?: boolean; ids?: number[] };
         Returns: {
           activity_types: string[];
           bike: boolean;
           connector: boolean;
-          description: string | null;
+          description: string;
           direction: string;
           geometry: Json;
           hidden: boolean;
