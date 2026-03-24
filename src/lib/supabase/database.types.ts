@@ -95,6 +95,7 @@ export type Database = {
           bike: boolean;
           connector: boolean;
           created_at: string;
+          description: string | null;
           direction: string | null;
           geometry: unknown;
           hidden: boolean;
@@ -113,6 +114,7 @@ export type Database = {
           bike?: boolean;
           connector?: boolean;
           created_at?: string;
+          description?: string | null;
           direction?: string | null;
           geometry: unknown;
           hidden?: boolean;
@@ -131,6 +133,7 @@ export type Database = {
           bike?: boolean;
           connector?: boolean;
           created_at?: string;
+          description?: string | null;
           direction?: string | null;
           geometry?: unknown;
           hidden?: boolean;
@@ -498,11 +501,12 @@ export type Database = {
         }[];
       };
       get_trails: {
-        Args: { hidden?: boolean };
+        Args: { hidden?: boolean; ids?: number[] };
         Returns: {
           activity_types: string[];
           bike: boolean;
           connector: boolean;
+          description: string | null;
           direction: string;
           geometry: Json;
           hidden: boolean;
@@ -510,7 +514,7 @@ export type Database = {
           name: string;
           planned: boolean;
           region_id: number;
-          tf_popularity: number;
+          tf_popularity: number | null;
           trail_class: string;
           type: string;
           visibility: string;

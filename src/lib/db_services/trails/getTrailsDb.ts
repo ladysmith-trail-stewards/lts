@@ -7,6 +7,8 @@ type TrailRow =
 export interface GetTrailsDbArgs {
   /** When true, hidden trails are included (subject to RLS). */
   hidden?: boolean;
+  /** When provided, only trails with these ids are returned. */
+  ids?: number[];
 }
 
 export interface GetTrailsDbResult {
@@ -17,9 +19,12 @@ export interface GetTrailsDbResult {
 /** Fetches trails via the `get_trails` RPC. RLS enforced server-side. */
 export async function getTrailsDb(
   client: SupabaseClient<Database>,
-  { hidden = false }: GetTrailsDbArgs = {}
+  { hidden = false, ids }: GetTrailsDbArgs = {}
 ): Promise<GetTrailsDbResult> {
-  const { data, error } = await client.rpc('get_trails', { hidden });
+  const { data, error } = await client.rpc('get_trails', {
+    hidden,
+    ...(ids !== undefined && { ids }),
+  });
   if (error) return { data: null, error: new Error(error.message) };
   return { data, error: null };
 }
