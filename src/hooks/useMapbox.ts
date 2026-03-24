@@ -78,7 +78,7 @@ export function useMapbox({
       features: trails.map((t) => ({
         type: 'Feature',
         id: t.id,
-        geometry: t.geometry,
+        geometry: t.geometry_geojson,
         properties: {
           id: t.id,
           name: t.name,

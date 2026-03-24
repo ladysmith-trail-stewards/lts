@@ -18,18 +18,18 @@ import {
   DIRECTION_LABELS,
   VISIBILITY_LABELS,
   ACTIVITY_OPTIONS,
-} from './trailEditSchema';
+} from './TrailDetailDrawer/trailEditSchema';
 import {
   trailToForm,
   extractFormErrors,
   formatDistance,
-} from './trailEditHelpers';
+} from './TrailDetailDrawer/trailEditHelpers';
 import {
   TrailClassDot,
   InfoBadge,
   PillToggle,
   StatusPill,
-} from './TrailDetailSubcomponents';
+} from './TrailDetailDrawer/TrailDetailSubcomponents';
 
 import {
   Select,

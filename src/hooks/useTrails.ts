@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase/client';
-import { getTrailsDb } from '@/lib/db_services/trails/getTrailsDb';
-import type { Database } from '@/lib/supabase/database.types';
+import {
+  getTrailsDb,
+  type TrailRow,
+} from '@/lib/db_services/trails/getTrailsDb';
 
-type TrailRow =
-  Database['public']['Functions']['get_trails']['Returns'][number];
-
-export type Trail = TrailRow & {
-  geometry: GeoJSON.LineString;
+export type Trail = Omit<TrailRow, 'geometry_geojson'> & {
+  /** GeoJSON LineString geometry, typed narrowly for map consumers. */
+  geometry_geojson: GeoJSON.LineString;
 };
 
 type State = {
@@ -17,7 +17,7 @@ type State = {
 };
 
 /**
- * Fetches all accessible trails via the get_trails() RPC.
+ * Fetches all accessible trails from the `trails_view` view.
  * Hidden trails are excluded by default; pass `{ hidden: true }` to include them.
  * RLS is enforced server-side — results reflect the caller's access level.
  */
@@ -46,7 +46,7 @@ export function useTrails(opts: { hidden?: boolean } = {}) {
       }
 
       setState({
-        trails: (data ?? []) as Trail[],
+        trails: (data ?? []) as unknown as Trail[],
         loading: false,
         error: null,
       });

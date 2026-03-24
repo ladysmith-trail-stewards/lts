@@ -206,17 +206,30 @@ describe('getTrailsDb — service role', () => {
 });
 
 describe('getTrailsDb — response shape', () => {
-  it('returns geometry as a GeoJSON LineString object', async () => {
+  it('returns geometry_geojson as a GeoJSON LineString object', async () => {
     const { data, error } = await getTrailsDb(serviceClient, { hidden: true });
     expect(error).toBeNull();
 
     const trail = (data ?? []).find((t) => t.name === NAMES.public);
     expect(trail).toBeDefined();
 
-    const geom = trail!.geometry as { type: string; coordinates: number[][] };
+    const geom = trail!.geometry_geojson as {
+      type: string;
+      coordinates: number[][];
+    };
     expect(geom.type).toBe('LineString');
     expect(Array.isArray(geom.coordinates)).toBe(true);
     expect(geom.coordinates.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('returns distance_m as a positive number', async () => {
+    const { data, error } = await getTrailsDb(serviceClient, { hidden: true });
+    expect(error).toBeNull();
+
+    const trail = (data ?? []).find((t) => t.name === NAMES.public);
+    expect(trail).toBeDefined();
+    expect(typeof trail!.distance_m).toBe('number');
+    expect(trail!.distance_m).toBeGreaterThan(0);
   });
 
   it('returns expected trail fields', async () => {
