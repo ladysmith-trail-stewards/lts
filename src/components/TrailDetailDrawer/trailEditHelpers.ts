@@ -38,10 +38,10 @@ export function extractFormErrors(
 export function formatDistance(metres: number | null): string {
   if (metres == null) return '—';
   if (metres > 1999) {
-    return `${(metres / 1000).toLocaleString(undefined, {
+    return `${(metres / 1000).toLocaleString('en', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     })} km`;
   }
-  return `${Math.round(metres).toLocaleString()} m`;
+  return `${Math.round(metres).toLocaleString('en')} m`;
 }

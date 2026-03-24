@@ -218,7 +218,7 @@ function TrailPanel({
         {/* ── Stats ─────────────────────────────────────────────────────── */}
         <div className="flex gap-2">
           {/* Distance */}
-          <div className="border rounded-lg p-2 text-center text-xs text-slate-500 w-16 shrink-0 flex flex-col justify-center">
+          <div className="border rounded-lg p-2 text-center text-xs text-slate-500 w-20 shrink-0 flex flex-col justify-center">
             <div className="font-semibold text-slate-700 text-sm">
               {formatDistance(currentTrail.distance_m)}
             </div>
@@ -241,7 +241,7 @@ function TrailPanel({
             </div>
           </div>
           {/* TF Score */}
-          <div className="border rounded-lg p-2 text-center text-xs text-slate-500 w-16 shrink-0 flex flex-col justify-center">
+          <div className="border rounded-lg p-2 text-center text-xs text-slate-500 w-20 shrink-0 flex flex-col justify-center">
             <div className="font-semibold text-slate-700 text-sm">
               {currentTrail.tf_popularity ?? '—'}
             </div>
@@ -514,7 +514,7 @@ export default function TrailDetailDrawer({
 
   return (
     <aside
-      className={`absolute top-0 right-0 h-full w-80 bg-white border-l border-slate-200 shadow-xl
+      className={`absolute top-0 right-0 h-full w-96 bg-white border-l border-slate-200 shadow-xl
         flex flex-col overflow-hidden z-20
         transition-transform duration-300 ease-in-out
         ${open ? 'translate-x-0' : 'translate-x-full'}`}
