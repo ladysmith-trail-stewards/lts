@@ -1,7 +1,9 @@
 import 'mapbox-gl/dist/mapbox-gl.css';
 import mapboxgl from 'mapbox-gl';
+import { useSearchParams } from 'react-router-dom';
 import { useMapbox } from '@/hooks/useMapbox';
 import { MAP_STYLES, type StyleKey } from '@/lib/map/config';
+import TrailDetailDrawer from '@/components/TrailDetailDrawer';
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN as
   | string
@@ -31,6 +33,8 @@ export default function MapPage() {
 }
 
 function MapPageInner() {
+  const [, setSearchParams] = useSearchParams();
+
   const {
     mapContainerRef,
     currentStyle,
@@ -42,10 +46,18 @@ function MapPageInner() {
     handleStyleChange,
     handleContourStrength,
     handleContourScheme,
-  } = useMapbox();
+    handleTrailUpdated,
+  } = useMapbox({
+    onTrailClick: (id) =>
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.set('trailId', String(id));
+        return next;
+      }),
+  });
 
   return (
-    <div className="relative">
+    <div className="relative overflow-hidden">
       <div
         ref={mapContainerRef}
         className="w-full"
@@ -142,6 +154,9 @@ function MapPageInner() {
           </div>
         </div>
       </div>
+
+      {/* Trail detail drawer — opens when ?trailId= is set in URL */}
+      <TrailDetailDrawer trails={trails} onTrailUpdated={handleTrailUpdated} />
     </div>
   );
 }

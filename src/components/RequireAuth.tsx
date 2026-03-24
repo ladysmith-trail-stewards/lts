@@ -1,28 +1,14 @@
-import { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
-
-import { supabase } from '@/lib/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function RequireAuth({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const [state, setState] = useState<'loading' | 'authorized' | 'unauthorized'>(
-    'loading'
-  );
+  const { user, loading } = useAuth();
 
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data, error }) => {
-      if (error || !data?.user) {
-        setState('unauthorized');
-      } else {
-        setState('authorized');
-      }
-    });
-  }, []);
-
-  if (state === 'loading') {
+  if (loading) {
     return (
       <div className="flex min-h-svh w-full items-center justify-center p-6">
         <p className="text-sm text-muted-foreground">Loading...</p>
@@ -30,7 +16,7 @@ export default function RequireAuth({
     );
   }
 
-  if (state === 'unauthorized') {
+  if (!user) {
     return <Navigate to="/login" replace />;
   }
 

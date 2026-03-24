@@ -1,34 +1,14 @@
-import { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
-
-import { supabase } from '@/lib/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function RequireAdmin({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const [state, setState] = useState<'loading' | 'authorized' | 'unauthorized'>(
-    'loading'
-  );
+  const { user, role, loading } = useAuth();
 
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data, error }) => {
-      if (error || !data?.user) {
-        setState('unauthorized');
-        return;
-      }
-      supabase.rpc('is_admin').then(({ data: isAdmin, error: rpcError }) => {
-        if (rpcError || !isAdmin) {
-          setState('unauthorized');
-        } else {
-          setState('authorized');
-        }
-      });
-    });
-  }, []);
-
-  if (state === 'loading') {
+  if (loading) {
     return (
       <div className="flex min-h-svh w-full items-center justify-center p-6">
         <p className="text-sm text-muted-foreground">Loading...</p>
@@ -36,7 +16,7 @@ export default function RequireAdmin({
     );
   }
 
-  if (state === 'unauthorized') {
+  if (!user || (role !== 'admin' && role !== 'super_admin')) {
     return <Navigate to="/login" replace />;
   }
 

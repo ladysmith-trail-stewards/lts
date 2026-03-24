@@ -25,6 +25,10 @@ import {
   CONTOUR_STRENGTH_DEFAULT,
 } from '@/lib/map/config';
 
+export interface UseMapboxOptions {
+  onTrailClick?: (trailId: number) => void;
+}
+
 export interface UseMapboxReturn {
   mapContainerRef: React.RefObject<HTMLDivElement | null>;
   currentStyle: StyleKey;
@@ -37,9 +41,14 @@ export interface UseMapboxReturn {
   handleStyleChange: (style: StyleKey) => void;
   handleContourStrength: (value: number) => void;
   handleContourScheme: (scheme: ContourScheme) => void;
+  handleTrailUpdated: (
+    updated: ReturnType<typeof useTrails>['trails'][number]
+  ) => void;
 }
 
-export function useMapbox(): UseMapboxReturn {
+export function useMapbox({
+  onTrailClick,
+}: UseMapboxOptions = {}): UseMapboxReturn {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
 
@@ -52,7 +61,14 @@ export function useMapbox(): UseMapboxReturn {
   const contourSchemeRef = useRef<ContourScheme>('dark');
   const [mapReady, setMapReady] = useState(false);
 
-  const { trails, loading, error: trailsError } = useTrails();
+  // Local copy of trails so we can patch individual rows after an edit.
+  // useTrails fetches once; handleTrailUpdated patches locally to avoid refetch.
+  const { trails: fetchedTrails, loading, error: trailsError } = useTrails();
+  const [trails, setTrails] = useState(fetchedTrails);
+  // Sync when the initial fetch lands (or if re-fetched)
+  if (trails !== fetchedTrails && !loading) {
+    setTrails(fetchedTrails);
+  }
 
   // ── GeoJSON ──────────────────────────────────────────────────────────────────
 
@@ -78,6 +94,22 @@ export function useMapbox(): UseMapboxReturn {
     }),
     [trails]
   );
+
+  function handleTrailUpdated(
+    updated: ReturnType<typeof useTrails>['trails'][number]
+  ) {
+    setTrails((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+    // Refresh the Mapbox GeoJSON source after React flushes the state update.
+    // buildGeoJSON is captured in a stable closure via useCallback([trails]),
+    // so we schedule the setData call after the state has been applied.
+    setTimeout(() => {
+      if (mapRef.current?.getSource(TRAILS_SOURCE)) {
+        (
+          mapRef.current.getSource(TRAILS_SOURCE) as mapboxgl.GeoJSONSource
+        ).setData(buildGeoJSON());
+      }
+    }, 0);
+  }
 
   const addTrailsLayer = useCallback(
     (map: mapboxgl.Map) => {
@@ -214,6 +246,7 @@ export function useMapbox(): UseMapboxReturn {
       zoom: INITIAL_ZOOM,
       pitch: INITIAL_PITCH,
       bearing: INITIAL_BEARING,
+      maxPitch: 85,
     });
 
     mapRef.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
@@ -424,6 +457,46 @@ export function useMapbox(): UseMapboxReturn {
     addTrailsLayer(mapRef.current);
   }, [mapReady, loading, addTrailsLayer]);
 
+  // ── Trail hover cursor + click → URL param ───────────────────────────────────
+
+  useEffect(() => {
+    if (!mapReady || !mapRef.current) return;
+    const map = mapRef.current;
+
+    const HIT_RADIUS = 5; // px — hit tolerance around trail lines
+    const hitBox = (
+      e: mapboxgl.MapMouseEvent
+    ): [mapboxgl.PointLike, mapboxgl.PointLike] => [
+      [e.point.x - HIT_RADIUS, e.point.y - HIT_RADIUS],
+      [e.point.x + HIT_RADIUS, e.point.y + HIT_RADIUS],
+    ];
+
+    const onMouseMove = (e: mapboxgl.MapMouseEvent) => {
+      if (!map.getLayer(TRAILS_LAYER)) return;
+      const features = map.queryRenderedFeatures(hitBox(e), {
+        layers: [TRAILS_LAYER],
+      });
+      map.getCanvas().style.cursor = features.length > 0 ? 'pointer' : '';
+    };
+    const onClick = (e: mapboxgl.MapMouseEvent) => {
+      if (!map.getLayer(TRAILS_LAYER)) return;
+      const features = map.queryRenderedFeatures(hitBox(e), {
+        layers: [TRAILS_LAYER],
+      });
+      const id = features[0]?.properties?.id;
+      if (id != null && onTrailClick) onTrailClick(Number(id));
+    };
+
+    map.on('mousemove', onMouseMove);
+    map.on('click', onClick);
+
+    return () => {
+      map.off('mousemove', onMouseMove);
+      map.off('click', onClick);
+      map.getCanvas().style.cursor = '';
+    };
+  }, [mapReady, onTrailClick]);
+
   // ── Handlers ─────────────────────────────────────────────────────────────────
 
   const handleStyleChange = (style: StyleKey) => {
@@ -457,5 +530,6 @@ export function useMapbox(): UseMapboxReturn {
     handleStyleChange,
     handleContourStrength,
     handleContourScheme,
+    handleTrailUpdated,
   };
 }
