@@ -118,24 +118,24 @@ SEED_SUPER_ADMIN; // role: super_admin
 
 ### `trails`
 
-| Column           | Type                   | Nullable | Notes                                                                        |
-| ---------------- | ---------------------- | :------: | ---------------------------------------------------------------------------- |
-| `id`             | `number`               |          | PK, identity                                                                 |
-| `name`           | `string`               |          |                                                                              |
-| `type`           | `string`               |          | surface/type classification                                                  |
-| `trail_class`    | `string`               |    ✓     | difficulty TC1–TC5                                                           |
-| `activity_types` | `string[]`             |    ✓     | e.g. hiking, mtb                                                             |
-| `direction`      | `string`               |    ✓     | `both` \| `oneway` \| `oneway-reverse`                                       |
-| `hidden`         | `boolean`              |          | default `false`                                                              |
-| `planned`        | `boolean`              |          | default `false`                                                              |
-| `connector`      | `boolean`              |          | default `false`                                                              |
-| `bike`           | `boolean`              |          | default `false`                                                              |
-| `tf_popularity`  | `number`               |    ✓     | Trailforks score                                                             |
-| `visibility`     | `string`               |          | `public` \| `private` \| `shared`                                            |
-| `region_id`      | `number`               |          | FK → `regions.id`                                                            |
-| `geometry`       | `unknown`              |          | PostGIS `LineString` (EPSG:4326); returned as GeoJSON via `get_trails()` RPC |
-| `created_at`     | `string` (timestamptz) |          |                                                                              |
-| `updated_at`     | `string` (timestamptz) |          | auto-set by trigger                                                          |
+| Column           | Type                   | Nullable | Notes                                                                                                                 |
+| ---------------- | ---------------------- | :------: | --------------------------------------------------------------------------------------------------------------------- |
+| `id`             | `number`               |          | PK, identity                                                                                                          |
+| `name`           | `string`               |          |                                                                                                                       |
+| `type`           | `string`               |          | surface/type classification                                                                                           |
+| `trail_class`    | `string`               |    ✓     | difficulty TC1–TC5                                                                                                    |
+| `activity_types` | `string[]`             |    ✓     | e.g. hiking, mtb                                                                                                      |
+| `direction`      | `string`               |    ✓     | `both` \| `oneway` \| `oneway-reverse`                                                                                |
+| `hidden`         | `boolean`              |          | default `false`                                                                                                       |
+| `planned`        | `boolean`              |          | default `false`                                                                                                       |
+| `connector`      | `boolean`              |          | default `false`                                                                                                       |
+| `bike`           | `boolean`              |          | default `false`                                                                                                       |
+| `tf_popularity`  | `number`               |    ✓     | Trailforks score                                                                                                      |
+| `visibility`     | `string`               |          | `public` \| `private` \| `shared`                                                                                     |
+| `region_id`      | `number`               |          | FK → `regions.id`                                                                                                     |
+| `geometry`       | `unknown`              |          | PostGIS `LineString` (EPSG:4326); exposed as `geometry_geojson` (GeoJSON) and `distance_m` (metres) via `trails_view` |
+| `created_at`     | `string` (timestamptz) |          |                                                                                                                       |
+| `updated_at`     | `string` (timestamptz) |          | auto-set by trigger                                                                                                   |
 
 > **TODO:** Input validation (shape, required fields, business rules) should be added at this layer before the Supabase call, so it is enforced regardless of which client is used. Consider `zod` schemas co-located with each `*Db.ts` file.
 

@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { trailToForm, extractFormErrors } from '../trailEditHelpers';
+import {
+  trailToForm,
+  extractFormErrors,
+  formatDistance,
+} from '../trailEditHelpers';
 import type { Trail } from '@/hooks/useTrails';
 
 // ── Minimal Trail factory ─────────────────────────────────────────────────────
@@ -20,7 +24,10 @@ function makeTrail(overrides: Partial<Trail> = {}): Trail {
     tf_popularity: null,
     visibility: 'public',
     region_id: 1,
-    geometry: { type: 'LineString', coordinates: [] },
+    distance_m: null,
+    geometry_geojson: { type: 'LineString', coordinates: [] },
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
     ...overrides,
   } as Trail;
 }
@@ -141,5 +148,41 @@ describe('extractFormErrors', () => {
   it('skips issues with no path', () => {
     const issues = [{ path: undefined, message: 'Top-level error' }];
     expect(extractFormErrors(issues)).toEqual({});
+  });
+});
+
+// ── formatDistance ────────────────────────────────────────────────────────────
+
+describe('formatDistance', () => {
+  it('returns — for null', () => {
+    expect(formatDistance(null)).toBe('—');
+  });
+
+  it('formats 0 m as whole metres', () => {
+    expect(formatDistance(0)).toBe('0 m');
+  });
+
+  it('formats a sub-2000 m distance as whole metres', () => {
+    expect(formatDistance(1234)).toBe('1,234 m');
+  });
+
+  it('rounds sub-2000 m to the nearest metre', () => {
+    expect(formatDistance(999.7)).toBe('1,000 m');
+  });
+
+  it('boundary: 1999 m shows metres', () => {
+    expect(formatDistance(1999)).toBe('1,999 m');
+  });
+
+  it('boundary: 2000 m shows km', () => {
+    expect(formatDistance(2000)).toBe('2.00 km');
+  });
+
+  it('formats over-2000 m as km with 2 decimal places', () => {
+    expect(formatDistance(5432)).toBe('5.43 km');
+  });
+
+  it('formats a large distance in km', () => {
+    expect(formatDistance(12345)).toBe('12.35 km');
   });
 });

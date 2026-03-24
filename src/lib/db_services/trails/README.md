@@ -4,19 +4,20 @@ CRUD wrappers for the `public.trails` table. See [`../README.md`](../README.md) 
 
 ## Files
 
-| File               | Description                                                                     |
-| ------------------ | ------------------------------------------------------------------------------- |
-| `createTrailDb.ts` | INSERT — returns `{ id }` of created row                                        |
-| `getTrailsDb.ts`   | SELECT via `get_trails()` RPC — returns rows with GeoJSON geometry              |
-| `updateTrailDb.ts` | UPDATE by id — returns `{ id }` of updated row                                  |
-| `deleteTrailDb.ts` | DELETE by id                                                                    |
-| `testHelpers.ts`   | Trail fixtures (`fixtureCreateTrail`, `fixtureDeleteTrails`, `SAMPLE_GEOMETRY`) |
+| File                | Description                                                                              |
+| ------------------- | ---------------------------------------------------------------------------------------- |
+| `getTrailsDb.ts`    | SELECT from `trails_view` — returns rows with GeoJSON geometry and computed `distance_m` |
+| `upsertTrailsDb.ts` | UPSERT (insert/update) via `upsert_trails()` RPC                                         |
+| `deleteTrailsDb.ts` | DELETE by id                                                                             |
+| `testHelpers.ts`    | Trail fixtures (`fixtureCreateTrail`, `fixtureDeleteTrails`, `SAMPLE_GEOMETRY`)          |
 
 ## RLS
 
 Full policy definitions: [`supabase/migrations/20260318050136_initial_schema.sql`](/supabase/migrations/20260318050136_initial_schema.sql).
 
-### SELECT (`get_trails` RPC — security invoker)
+The view `trails_view` is defined with `security_invoker = true`, so the underlying RLS policies on `public.trails` are always enforced.
+
+### SELECT (`trails_view` — security invoker)
 
 | Caller                                  | Sees                         |
 | --------------------------------------- | ---------------------------- |
@@ -25,6 +26,13 @@ Full policy definitions: [`supabase/migrations/20260318050136_initial_schema.sql
 | service_role                            | all trails (bypasses RLS)    |
 
 `hidden=true` trails are excluded by default; pass `{ hidden: true }` to include them.
+
+### Computed columns
+
+| Column             | Type     | Description                                       |
+| ------------------ | -------- | ------------------------------------------------- |
+| `distance_m`       | `number` | Spheroidal length of the trail geometry in metres |
+| `geometry_geojson` | `Json`   | GeoJSON representation of the PostGIS LineString  |
 
 ### INSERT / UPDATE
 

@@ -2,10 +2,6 @@ import type { Trail } from '@/hooks/useTrails';
 import type { TrailEditValues } from './trailEditSchema';
 import { TRAIL_CLASS_LABELS } from './trailEditSchema';
 
-/**
- * Map a Trail row to the form's initial values, applying safe fallbacks for
- * any field that doesn't match the schema's allowed values.
- */
 export function trailToForm(trail: Trail): TrailEditValues {
   return {
     name: trail.name,
@@ -28,9 +24,6 @@ export function trailToForm(trail: Trail): TrailEditValues {
   };
 }
 
-/**
- * Extract a flat map of valibot field errors from a failed SafeParseResult.
- */
 export function extractFormErrors(
   issues: { path?: { key: unknown }[] | undefined; message: string }[]
 ): Partial<Record<keyof TrailEditValues, string>> {
@@ -40,4 +33,15 @@ export function extractFormErrors(
     if (key) errs[key] = issue.message;
   }
   return errs;
+}
+
+export function formatDistance(metres: number | null): string {
+  if (metres == null) return '—';
+  if (metres > 1999) {
+    return `${(metres / 1000).toLocaleString('en', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })} km`;
+  }
+  return `${Math.round(metres).toLocaleString('en')} m`;
 }
