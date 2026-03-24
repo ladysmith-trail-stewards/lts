@@ -493,7 +493,11 @@ export function useMapbox({
     return () => {
       map.off('mousemove', onMouseMove);
       map.off('click', onClick);
-      map.getCanvas().style.cursor = '';
+      try {
+        map.getCanvas().style.cursor = '';
+      } catch {
+        /* map already removed */
+      }
     };
   }, [mapReady, onTrailClick]);
 
