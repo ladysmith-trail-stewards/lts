@@ -1,10 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/supabase/database.types';
 import { toJson } from '@/lib/utils';
-import type {
-  TrailUpsertFeature,
-  TrailUpsertProperties,
-} from './trailSchemas';
+import type { TrailUpsertFeature, TrailUpsertProperties } from './trailSchemas';
 
 export type { TrailUpsertFeature, TrailUpsertProperties } from './trailSchemas';
 
