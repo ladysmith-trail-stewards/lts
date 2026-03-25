@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { LogIn, LogOut, Menu } from 'lucide-react';
+import { LogIn, User, Menu } from 'lucide-react';
 import { NavigationMenu } from '@base-ui/react/navigation-menu';
 import { Tooltip } from '@base-ui/react/tooltip';
 import { NavigationMenuLink } from '@/components/ui/navigation-menu';
 import { menuRoutes } from '@/routes';
 import { supabase } from '@/lib/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+import { UserProfileDialog } from '@/components/UserProfileDialog';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 
 function RouterLink(props: NavigationMenu.Link.Props & { to: string }) {
@@ -119,20 +121,8 @@ function HeaderMenu() {
 }
 
 function HeaderUser() {
-  const navigate = useNavigate();
-  const [user, setUser] = useState<SupabaseUser | null>(null);
-
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setUser(data.user));
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const { user, role } = useAuth();
 
   if (!user) {
     return (
@@ -146,22 +136,28 @@ function HeaderUser() {
     );
   }
 
+  const displayName =
+    user.user_metadata?.full_name || user.email?.split('@')[0];
+
   return (
-    <button
-      type="button"
-      onClick={async () => {
-        await supabase.auth.signOut();
-        navigate('/');
-      }}
-      className="flex items-center gap-2 rounded-full bg-slate-700 hover:bg-slate-600 border border-slate-600 hover:border-slate-500 pl-1 pr-3 h-9 text-sm text-white transition-colors"
-    >
-      <div className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-500 text-white">
-        <LogOut size={14} />
-      </div>
-      <span className="max-w-[120px] truncate">
-        {user.user_metadata?.full_name || user.email?.split('@')[0]}
-      </span>
-    </button>
+    <>
+      <button
+        type="button"
+        onClick={() => setDialogOpen(true)}
+        className="flex items-center gap-2 rounded-full bg-slate-700 hover:bg-slate-600 border border-slate-600 hover:border-slate-500 pl-1 pr-3 h-9 text-sm text-white transition-colors"
+      >
+        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-500 text-white">
+          <User size={14} />
+        </div>
+        <span className="max-w-[120px] truncate">{displayName}</span>
+        {role && (
+          <span className="text-[10px] leading-none px-1.5 py-0.5 rounded bg-slate-600 text-slate-300 capitalize">
+            {role.replace('_', ' ')}
+          </span>
+        )}
+      </button>
+      <UserProfileDialog open={dialogOpen} onOpenChange={setDialogOpen} />
+    </>
   );
 }
 
