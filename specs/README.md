@@ -1,6 +1,7 @@
 # Specs
 
 Specs are the source of truth for all planned work in this repository. Issues and PRs are derived from specs — not the other way around.
+How can this possibly be maintained? Through the Use of LLM, and rulesheets, that will check for deviations / closed tickets , etc. Totally worth a try.
 
 > New here? Read the [Spec Writing Guide](./SPEC_GUIDE.md).
 
