@@ -5,10 +5,8 @@ import {
   type TrailRow,
 } from '@/lib/db_services/trails/getTrailsDb';
 
-export type Trail = Omit<TrailRow, 'geometry_geojson'> & {
-  /** GeoJSON LineString geometry, typed narrowly for map consumers. */
-  geometry_geojson: GeoJSON.LineString;
-};
+/** A resolved trail row from `trails_view` with narrow nullability and typed geometry. */
+export type Trail = TrailRow;
 
 type State = {
   trails: Trail[];
@@ -46,7 +44,7 @@ export function useTrails(opts: { hidden?: boolean } = {}) {
       }
 
       setState({
-        trails: (data ?? []) as unknown as Trail[],
+        trails: data ?? [],
         loading: false,
         error: null,
       });

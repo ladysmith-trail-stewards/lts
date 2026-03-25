@@ -1,25 +1,17 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Database, TablesInsert } from '@/lib/supabase/database.types';
+import type { Database } from '@/lib/supabase/database.types';
 import { toJson } from '@/lib/utils';
+import type {
+  TrailUpsertFeature,
+  TrailUpsertProperties,
+} from './trailSchemas';
 
-type TrailInsert = TablesInsert<'trails'>;
+export type { TrailUpsertFeature, TrailUpsertProperties } from './trailSchemas';
 
-export type TrailFeatureProperties = Omit<
-  TrailInsert,
-  'geometry' | 'created_at' | 'updated_at'
-> & {
-  id?: number | null;
-  visibility?: 'public' | 'private' | 'shared';
-};
-
-export interface TrailFeature {
-  type: 'Feature';
-  geometry: {
-    type: 'LineString';
-    coordinates: [number, number][];
-  };
-  properties: TrailFeatureProperties;
-}
+/** @deprecated Use TrailUpsertFeature */
+export type TrailFeature = TrailUpsertFeature;
+/** @deprecated Use TrailUpsertProperties */
+export type TrailFeatureProperties = TrailUpsertProperties;
 
 type UpsertTrailRpcRow =
   Database['public']['Functions']['upsert_trails']['Returns'][number];
@@ -46,7 +38,7 @@ export interface UpsertTrailsDbResult {
  */
 export async function upsertTrailsDb(
   client: SupabaseClient<Database>,
-  features: TrailFeature | TrailFeature[]
+  features: TrailUpsertFeature | TrailUpsertFeature[]
 ): Promise<UpsertTrailsDbResult> {
   const featureArray = Array.isArray(features) ? features : [features];
 

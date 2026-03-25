@@ -112,10 +112,7 @@ function TrailPanel({
 
     const { allOk, error } = await upsertTrailsDb(supabase, {
       type: 'Feature',
-      geometry: currentTrail.geometry_geojson as {
-        type: 'LineString';
-        coordinates: [number, number][];
-      },
+      geometry: currentTrail.geometry_geojson,
       properties: {
         id: currentTrail.id,
         name: result.output.name,
