@@ -1,0 +1,36 @@
+# Specs
+
+Specs are the source of truth for all planned work in this repository. Issues and PRs are derived from specs — not the other way around.
+
+> New here? Read the [Spec Writing Guide](./SPEC_GUIDE.md).
+
+## Table of Contents
+
+- **E-001** [Trail Management](./epics/trail-management/spec.md) `active`
+  - **F-001** [Draw Trail](./epics/trail-management/draw-trail/spec.md) `draft`
+  - **F-002** [Trail Elevation Profile](./epics/trail-management/trail-elevation-profile/spec.md) `draft`
+
+- **Chores**
+  - **C-001** [Standardize Tailwind Class Usage Across Components](./chores/standardize-tailwind-class-usage.md) `draft`
+
+---
+
+## Structure
+
+```
+specs/
+├── epics/        # Large, multi-feature bodies of work
+├── fixes/        # Bug fixes
+└── chores/       # Refactors, maintenance, and non-feature work
+```
+
+## ID Format
+
+| Prefix | Type    | Example |
+|--------|---------|---------|
+| `E-`   | Epic    | E-001   |
+| `F-`   | Feature | F-001   |
+| `B-`   | Bug fix | B-001   |
+| `C-`   | Chore   | C-001   |
+
+IDs are sequential and never reused.

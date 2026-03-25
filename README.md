@@ -2,6 +2,12 @@
 
 Web application for the Ladysmith Trail Stewards — a trail stewardship organization in Ladysmith, BC, Canada. Provides public-facing information, user authentication with role-based access control, and an admin dashboard with interactive GIS trail mapping.
 
+## Project Management
+
+Planned work is tracked as specs — the source of truth for all features, bugs, and chores. Issues and PRs are derived from specs.
+
+→ [View specs](./specs/README.md)
+
 ## Prerequisites
 
 | Tool | Version | Install |
