@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { GoogleIcon } from '@/components/icons/GoogleIcon';
 
+// Production: SSO only. Dev: email/password + SSO.
 const isProduction = import.meta.env.PROD;
 
 export default function SignUpPage() {
@@ -103,81 +104,112 @@ export default function SignUpPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-2xl">Sign up</CardTitle>
-                <CardDescription>Create a new account</CardDescription>
+                <CardDescription>
+                  {isProduction
+                    ? 'Create an account with your Google account'
+                    : 'Create a new account'}
+                </CardDescription>
               </CardHeader>
               <CardContent>
-                <form onSubmit={handleSubmit}>
-                  <div className="flex flex-col gap-6">
-                    <div className="grid gap-2">
-                      <Label htmlFor="email">Email</Label>
-                      <Input
-                        id="email"
-                        name="email"
-                        type="email"
-                        placeholder="m@example.com"
-                        required
-                      />
-                    </div>
-                    <div className="grid gap-2">
-                      <div className="flex items-center">
-                        <Label htmlFor="password">Password</Label>
+                <div className="flex flex-col gap-6">
+                  {!isProduction && (
+                    <form onSubmit={handleSubmit}>
+                      <div className="flex flex-col gap-6">
+                        <div className="grid gap-2">
+                          <Label htmlFor="email">Email</Label>
+                          <Input
+                            id="email"
+                            name="email"
+                            type="email"
+                            placeholder="m@example.com"
+                            required
+                          />
+                        </div>
+                        <div className="grid gap-2">
+                          <div className="flex items-center">
+                            <Label htmlFor="password">Password</Label>
+                          </div>
+                          <Input
+                            id="password"
+                            name="password"
+                            type="password"
+                            required
+                          />
+                        </div>
+                        <div className="grid gap-2">
+                          <div className="flex items-center">
+                            <Label htmlFor="repeat-password">
+                              Repeat Password
+                            </Label>
+                          </div>
+                          <Input
+                            id="repeat-password"
+                            name="repeat-password"
+                            type="password"
+                            required
+                          />
+                        </div>
+                        {error && (
+                          <p className="text-sm text-red-500">{error}</p>
+                        )}
+                        <Button
+                          type="submit"
+                          className="w-full"
+                          disabled={loading}
+                        >
+                          {loading ? 'Creating an account...' : 'Sign up'}
+                        </Button>
                       </div>
-                      <Input
-                        id="password"
-                        name="password"
-                        type="password"
-                        required
-                      />
-                    </div>
-                    <div className="grid gap-2">
-                      <div className="flex items-center">
-                        <Label htmlFor="repeat-password">Repeat Password</Label>
+                      <div className="mt-4 text-center text-sm">
+                        Already have an account?{' '}
+                        <Link
+                          to="/login"
+                          className="underline underline-offset-4"
+                        >
+                          Login
+                        </Link>
                       </div>
-                      <Input
-                        id="repeat-password"
-                        name="repeat-password"
-                        type="password"
-                        required
-                      />
-                    </div>
-                    {error && <p className="text-sm text-red-500">{error}</p>}
-                    <Button type="submit" className="w-full" disabled={loading}>
-                      {loading ? 'Creating an account...' : 'Sign up'}
+                    </form>
+                  )}
+                  <div className="flex flex-col gap-4">
+                    {!isProduction && (
+                      <div className="relative">
+                        <div className="absolute inset-0 flex items-center">
+                          <span className="w-full border-t" />
+                        </div>
+                        <div className="relative flex justify-center text-xs">
+                          <span className="bg-card px-2 text-muted-foreground">
+                            Or continue with
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                    {error && isProduction && (
+                      <p className="text-sm text-red-500">{error}</p>
+                    )}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full"
+                      disabled={ssoLoading}
+                      onClick={handleGoogleSignIn}
+                    >
+                      <GoogleIcon />
+                      {ssoLoading ? 'Redirecting...' : 'Continue with Google'}
                     </Button>
                     {isProduction && (
-                      <>
-                        <div className="relative my-2">
-                          <div className="absolute inset-0 flex items-center">
-                            <span className="w-full border-t" />
-                          </div>
-                          <div className="relative flex justify-center text-xs">
-                            <span className="bg-card px-2 text-muted-foreground">
-                              Or continue with
-                            </span>
-                          </div>
-                        </div>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="w-full"
-                          disabled={ssoLoading}
-                          onClick={handleGoogleSignIn}
+                      <div className="text-center text-sm">
+                        Already have an account?{' '}
+                        <Link
+                          to="/login"
+                          className="underline underline-offset-4"
                         >
-                          <GoogleIcon />
-                          {ssoLoading
-                            ? 'Redirecting...'
-                            : 'Continue with Google'}
-                        </Button>
-                      </>
+                          Login
+                        </Link>
+                      </div>
                     )}
                   </div>
-                  <div className="mt-4 text-center text-sm">
-                    Already have an account?{' '}
-                    <Link to="/login" className="underline underline-offset-4">
-                      Login
-                    </Link>
-                  </div>
-                </form>
+                </div>
               </CardContent>
             </Card>
           )}

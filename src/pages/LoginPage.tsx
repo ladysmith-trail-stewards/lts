@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { GoogleIcon } from '@/components/icons/GoogleIcon';
 
+// Production: SSO only. Dev: email/password + SSO.
 const isProduction = import.meta.env.PROD;
 
 export default function LoginPage() {
@@ -70,75 +71,102 @@ export default function LoginPage() {
             <CardHeader>
               <CardTitle className="text-2xl">Login</CardTitle>
               <CardDescription>
-                Enter your email below to login to your account
+                {isProduction
+                  ? 'Sign in with your Google account'
+                  : 'Enter your email below to login to your account'}
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <form onSubmit={handleSubmit}>
-                <div className="flex flex-col gap-6">
-                  <div className="grid gap-2">
-                    <Label htmlFor="email">Email</Label>
-                    <Input
-                      id="email"
-                      name="email"
-                      type="email"
-                      placeholder="m@example.com"
-                      required
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <div className="flex items-center">
-                      <Label htmlFor="password">Password</Label>
-                      <Link
-                        to="/forgot-password"
-                        className="ml-auto inline-block text-sm underline-offset-4 hover:underline"
+              <div className="flex flex-col gap-6">
+                {!isProduction && (
+                  <form onSubmit={handleSubmit}>
+                    <div className="flex flex-col gap-6">
+                      <div className="grid gap-2">
+                        <Label htmlFor="email">Email</Label>
+                        <Input
+                          id="email"
+                          name="email"
+                          type="email"
+                          placeholder="m@example.com"
+                          required
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <div className="flex items-center">
+                          <Label htmlFor="password">Password</Label>
+                          <Link
+                            to="/forgot-password"
+                            className="ml-auto inline-block text-sm underline-offset-4 hover:underline"
+                          >
+                            Forgot your password?
+                          </Link>
+                        </div>
+                        <Input
+                          id="password"
+                          type="password"
+                          name="password"
+                          required
+                        />
+                      </div>
+                      {error && <p className="text-sm text-red-500">{error}</p>}
+                      <Button
+                        type="submit"
+                        className="w-full"
+                        disabled={loading}
                       >
-                        Forgot your password?
+                        {loading ? 'Logging in...' : 'Login'}
+                      </Button>
+                    </div>
+                    <div className="mt-4 text-center text-sm">
+                      Don&apos;t have an account?{' '}
+                      <Link
+                        to="/sign-up"
+                        className="underline underline-offset-4"
+                      >
+                        Sign up
                       </Link>
                     </div>
-                    <Input
-                      id="password"
-                      type="password"
-                      name="password"
-                      required
-                    />
-                  </div>
-                  {error && <p className="text-sm text-red-500">{error}</p>}
-                  <Button type="submit" className="w-full" disabled={loading}>
-                    {loading ? 'Logging in...' : 'Login'}
+                  </form>
+                )}
+                <div className="flex flex-col gap-4">
+                  {!isProduction && (
+                    <div className="relative">
+                      <div className="absolute inset-0 flex items-center">
+                        <span className="w-full border-t" />
+                      </div>
+                      <div className="relative flex justify-center text-xs">
+                        <span className="bg-card px-2 text-muted-foreground">
+                          Or continue with
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                  {error && isProduction && (
+                    <p className="text-sm text-red-500">{error}</p>
+                  )}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full"
+                    disabled={ssoLoading}
+                    onClick={handleGoogleSignIn}
+                  >
+                    <GoogleIcon />
+                    {ssoLoading ? 'Redirecting...' : 'Continue with Google'}
                   </Button>
                   {isProduction && (
-                    <>
-                      <div className="relative my-2">
-                        <div className="absolute inset-0 flex items-center">
-                          <span className="w-full border-t" />
-                        </div>
-                        <div className="relative flex justify-center text-xs">
-                          <span className="bg-card px-2 text-muted-foreground">
-                            Or continue with
-                          </span>
-                        </div>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="w-full"
-                        disabled={ssoLoading}
-                        onClick={handleGoogleSignIn}
+                    <div className="text-center text-sm">
+                      Don&apos;t have an account?{' '}
+                      <Link
+                        to="/sign-up"
+                        className="underline underline-offset-4"
                       >
-                        <GoogleIcon />
-                        {ssoLoading ? 'Redirecting...' : 'Continue with Google'}
-                      </Button>
-                    </>
+                        Sign up
+                      </Link>
+                    </div>
                   )}
                 </div>
-                <div className="mt-4 text-center text-sm">
-                  Don&apos;t have an account?{' '}
-                  <Link to="/sign-up" className="underline underline-offset-4">
-                    Sign up
-                  </Link>
-                </div>
-              </form>
+              </div>
             </CardContent>
           </Card>
         </div>

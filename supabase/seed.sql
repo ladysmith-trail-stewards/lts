@@ -93,13 +93,12 @@ select setval('public.regions_id_seq', greatest(1, (select max(id) from public.r
 
 -- ============================================================
 -- Profiles
--- Inserted with service_role bypass (seed runs as superuser)
+-- Update seed profiles created by the trigger with correct roles and region.
 -- ============================================================
-insert into public.profiles (auth_user_id, name, role, region_id) values
-  ('00000000-0000-0000-0000-000000000001', 'Test User',       'user',        1),
-  ('00000000-0000-0000-0000-000000000002', 'Admin User',      'admin',       1),
-  ('00000000-0000-0000-0000-000000000003', 'Super User',      'super_user',  1),
-  ('00000000-0000-0000-0000-000000000004', 'Super Admin User','super_admin', 1);
+update public.profiles set name = 'Test User',        role = 'user',        region_id = 1 where auth_user_id = '00000000-0000-0000-0000-000000000001';
+update public.profiles set name = 'Admin User',       role = 'admin',       region_id = 1 where auth_user_id = '00000000-0000-0000-0000-000000000002';
+update public.profiles set name = 'Super User',       role = 'super_user',  region_id = 1 where auth_user_id = '00000000-0000-0000-0000-000000000003';
+update public.profiles set name = 'Super Admin User', role = 'super_admin', region_id = 1 where auth_user_id = '00000000-0000-0000-0000-000000000004';
 -- ============================================================
 -- Trails (seeded from trails.geojson)
 -- ============================================================
