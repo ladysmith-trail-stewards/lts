@@ -25,13 +25,14 @@ This guide is for humans and LLMs writing specs in this repository. Specs are th
 
 Every spec must include a `## Flags` table directly after the title (and epic back-link if present). Flags give reviewers an instant read on the blast radius of the change.
 
-| Flag | Yes | No | Meaning |
-|------|-----|----|---------|
-| DB Change | ✅ | ⬜ | Requires a migration, schema alter, or new RPC |
-| Style Only | ✅ | ⬜ | CSS / Tailwind / design token changes only — no logic |
-| Env Update Required | ✅ | ⬜ | New or changed environment variable needed |
+| Flag                | Yes | No  | Meaning                                               |
+| ------------------- | --- | --- | ----------------------------------------------------- |
+| DB Change           | ✅  | ⬜  | Requires a migration, schema alter, or new RPC        |
+| Style Only          | ✅  | ⬜  | CSS / Tailwind / design token changes only — no logic |
+| Env Update Required | ✅  | ⬜  | New or changed environment variable needed            |
 
 Rules:
+
 - All three flags must be present on every spec — never omit a row.
 - A spec can be both `DB Change: ✅` and `Style Only: ⬜` — flags are independent.
 - If unsure, default to ✅ and refine later.
@@ -54,15 +55,15 @@ updated: YYYY-MM-DD
 
 # <Feature Name>
 
-> Epic: [<Epic Name>](<relative-path-to-epic-spec.md>) — E-XXX
+> Epic: [<Epic Name>](relative-path-to-epic-spec.md) — E-XXX
 
 ## Flags
 
-| Flag | |
-|------|-|
-| DB Change | ⬜ |
-| Style Only | ⬜ |
-| Env Update Required | ⬜ |
+| Flag                |     |
+| ------------------- | --- |
+| DB Change           | ⬜  |
+| Style Only          | ⬜  |
+| Env Update Required | ⬜  |
 
 ## Problem
 
@@ -85,12 +86,15 @@ updated: YYYY-MM-DD
 ## Testing
 
 **Unit tests:**
+
 - <Function name and what it asserts.>
 
 **Integration tests:**
+
 - <RPC or DB behaviour to verify, including RLS checks.>
 
 **Edge cases:**
+
 - <Boundary conditions, error states, race conditions.>
 
 ## Notes
@@ -101,18 +105,18 @@ updated: YYYY-MM-DD
 ## Related Issues
 
 | Issue | Description | Status |
-|-------|-------------|--------|
+| ----- | ----------- | ------ |
 
 ## Related PRs
 
-| PR | Description | Status |
-|----|-------------|--------|
+| PR  | Description | Status |
+| --- | ----------- | ------ |
 
 ## Changelog
 
-| Date | Description | Initiated by | Why |
-|------|-------------|--------------|-----|
-| YYYY-MM-DD | Spec created | <name> | <reason> |
+| Date       | Description  | Initiated by | Why      |
+| ---------- | ------------ | ------------ | -------- |
+| YYYY-MM-DD | Spec created | <name>       | <reason> |
 ```
 
 ---
@@ -131,15 +135,15 @@ updated: YYYY-MM-DD
 
 # <Short Bug Title>
 
-> Epic: [<Epic Name>](<relative-path>) — E-XXX  ← omit if no parent epic
+> Epic: [<Epic Name>](relative-path) — E-XXX ← omit if no parent epic
 
 ## Flags
 
-| Flag | |
-|------|-|
-| DB Change | ⬜ |
-| Style Only | ⬜ |
-| Env Update Required | ⬜ |
+| Flag                |     |
+| ------------------- | --- |
+| DB Change           | ⬜  |
+| Style Only          | ⬜  |
+| Env Update Required | ⬜  |
 
 ## Problem
 
@@ -157,12 +161,15 @@ updated: YYYY-MM-DD
 ## Testing
 
 **Reproduction test:**
+
 - <How to confirm the bug is fixed.>
 
 **Regression:**
+
 - <What must still work after the fix.>
 
 **Edge cases:**
+
 - <Related failure modes to check.>
 
 ## Notes
@@ -173,18 +180,18 @@ updated: YYYY-MM-DD
 ## Related Issues
 
 | Issue | Description | Status |
-|-------|-------------|--------|
+| ----- | ----------- | ------ |
 
 ## Related PRs
 
-| PR | Description | Status |
-|----|-------------|--------|
+| PR  | Description | Status |
+| --- | ----------- | ------ |
 
 ## Changelog
 
-| Date | Description | Initiated by | Why |
-|------|-------------|--------------|-----|
-| YYYY-MM-DD | Spec created | <name> | <reason> |
+| Date       | Description  | Initiated by | Why      |
+| ---------- | ------------ | ------------ | -------- |
+| YYYY-MM-DD | Spec created | <name>       | <reason> |
 ```
 
 ---
@@ -205,11 +212,11 @@ updated: YYYY-MM-DD
 
 ## Flags
 
-| Flag | |
-|------|-|
-| DB Change | ⬜ |
-| Style Only | ⬜ |
-| Env Update Required | ⬜ |
+| Flag                |     |
+| ------------------- | --- |
+| DB Change           | ⬜  |
+| Style Only          | ⬜  |
+| Env Update Required | ⬜  |
 
 ## Problem
 
@@ -220,9 +227,11 @@ updated: YYYY-MM-DD
 <What will be done. Define the scope boundary clearly — what files/systems are in and out.>
 
 **In scope:**
+
 - <...>
 
 **Out of scope:**
+
 - <...>
 
 ## Testing
@@ -236,29 +245,35 @@ updated: YYYY-MM-DD
 ## Related Issues
 
 | Issue | Description | Status |
-|-------|-------------|--------|
+| ----- | ----------- | ------ |
 
 ## Related PRs
 
-| PR | Description | Status |
-|----|-------------|--------|
+| PR  | Description | Status |
+| --- | ----------- | ------ |
 
 ## Changelog
 
-| Date | Description | Initiated by | Why |
-|------|-------------|--------------|-----|
-| YYYY-MM-DD | Spec created | <name> | <reason> |
+| Date       | Description  | Initiated by | Why      |
+| ---------- | ------------ | ------------ | -------- |
+| YYYY-MM-DD | Spec created | <name>       | <reason> |
 ```
 
 ---
 
 ## After Writing a Spec
 
-1. Add the entry to `specs/README.md` under the correct epic or section.
+1. Add the entry to `specs/README.md` under the correct epic or section with the spec's current `status` as a backtick label (e.g. `` `draft` ``).
 2. If it's a feature, add it to the parent epic's `## Features` table.
 3. Add the `> Epic:` back-link below the spec title (features and bugs only).
 4. Leave `Related Issues` and `Related PRs` tables empty — fill them when tickets are created.
 5. Add a first row to the `Changelog` table: today's date, "Spec created", your name, and why.
+
+## When a Spec Ships (PR merged)
+
+1. Update the spec front matter: set `status: complete` and update `updated` to today's date. Add `pr: <url>` and `closed-by: <issue-url>` if applicable.
+2. **Update `specs/README.md`** — change the status label next to the entry from `` `draft` `` / `` `active` `` to `` `complete` ``.
+3. Add a Changelog row describing what shipped and why.
 
 ## Generating a GitHub Issue from a Spec
 
