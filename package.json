@@ -16,8 +16,6 @@
     "db:status": "supabase status",
     "db:studio": "supabase studio",
     "db:types": "supabase gen types typescript --local --schema public > src/lib/supabase/database.types.ts",
-    "db:backup": "node scripts/db-backup.js",
-    "db:restore": "node scripts/db-restore.js",
     "db:policies": "node scripts/extract-db-policies.js",
     "test": "vitest run --project unit",
     "test:watch": "vitest --project unit",

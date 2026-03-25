@@ -1,19 +1,22 @@
 # Database Backup & Restore
 
-Manual runbook for dumping and restoring the Ladysmith Trail Stewards PostgreSQL database (hosted on Supabase).
+Manual runbook for backing up and restoring the Ladysmith Trail Stewards PostgreSQL database (hosted on Supabase).
+
+> **Free tier note:** Supabase's automated daily backups (visible in the dashboard) require a paid plan. However, **manual dumps using the Supabase CLI or `pg_dump` work on the free tier** and are the recommended approach here.
 
 ---
 
 ## Overview
 
-| Script | Command | Purpose |
+Two complementary approaches:
+
+| Approach | Free tier | When to use |
 |---|---|---|
-| `db-backup.js` | `pnpm db:backup` | Dump the database to a SQL file |
-| `db-restore.js` | `pnpm db:restore` | Restore the database from a SQL file |
+| `supabase db dump` (Supabase CLI) | ✅ Yes | Quick dump via the Supabase CLI |
+| `pg_dump` / `pg_restore` (PostgreSQL tools) | ✅ Yes | Full control; works with any PostgreSQL-compatible tool |
+| Supabase Dashboard (Backups page) | ⛔ Paid plans only | Automated daily snapshots + point-in-time recovery |
 
-Both scripts work against **local** (Docker) and **remote** (Supabase cloud) databases.
-
-Dump files are written to `backups/` at the repo root. That directory is `.gitignore`d — **never commit backup files to git**.
+For this project the CLI or `pg_dump` approach is the right one.
 
 ---
 
@@ -22,78 +25,80 @@ Dump files are written to `backups/` at the repo root. That directory is `.gitig
 | Tool | Install |
 |---|---|
 | Supabase CLI | `brew install supabase/tap/supabase` |
-| psql (PostgreSQL client) | `brew install libpq && brew link --force libpq` (macOS) or `sudo apt install postgresql-client` (Ubuntu) |
+| pg_dump / psql | `brew install libpq && brew link --force libpq` (macOS) or `sudo apt install postgresql-client` (Ubuntu) |
+
+---
+
+## Getting the connection string
+
+All commands below need the production database connection string.
+
+1. Open the [Supabase dashboard](https://supabase.com/dashboard) and select the project.
+2. Go to **Project Settings → Database → Connection string**.
+3. Copy the **Direct connection** URI (not the pooler — `pg_dump` needs a direct connection):
+   ```
+   postgresql://postgres.<project-ref>:<password>@aws-0-<region>.supabase.com:5432/postgres
+   ```
+
+> ⚠️ This string contains your database password — never commit it to git. Store it in a password manager or pass it as an environment variable:
+> ```bash
+> export PROD_DB_URL="postgresql://postgres.<ref>:<password>@..."
+> ```
 
 ---
 
 ## Backup — dump to file
 
-### Local database
+### Using the Supabase CLI (recommended)
+
+The Supabase CLI wraps `pg_dump` and handles auth automatically when you are logged in (`supabase login`):
 
 ```bash
-pnpm db:backup
+# Dump schema + data
+supabase db dump --db-url "$PROD_DB_URL" -f backup-$(date +%F).sql
+
+# Dump data only (no DDL)
+supabase db dump --db-url "$PROD_DB_URL" --data-only -f backup-data-$(date +%F).sql
 ```
 
-Writes `backups/YYYY-MM-DDTHH-MM-SSZ.sql`. Local Supabase must be running (`pnpm db:start`).
+Reference: [Supabase CLI — `db dump`](https://supabase.com/docs/reference/cli/supabase-db-dump)
 
-### Remote / production database
+### Using pg_dump directly
 
 ```bash
-pnpm db:backup -- --db-url "postgresql://postgres.<project-ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres"
+pg_dump "$PROD_DB_URL" \
+  --clean \
+  --if-exists \
+  --quote-all-identifiers \
+  --no-owner \
+  --no-privileges \
+  -f backup-$(date +%F).sql
 ```
 
-Find the connection string in the Supabase dashboard under **Project Settings → Database → Connection string** (use the **Direct connection** URI, not the pooler, for schema-aware dumps).
-
-> ⚠️ The connection string contains your database password. Pass it via an environment variable or enter it interactively — never hard-code it in scripts or commit it to git.
-
-```bash
-# Safer: store the URL in an environment variable
-export PROD_DB_URL="postgresql://postgres.<ref>:<password>@..."
-pnpm db:backup -- --db-url "$PROD_DB_URL"
-```
-
-### Data-only backup (no schema / DDL)
-
-```bash
-pnpm db:backup -- --data-only
-pnpm db:backup -- --data-only --db-url "$PROD_DB_URL"
-```
-
-### Custom output file
-
-```bash
-pnpm db:backup -- --file /path/to/my-backup.sql
-```
+> Store the resulting `.sql` file somewhere safe and **off-repository** (e.g. an encrypted cloud storage bucket, Dropbox, or a password manager attachment). Never commit backup files to git — the `backups/` directory is listed in `.gitignore` if you choose to dump there locally.
 
 ---
 
 ## Restore — load from file
 
-> ⚠️ Always take a fresh backup of the **target** database before restoring. Restoring applies all SQL statements in the dump file — depending on the dump type, existing rows may be overwritten or duplicated.
+> ⚠️ Always take a fresh backup of the **target** database before restoring. Running a dump against a live database may overwrite or duplicate existing data.
 
-### Local database
-
-```bash
-pnpm db:restore -- --file backups/2026-01-01T00-00-00Z.sql
-```
-
-The script will prompt for confirmation before executing.
-
-### Remote / production database
+### Restore to local database
 
 ```bash
-pnpm db:restore -- --file backups/2026-01-01T00-00-00Z.sql --db-url "$PROD_DB_URL"
+# Ensure local Supabase is running
+pnpm db:start
+
+psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -f backup-2026-01-01.sql
 ```
 
-### Skip confirmation prompt (CI / scripted use)
+### Restore to production database
 
 ```bash
-pnpm db:restore -- --file backups/2026-01-01T00-00-00Z.sql --yes
+psql "$PROD_DB_URL" -f backup-2026-01-01.sql
 ```
 
-### After restoring locally
-
-If the schema changed, regenerate TypeScript types:
+After restoring locally, regenerate TypeScript types if the schema changed:
 
 ```bash
 pnpm db:types
@@ -101,19 +106,23 @@ pnpm db:types
 
 ---
 
-## Recommended backup schedule
+## Supabase dashboard backups (paid plans)
 
-At this scale (≤ 50 users) a simple manual cadence is sufficient:
+On **Pro** and higher plans, Supabase automatically takes daily backups accessible from:
+
+**Dashboard → Project → Database → Backups**
+
+From there you can download a backup or trigger a point-in-time restore directly in the UI without running any commands. See [Supabase docs — Backups](https://supabase.com/docs/guides/platform/backups) for full details.
+
+---
+
+## Recommended cadence
 
 | Event | Action |
 |---|---|
-| Before any production schema migration | `db:backup -- --db-url "$PROD_DB_URL"` |
-| Before a major data import or bulk edit | `db:backup -- --db-url "$PROD_DB_URL"` |
-| Weekly (or as needed) | `db:backup -- --db-url "$PROD_DB_URL"` |
-
-Store the resulting SQL files somewhere safe and off-repository (e.g. an encrypted cloud storage bucket or a password manager attachment).
-
-Note: Supabase Pro tier includes [automated daily backups](https://supabase.com/docs/guides/platform/backups) with point-in-time recovery — consider upgrading if the data becomes critical.
+| Before any production schema migration | Dump prod with `supabase db dump` |
+| Before a major data import or bulk edit | Dump prod with `supabase db dump` |
+| Weekly (or as needed) | Dump prod and store off-repository |
 
 ---
 
@@ -121,8 +130,8 @@ Note: Supabase Pro tier includes [automated daily backups](https://supabase.com/
 
 | Error | Fix |
 |---|---|
-| `Local Supabase is not running` | Run `pnpm db:start` |
-| `psql not found` | Install PostgreSQL client tools (see Prerequisites) |
-| `Supabase CLI not found` | Install the Supabase CLI (see Prerequisites) |
-| `connection refused` on remote | Double-check the connection string and that your IP is allowed in Supabase network settings |
-| `permission denied` | Ensure you are using the **Direct connection** URI with the `postgres` superuser role |
+| `connection refused` | Double-check the connection string; ensure your IP is not blocked in Supabase network settings |
+| `pg_dump: error: query failed: ERROR: permission denied` | Use the **Direct connection** URI (not the pooler) with the `postgres` superuser |
+| `psql: command not found` | Install PostgreSQL client tools (see Prerequisites) |
+| `supabase: command not found` | Install the Supabase CLI (see Prerequisites) |
+
