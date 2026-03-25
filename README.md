@@ -95,6 +95,8 @@ pnpm db:reset           # ⚠️  full reset — drops all data, re-runs migrati
 pnpm db:migrate         # apply pending migrations only (no data loss), regenerates types + POLICIES.md
 pnpm db:types           # regenerate src/lib/supabase/database.types.ts
 pnpm db:policies        # regenerate supabase/POLICIES.md from live DB
+pnpm db:backup          # dump local or remote DB to backups/ (see supabase/BACKUP.md)
+pnpm db:restore         # restore local or remote DB from a dump file
 
 # Testing
 pnpm test               # unit tests only
