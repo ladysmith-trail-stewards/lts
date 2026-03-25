@@ -36,7 +36,11 @@ export default function PendingApprovalPage() {
               You&apos;ll receive access once an admin reviews your account.
               Please check back later.
             </p>
-            <Button variant="outline" className="w-full" onClick={handleSignOut}>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={handleSignOut}
+            >
               Sign out
             </Button>
           </CardContent>

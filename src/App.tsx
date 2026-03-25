@@ -54,7 +54,10 @@ function App() {
                 <Route path="/auth/confirm" element={<AuthConfirmPage />} />
                 <Route path="/auth/error" element={<AuthErrorPage />} />
                 <Route path="/logout" element={<LogoutPage />} />
-                <Route path="/pending-approval" element={<PendingApprovalPage />} />
+                <Route
+                  path="/pending-approval"
+                  element={<PendingApprovalPage />}
+                />
                 <Route
                   path="/users"
                   element={

@@ -40,7 +40,9 @@ export default function LoginPage() {
           <Card>
             <CardHeader>
               <CardTitle className="text-2xl">Login</CardTitle>
-              <CardDescription>Sign in with your Google account</CardDescription>
+              <CardDescription>
+                Sign in with your Google account
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="flex flex-col gap-4">

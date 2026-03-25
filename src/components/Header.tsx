@@ -153,7 +153,7 @@ function HeaderUser() {
       <span className="max-w-[120px] truncate">{displayName}</span>
       {role && (
         <span className="text-[10px] leading-none px-1.5 py-0.5 rounded bg-slate-600 text-slate-300 capitalize">
-          {role.replace('_', ' ')}
+          {role === 'pending' ? 'pending approval' : role.replace('_', ' ')}
         </span>
       )}
     </button>
