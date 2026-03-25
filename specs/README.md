@@ -11,7 +11,12 @@ How can this possibly be maintained? Through the Use of LLM, and rulesheets, tha
   - **F-001** [Draw Trail](./epics/trail-management/draw-trail/spec.md) `draft`
   - **F-002** [Trail Elevation Profile](./epics/trail-management/trail-elevation-profile/spec.md) `draft`
 
+- **E-002** [User Account](./epics/user-account/spec.md) `active`
+  - **F-004** [Google SSO Authentication](./epics/user-account/google-sso-auth/spec.md) `complete`
+  - **F-003** [User Profile Dialog](./epics/user-account/user-profile-dialog/spec.md) `draft`
+
 - **Chores**
+  - **C-002** [DX Improvements: db:studio, db:reset Formatting, POLICIES.md Stability](./chores/dx-improvements-db-tooling.md) `complete`
   - **C-001** [Standardize Tailwind Class Usage Across Components](./chores/standardize-tailwind-class-usage.md) `draft`
 
 ---
