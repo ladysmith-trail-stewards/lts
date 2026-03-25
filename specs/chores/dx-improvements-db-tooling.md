@@ -4,26 +4,27 @@ type: chore
 status: complete
 created: 2026-03-25
 updated: 2026-03-25
-pr: https://github.com/ladysmith-trail-stewards/lts/pull/46
+pr: https://github.com/ladysmith-trail-stewards/lts/pull/50
 ---
 
-# DX Improvements: db:studio, db:reset Formatting, POLICIES.md Stability
+# DX Improvements: db:studio, db:reset Formatting, POLICIES.md Stability, pre-commit Hook
 
 ## Flags
 
-| Flag | |
-|---|---|
-| DB Change | ⬜ |
-| Style Only | ⬜ |
-| Env Update Required | ⬜ |
+| Flag                |     |
+| ------------------- | --- |
+| DB Change           | ⬜  |
+| Style Only          | ⬜  |
+| Env Update Required | ⬜  |
 
 ## Problem
 
-Three small developer experience issues found while working on the Google SSO feature:
+Three small developer experience issues found while working on the Google SSO feature, plus a pre-commit hook bug:
 
 1. `pnpm db:studio` ran `supabase studio`, a command that no longer exists in the Supabase CLI — it errored immediately.
 2. `pnpm db:reset` ran Prettier verbosely, printing every reformatted filename and making it hard to spot real warnings in the output.
 3. `supabase/POLICIES.md` included an ISO timestamp in its header, meaning the file was always dirty in git after any `db:reset` run — even if the schema hadn't changed.
+4. The pre-commit hook ran `pnpm run format` (which writes files) but never re-staged the changes — so prettier reformats were written to disk but the _original_ unformatted versions were what got committed.
 
 ## Changes
 
@@ -64,10 +65,33 @@ Uses `--list-different` to count changed files before silently writing them with
 
 This makes POLICIES.md stable between runs when the schema is unchanged, keeping it clean in git diffs.
 
+### pre-commit hook: replace `format` with `lint-staged`
+
+`.husky/pre-commit` previously ran `pnpm run format`, which called `prettier --write` on all `src/**/*` files but never re-staged the results. Formatted changes were written to disk but the original versions were committed.
+
+Replaced with `lint-staged` (`pnpm lint-staged`):
+
+- Installed `lint-staged` as a dev dependency.
+- Added config to `package.json`:
+  ```json
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx,json,css,md}": "prettier --write"
+  }
+  ```
+- Hook now runs `pnpm lint-staged` (formats and re-stages only the files being committed) followed by `pnpm run lint`.
+- Removed the deprecated `#!/usr/bin/env sh` + `. "$(dirname -- "$0")/_/husky.sh"` lines that Husky v10 no longer supports.
+
 ## Files modified
 
-| File | Change |
-|---|---|
-| `package.json` | `db:studio` → `open http://127.0.0.1:54323` |
-| `scripts/db-reset.js` | Prettier step: verbose → quiet summary |
-| `scripts/extract-db-policies.js` | Removed timestamp from POLICIES.md header |
+| File                             | Change                                                                    |
+| -------------------------------- | ------------------------------------------------------------------------- |
+| `package.json`                   | `db:studio` fix; add `lint-staged` dep + config                           |
+| `scripts/db-reset.js`            | Prettier step: verbose → quiet summary                                    |
+| `scripts/extract-db-policies.js` | Removed timestamp from POLICIES.md header                                 |
+| `.husky/pre-commit`              | Replace `pnpm run format` with `pnpm lint-staged`; fix deprecated shebang |
+
+## Changelog
+
+| Date       | Description  | Initiated by | Why                                            |
+| ---------- | ------------ | ------------ | ---------------------------------------------- |
+| 2026-03-25 | Spec created | kshaw        | Four DX papercuts found during Google SSO work |

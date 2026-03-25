@@ -16,8 +16,8 @@ How can this possibly be maintained? Through the Use of LLM, and rulesheets, tha
   - **F-003** [User Profile Dialog](./epics/user-account/user-profile-dialog/spec.md) `draft`
 
 - **Chores**
-  - **C-002** [DX Improvements: db:studio, db:reset Formatting, POLICIES.md Stability](./chores/dx-improvements-db-tooling.md) `complete`
   - **C-001** [Standardize Tailwind Class Usage Across Components](./chores/standardize-tailwind-class-usage.md) `draft`
+  - **C-002** [DX Improvements: db:studio, db:reset Formatting, POLICIES.md Stability, pre-commit Hook](./chores/dx-improvements-db-tooling.md) `complete`
 
 ---
 
@@ -33,7 +33,7 @@ specs/
 ## ID Format
 
 | Prefix | Type    | Example |
-|--------|---------|---------|
+| ------ | ------- | ------- |
 | `E-`   | Epic    | E-001   |
 | `F-`   | Feature | F-001   |
 | `B-`   | Bug fix | B-001   |

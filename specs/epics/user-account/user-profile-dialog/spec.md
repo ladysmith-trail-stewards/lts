@@ -13,11 +13,11 @@ updated: 2026-03-25
 
 ## Flags
 
-| Flag | |
-|---|---|
-| DB Change | ⬜ |
-| Style Only | ⬜ |
-| Env Update Required | ⬜ |
+| Flag                |     |
+| ------------------- | --- |
+| DB Change           | ⬜  |
+| Style Only          | ⬜  |
+| Env Update Required | ⬜  |
 
 ## Problem
 
@@ -49,10 +49,10 @@ Profile data is fetched from `public.profiles` when the dialog opens (not on mou
 
 ## Files to create / modify
 
-| File | Change |
-|---|---|
-| `src/components/UserProfileDialog.tsx` | New — dialog component |
-| `src/components/Header.tsx` | Modify `HeaderUser` to open the dialog on click instead of logging out directly |
+| File                                   | Change                                                                          |
+| -------------------------------------- | ------------------------------------------------------------------------------- |
+| `src/components/UserProfileDialog.tsx` | New — dialog component                                                          |
+| `src/components/Header.tsx`            | Modify `HeaderUser` to open the dialog on click instead of logging out directly |
 
 ## Testing
 
