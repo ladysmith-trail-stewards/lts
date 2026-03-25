@@ -4,7 +4,7 @@ type: chore
 status: complete
 created: 2026-03-25
 updated: 2026-03-25
-pr: https://github.com/ladysmith-trail-stewards/lts/pull/46
+pr: https://github.com/ladysmith-trail-stewards/lts/pull/50
 ---
 
 # DX Improvements: db:studio, db:reset Formatting, POLICIES.md Stability, pre-commit Hook
@@ -89,3 +89,9 @@ Replaced with `lint-staged` (`pnpm lint-staged`):
 | `scripts/db-reset.js`            | Prettier step: verbose → quiet summary                                    |
 | `scripts/extract-db-policies.js` | Removed timestamp from POLICIES.md header                                 |
 | `.husky/pre-commit`              | Replace `pnpm run format` with `pnpm lint-staged`; fix deprecated shebang |
+
+## Changelog
+
+| Date       | Description  | Initiated by | Why                                            |
+| ---------- | ------------ | ------------ | ---------------------------------------------- |
+| 2026-03-25 | Spec created | kshaw        | Four DX papercuts found during Google SSO work |
