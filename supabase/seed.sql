@@ -94,6 +94,8 @@ select setval('public.regions_id_seq', greatest(1, (select max(id) from public.r
 -- ============================================================
 -- Profiles
 -- Update seed profiles created by the trigger with correct roles and region.
+-- Seed users are email/password so the trigger already sets role = 'user';
+-- override here to assign the correct role for each test user.
 -- ============================================================
 update public.profiles set name = 'Test User',        role = 'user',        region_id = 1 where auth_user_id = '00000000-0000-0000-0000-000000000001';
 update public.profiles set name = 'Admin User',       role = 'admin',       region_id = 1 where auth_user_id = '00000000-0000-0000-0000-000000000002';
