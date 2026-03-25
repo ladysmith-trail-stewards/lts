@@ -12,11 +12,15 @@ import {
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { GoogleIcon } from '@/components/icons/GoogleIcon';
+
+const isProduction = import.meta.env.PROD;
 
 export default function LoginPage() {
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [ssoLoading, setSsoLoading] = useState(false);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -39,6 +43,23 @@ export default function LoginPage() {
     }
 
     navigate('/');
+  }
+
+  async function handleGoogleSignIn() {
+    setError(null);
+    setSsoLoading(true);
+
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/`,
+      },
+    });
+
+    if (error) {
+      setError(error.message);
+      setSsoLoading(false);
+    }
   }
 
   return (
@@ -86,6 +107,30 @@ export default function LoginPage() {
                   <Button type="submit" className="w-full" disabled={loading}>
                     {loading ? 'Logging in...' : 'Login'}
                   </Button>
+                  {isProduction && (
+                    <>
+                      <div className="relative my-2">
+                        <div className="absolute inset-0 flex items-center">
+                          <span className="w-full border-t" />
+                        </div>
+                        <div className="relative flex justify-center text-xs">
+                          <span className="bg-card px-2 text-muted-foreground">
+                            Or continue with
+                          </span>
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full"
+                        disabled={ssoLoading}
+                        onClick={handleGoogleSignIn}
+                      >
+                        <GoogleIcon />
+                        {ssoLoading ? 'Redirecting...' : 'Continue with Google'}
+                      </Button>
+                    </>
+                  )}
                 </div>
                 <div className="mt-4 text-center text-sm">
                   Don&apos;t have an account?{' '}
