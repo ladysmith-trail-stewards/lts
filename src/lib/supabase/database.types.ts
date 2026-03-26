@@ -1261,7 +1261,7 @@ export type Database = {
       };
     };
     Enums: {
-      app_role: 'super_admin' | 'admin' | 'super_user' | 'user';
+      app_role: 'super_admin' | 'admin' | 'super_user' | 'user' | 'pending';
     };
     CompositeTypes: {
       geometry_dump: {
@@ -1400,7 +1400,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ['super_admin', 'admin', 'super_user', 'user'],
+      app_role: ['super_admin', 'admin', 'super_user', 'user', 'pending'],
     },
   },
 } as const;

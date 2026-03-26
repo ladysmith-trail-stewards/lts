@@ -14,6 +14,7 @@ import AuthConfirmPage from './pages/AuthConfirmPage';
 import AuthErrorPage from './pages/AuthErrorPage';
 import LogoutPage from './pages/LogoutPage';
 import UsersPage from './pages/UsersPage';
+import PendingApprovalPage from './pages/PendingApprovalPage';
 import RequireAdmin from './components/RequireAdmin';
 import RequireAuth from './components/RequireAuth';
 
@@ -53,6 +54,10 @@ function App() {
                 <Route path="/auth/confirm" element={<AuthConfirmPage />} />
                 <Route path="/auth/error" element={<AuthErrorPage />} />
                 <Route path="/logout" element={<LogoutPage />} />
+                <Route
+                  path="/pending-approval"
+                  element={<PendingApprovalPage />}
+                />
                 <Route
                   path="/users"
                   element={
