@@ -6,6 +6,7 @@ import { Tooltip } from '@base-ui/react/tooltip';
 import { NavigationMenuLink } from '@/components/ui/navigation-menu';
 import { menuRoutes } from '@/routes';
 import { supabase } from '@/lib/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 import type { User as SupabaseUser } from '@supabase/supabase-js';
 
 function RouterLink(props: NavigationMenu.Link.Props & { to: string }) {
@@ -120,19 +121,7 @@ function HeaderMenu() {
 
 function HeaderUser() {
   const navigate = useNavigate();
-  const [user, setUser] = useState<SupabaseUser | null>(null);
-
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setUser(data.user));
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
+  const { user, role } = useAuth();
 
   if (!user) {
     return (
@@ -146,6 +135,9 @@ function HeaderUser() {
     );
   }
 
+  const displayName =
+    user.user_metadata?.full_name || user.email?.split('@')[0];
+
   return (
     <button
       type="button"
@@ -158,9 +150,12 @@ function HeaderUser() {
       <div className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-500 text-white">
         <LogOut size={14} />
       </div>
-      <span className="max-w-[120px] truncate">
-        {user.user_metadata?.full_name || user.email?.split('@')[0]}
-      </span>
+      <span className="max-w-[120px] truncate">{displayName}</span>
+      {role && (
+        <span className="text-[10px] leading-none px-1.5 py-0.5 rounded bg-slate-600 text-slate-300 capitalize">
+          {role === 'pending' ? 'pending approval' : role.replace('_', ' ')}
+        </span>
+      )}
     </button>
   );
 }

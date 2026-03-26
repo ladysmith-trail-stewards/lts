@@ -79,6 +79,60 @@ Available after `pnpm db:reset` (password: `password123`):
 
 ---
 
+## User management
+
+### How registration works
+
+1. A new user signs up via **Google SSO** (production) or email/password (dev).
+2. A profile is automatically created with:
+   - `role = user`
+   - `region_id = 0` (Default — no region assigned yet)
+3. The user can access the site but has limited permissions until an admin assigns them a region and/or a higher role.
+
+### Granting region access and elevated roles
+
+#### In-app
+Not yet implemented — user role and region management should eventually be handled through the admin UI at `/users`. For now use the dashboard options below.
+
+#### Dev: Supabase Studio
+
+1. Run `pnpm db:studio` to open Studio at `http://127.0.0.1:54323`.
+2. Navigate to **Table Editor → profiles**.
+3. Find the user row (match on `name` or `auth_user_id`).
+4. Click the row to edit:
+   - Set `region_id` to `1` (Ladysmith) or whichever region applies.
+   - Set `role` to `user`, `super_user`, `admin`, or `super_admin`.
+5. Save.
+
+Or use the **SQL Editor**:
+```sql
+update public.profiles
+set role = 'admin', region_id = 1
+where auth_user_id = '<uuid>';
+```
+
+#### Production: Supabase Dashboard
+
+1. Go to [supabase.com/dashboard](https://supabase.com/dashboard) and open the project.
+2. Navigate to **Table Editor → profiles**.
+3. Find the user row and click to edit:
+   - Set `region_id` to the appropriate region.
+   - Set `role` to the desired value.
+4. Save.
+
+Or use the **SQL Editor** (left sidebar):
+```sql
+update public.profiles
+set role = 'admin', region_id = 1
+where auth_user_id = '<uuid>';
+```
+
+To find a user's UUID: **Authentication → Users** → copy the **UID** from the user's row.
+
+> ⚠️ Only `super_admin` users should promote others to `admin` or `super_admin`.
+
+---
+
 ## Common commands
 
 ```bash

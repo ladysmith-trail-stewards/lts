@@ -27,16 +27,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [role, setRole] = useState<AppRole | null>(null);
   const [loading, setLoading] = useState(true);
 
+  async function loadProfile() {
+    const { data: r } = await supabase.rpc('get_my_role');
+    setRole((r as AppRole) ?? null);
+    setLoading(false);
+  }
+
   useEffect(() => {
     // Initial session check
     supabase.auth.getUser().then(({ data, error }) => {
       const resolved = error || !data?.user ? null : data.user;
       setUser(resolved);
       if (resolved) {
-        supabase.rpc('get_my_role').then(({ data: r }) => {
-          setRole((r as AppRole) ?? null);
-          setLoading(false);
-        });
+        loadProfile();
       } else {
         setLoading(false);
       }
@@ -49,9 +52,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const resolved = session?.user ?? null;
       setUser(resolved);
       if (resolved) {
-        supabase.rpc('get_my_role').then(({ data: r }) => {
-          setRole((r as AppRole) ?? null);
-        });
+        loadProfile();
       } else {
         setRole(null);
       }

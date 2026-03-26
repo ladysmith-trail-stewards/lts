@@ -6,7 +6,7 @@ export default function RequireAuth({
 }: {
   children: React.ReactNode;
 }) {
-  const { user, loading } = useAuth();
+  const { user, role, loading } = useAuth();
 
   if (loading) {
     return (
@@ -18,6 +18,10 @@ export default function RequireAuth({
 
   if (!user) {
     return <Navigate to="/login" replace />;
+  }
+
+  if (role === 'pending') {
+    return <Navigate to="/pending-approval" replace />;
   }
 
   return <>{children}</>;

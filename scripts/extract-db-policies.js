@@ -220,12 +220,7 @@ function buildMatrixSection(rows) {
   const byTable = {};
   for (const row of rows) (byTable[row.table_name] ??= []).push(row);
 
-  const legend =
-    '> ✅ = always &nbsp;·&nbsp; 📍 = own region only &nbsp;·&nbsp; 👤 = own record only &nbsp;·&nbsp; — = no access\n' +
-    '>\n' +
-    '> `service_role` bypasses RLS entirely and is excluded from this matrix.\n\n';
-
-  let md = legend;
+  let md = '';
   for (const [table, policies] of Object.entries(byTable)) {
     const matrix = buildMatrix(policies);
     md += `### \`${table}\`\n\n`;
@@ -261,6 +256,14 @@ const md = `# RLS Policies
 ---
 
 ## Access Matrix
+
+> ✅ = always &nbsp;·&nbsp; 📍 = own region only &nbsp;·&nbsp; 👤 = own record only &nbsp;·&nbsp; — = no access
+>
+> \`service_role\` bypasses RLS entirely and is excluded from this matrix.
+>
+> **\`pending\` role** — new Google SSO sign-ups land here until an admin promotes them to \`user\`.
+> No policies grant \`pending\` any access, so it is effectively identical to \`anon\` at the data layer.
+> Approval = \`UPDATE profiles SET role = 'user'\`, which admins can already do via their existing UPDATE policies.
 
 ${buildMatrixSection(data)}
 ---
