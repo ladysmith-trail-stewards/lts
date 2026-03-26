@@ -150,6 +150,9 @@ pnpm db:migrate         # apply pending migrations only (no data loss), regenera
 pnpm db:types           # regenerate src/lib/supabase/database.types.ts
 pnpm db:policies        # regenerate supabase/POLICIES.md from live DB
 
+# Backup / restore — see supabase/BACKUP.md for full instructions
+# Uses `supabase db dump` (CLI) or `pg_dump` directly; works on free tier
+
 # Testing
 pnpm test               # unit tests only
 pnpm test:integration   # integration tests (requires local Supabase running)
