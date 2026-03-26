@@ -24,11 +24,22 @@ import { hideBin } from 'yargs/helpers';
 
 const argv = yargs(hideBin(process.argv))
   .usage('Usage: $0 [options]')
-  .option('seed', { type: 'boolean', default: true, description: 'Run seed.sql after migrations' })
-  .option('types', { type: 'boolean', default: true, description: 'Regenerate database.types.ts' })
-  .option('policies', { type: 'boolean', default: true, description: 'Regenerate POLICIES.md' })
-  .help()
-  .argv;
+  .option('seed', {
+    type: 'boolean',
+    default: true,
+    description: 'Run seed.sql after migrations',
+  })
+  .option('types', {
+    type: 'boolean',
+    default: true,
+    description: 'Regenerate database.types.ts',
+  })
+  .option('policies', {
+    type: 'boolean',
+    default: true,
+    description: 'Regenerate POLICIES.md',
+  })
+  .help().argv;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -48,7 +59,9 @@ function checkSupabaseRunning() {
   try {
     const out = execSync('supabase status 2>&1', { encoding: 'utf8' });
     if (!out.includes('is running')) {
-      console.error('✖ Local Supabase is not running. Start it first: pnpm db:start');
+      console.error(
+        '✖ Local Supabase is not running. Start it first: pnpm db:start'
+      );
       process.exit(1);
     }
   } catch {
@@ -69,7 +82,10 @@ const resetCmd = argv.seed
   ? 'supabase db reset'
   : 'supabase db reset --no-seed';
 
-run(resetCmd, 'Reset database (migrations' + (argv.seed ? ' + seed' : '') + ')');
+run(
+  resetCmd,
+  'Reset database (migrations' + (argv.seed ? ' + seed' : '') + ')'
+);
 
 if (argv.types) {
   run(
@@ -80,6 +96,34 @@ if (argv.types) {
 
 if (argv.policies) {
   run('node scripts/extract-db-policies.js', 'Regenerate POLICIES.md');
+}
+
+// Run prettier and summarise — suppress per-file output
+console.log('\n▶ Format source files');
+try {
+  const changed = execSync(
+    'prettier --list-different "src/**/*.{js,jsx,ts,tsx,json,css,md}"',
+    { encoding: 'utf8' }
+  )
+    .trim()
+    .split('\n')
+    .filter(Boolean);
+  execSync(
+    'prettier --write --log-level silent "src/**/*.{js,jsx,ts,tsx,json,css,md}"'
+  );
+  console.log(`  reformatted ${changed.length} file(s)`);
+} catch (e) {
+  // --list-different exits 1 when files need formatting; that's fine
+  const changed = (e.stdout ?? '').trim().split('\n').filter(Boolean);
+  if (changed.length) {
+    execSync(
+      'prettier --write --log-level silent "src/**/*.{js,jsx,ts,tsx,json,css,md}"'
+    );
+    console.log(`  reformatted ${changed.length} file(s)`);
+  } else {
+    console.error('  prettier failed:', e.message);
+    process.exit(1);
+  }
 }
 
 console.log('\n✔ db:reset complete.');

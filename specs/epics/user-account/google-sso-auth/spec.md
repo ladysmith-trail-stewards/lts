@@ -6,6 +6,7 @@ status: complete
 created: 2026-03-25
 updated: 2026-03-25
 pr: https://github.com/ladysmith-trail-stewards/lts/pull/46
+closed-by: https://github.com/ladysmith-trail-stewards/lts/issues/27
 ---
 
 # Google SSO Authentication
@@ -14,11 +15,11 @@ pr: https://github.com/ladysmith-trail-stewards/lts/pull/46
 
 ## Flags
 
-| Flag | |
-|---|---|
-| DB Change | ✅ |
-| Style Only | ⬜ |
-| Env Update Required | ✅ |
+| Flag                |     |
+| ------------------- | --- |
+| DB Change           | ✅  |
+| Style Only          | ⬜  |
+| Env Update Required | ✅  |
 
 ## Problem
 
@@ -86,28 +87,28 @@ No RLS policy grants `pending` any access, so unapproved users are locked out at
 
 ## Files modified
 
-| File | Change |
-|---|---|
-| `src/pages/LoginPage.tsx` | SSO only — email/password form removed |
-| `src/pages/SignUpPage.tsx` | SSO only — email/password form removed |
-| `src/pages/PendingApprovalPage.tsx` | New — shown to `pending` users after sign-in |
-| `src/components/Header.tsx` | Use `useAuth()`, add role badge |
-| `src/components/RequireAuth.tsx` | Redirect `pending` role to `/pending-approval` |
-| `src/contexts/AuthContext.tsx` | Load role via `get_my_role()`; expose to app |
-| `src/App.tsx` | Add `/pending-approval` route |
-| `supabase/config.toml` | Google provider block; corrected `site_url` + `additional_redirect_urls` |
-| `supabase/migrations/20260325000000_auto_create_profile_on_signup.sql` | New — trigger + region 0 |
-| `supabase/migrations/20260325000001_profiles_approval_gate.sql` | New — `pending` role; updated trigger |
-| `supabase/seed.sql` | Profiles section: INSERT → UPDATE; no `approved` column |
-| `scripts/extract-db-policies.js` | Add `pending` role note to generated `POLICIES.md` |
-| `.env.example` | Documented Google SSO env vars |
-| `README.md` | Added User Management section |
+| File                                                                   | Change                                                                   |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `src/pages/LoginPage.tsx`                                              | SSO only — email/password form removed                                   |
+| `src/pages/SignUpPage.tsx`                                             | SSO only — email/password form removed                                   |
+| `src/pages/PendingApprovalPage.tsx`                                    | New — shown to `pending` users after sign-in                             |
+| `src/components/Header.tsx`                                            | Use `useAuth()`, add role badge                                          |
+| `src/components/RequireAuth.tsx`                                       | Redirect `pending` role to `/pending-approval`                           |
+| `src/contexts/AuthContext.tsx`                                         | Load role via `get_my_role()`; expose to app                             |
+| `src/App.tsx`                                                          | Add `/pending-approval` route                                            |
+| `supabase/config.toml`                                                 | Google provider block; corrected `site_url` + `additional_redirect_urls` |
+| `supabase/migrations/20260325000000_auto_create_profile_on_signup.sql` | New — trigger + region 0                                                 |
+| `supabase/migrations/20260325000001_profiles_approval_gate.sql`        | New — `pending` role; updated trigger                                    |
+| `supabase/seed.sql`                                                    | Profiles section: INSERT → UPDATE; no `approved` column                  |
+| `scripts/extract-db-policies.js`                                       | Add `pending` role note to generated `POLICIES.md`                       |
+| `.env.example`                                                         | Documented Google SSO env vars                                           |
+| `README.md`                                                            | Added User Management section                                            |
 
 ## Environment variables added
 
-| Variable | Used in | Purpose |
-|---|---|---|
-| `SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID` | `supabase/config.toml` (local only) | Google OAuth client ID |
+| Variable                                      | Used in                             | Purpose                    |
+| --------------------------------------------- | ----------------------------------- | -------------------------- |
+| `SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID`     | `supabase/config.toml` (local only) | Google OAuth client ID     |
 | `SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_SECRET` | `supabase/config.toml` (local only) | Google OAuth client secret |
 
 ## Testing
@@ -122,9 +123,10 @@ No RLS policy grants `pending` any access, so unapproved users are locked out at
 
 ## Changelog
 
-| Date | Description | Initiated by | Why |
-|------|-------------|--------------|-----|
-| 2026-03-25 | Spec created | kshaw | Google SSO needed for production; email/password unsuitable for volunteer org |
-| 2026-03-25 | Added approval gate: `pending` role for new OAuth sign-ups | kshaw | Open self-registration unsafe; admins must vet new users before granting access |
-| 2026-03-25 | Replaced `approved` boolean with `pending` role | kshaw | Role-as-state gives RLS enforcement for free; no per-policy `AND` clauses needed |
-| 2026-03-25 | Removed `isProduction` email/password gating; SSO only in all envs | kshaw | Simplifies auth surface; dev seed users cover testing needs without a UI |
+| Date       | Description                                                                              | Initiated by | Why                                                                              |
+| ---------- | ---------------------------------------------------------------------------------------- | ------------ | -------------------------------------------------------------------------------- |
+| 2026-03-25 | Spec created                                                                             | kshaw        | Google SSO needed for production; email/password unsuitable for volunteer org    |
+| 2026-03-25 | Added approval gate: `pending` role for new OAuth sign-ups                               | kshaw        | Open self-registration unsafe; admins must vet new users before granting access  |
+| 2026-03-25 | Replaced `approved` boolean with `pending` role                                          | kshaw        | Role-as-state gives RLS enforcement for free; no per-policy `AND` clauses needed |
+| 2026-03-25 | Removed `isProduction` email/password gating; SSO only in all envs                       | kshaw        | Simplifies auth surface; dev seed users cover testing needs without a UI         |
+| 2026-03-25 | Closes [#27](https://github.com/ladysmith-trail-stewards/lts/issues/27) — Swapped to SSO | kshaw        | Email/password auth removed in favour of Google SSO                              |
