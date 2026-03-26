@@ -28,17 +28,24 @@ export function UserProfileDialog({ open, onOpenChange }: Props) {
   const [bio, setBio] = useState('');
   const [saving, setSaving] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [loadingProfile, setLoadingProfile] = useState(false);
 
   // Fetch profile when dialog opens
   useEffect(() => {
     if (!open || !user) return;
 
+    setLoadingProfile(true);
     supabase
       .from('profiles')
       .select('name, bio')
       .eq('auth_user_id', user.id)
       .single()
-      .then(({ data }) => {
+      .then(({ data, error }) => {
+        setLoadingProfile(false);
+        if (error) {
+          toast.error('Failed to load profile. Please try again.');
+          return;
+        }
         if (data) {
           setName(data.name ?? '');
           setBio(data.bio ?? '');
@@ -87,6 +94,7 @@ export function UserProfileDialog({ open, onOpenChange }: Props) {
               id="profile-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
+              disabled={loadingProfile}
               required
             />
           </div>
@@ -98,6 +106,7 @@ export function UserProfileDialog({ open, onOpenChange }: Props) {
               onChange={(e) => setBio(e.target.value)}
               rows={3}
               placeholder="Tell us a little about yourself…"
+              disabled={loadingProfile}
             />
           </div>
         </div>
@@ -123,7 +132,7 @@ export function UserProfileDialog({ open, onOpenChange }: Props) {
           <Button
             type="button"
             onClick={handleSave}
-            disabled={saving || !name.trim()}
+            disabled={saving || loadingProfile || !name.trim()}
           >
             {saving ? 'Saving…' : 'Save'}
           </Button>
