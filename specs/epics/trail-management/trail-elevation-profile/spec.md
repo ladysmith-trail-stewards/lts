@@ -2,7 +2,7 @@
 id: F-002
 type: feature
 epic: trail-management
-status: draft
+status: planned
 created: 2026-03-24
 updated: 2026-03-24
 ---
@@ -13,11 +13,11 @@ updated: 2026-03-24
 
 ## Flags
 
-| Flag | |
-|------|-|
-| DB Change | ✅ |
-| Style Only | ⬜ |
-| Env Update Required | ⬜ |
+| Flag                |     |
+| ------------------- | --- |
+| DB Change           | ✅  |
+| Style Only          | ⬜  |
+| Env Update Required | ⬜  |
 
 ## Problem
 
@@ -32,6 +32,7 @@ When a user selects a trail, display an elevation profile chart in the `TrailDet
 **Elevation data strategy — one-time fetch, persisted as 3D geometry:**
 
 ### Initial Solution
+
 Elevation is fetched once from the Mapbox Terrain raster source and written back to the database as a `LineStringZ` geometry. It is never re-fetched at view time — the chart reads z-coordinates directly from the stored geometry. 10m resolution to start.
 
 **Fetch process:**
@@ -57,17 +58,20 @@ Elevation is fetched once from the Mapbox Terrain raster source and written back
 ## Testing
 
 **Unit tests:**
+
 - `resampleLineString(coords, spacingMetres)` — returns evenly-spaced points at correct intervals for a known geometry.
 - `parseElevationProfile(linestringZ)` — returns `{ distance: number[], elevation: number[] }` from a 3D coordinate array.
 - Distance accumulation is correct for a known 3-point geometry.
 - Handles empty coordinate array gracefully (returns empty arrays, no throw).
 
 **Integration tests:**
+
 - After saving a new trail, the stored geometry includes z-coordinates.
 - Admin or builder can trigger bulk elevation sync — all trails in `trails_view` have z-coordinates after sync completes.
 - Member or unauthenticated user cannot call `update_trail_geometry` RPC (RLS denial).
 
 **Edge cases:**
+
 - Trail with only 2 waypoints — resampling produces intermediate points; profile renders correctly.
 - Flat trail (all z identical) — renders a flat line, no division-by-zero.
 - Missing Mapbox token — sync tool is disabled; chart shows "elevation data unavailable" if z-coords are absent.
@@ -87,20 +91,20 @@ Elevation is fetched once from the Mapbox Terrain raster source and written back
 ## Related Issues
 
 | Issue | Description | Status |
-|-------|-------------|--------|
+| ----- | ----------- | ------ |
 
 ## Related PRs
 
-| PR | Description | Status |
-|----|-------------|--------|
+| PR  | Description | Status |
+| --- | ----------- | ------ |
 
 ## Changelog
 
-| Date | Description | Initiated by | Why |
-|------|-------------|--------------|-----|
-| 2026-03-24 | Spec created | KS | New spec system |
+| Date       | Description  | Author | Driver          | Why | Stage |
+| ---------- | ------------ | ------ | --------------- | --- | ----- |
+| 2026-03-24 | Spec created | KS     | New spec system |
 
 ## Related PRs
 
-| PR | Description | Status |
-|----|-------------|--------|
+| PR  | Description | Status |
+| --- | ----------- | ------ |

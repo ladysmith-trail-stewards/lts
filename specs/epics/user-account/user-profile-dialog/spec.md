@@ -2,7 +2,7 @@
 id: F-003
 type: feature
 epic: user-account
-status: draft
+status: planned
 created: 2026-03-25
 updated: 2026-03-25
 ---
