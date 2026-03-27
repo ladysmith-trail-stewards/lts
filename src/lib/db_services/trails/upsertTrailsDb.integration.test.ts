@@ -187,3 +187,20 @@ describe('upsertTrailsDb — invalid geometry', () => {
     expect(results).toHaveLength(0);
   });
 });
+
+describe('upsertTrailsDb — sentinel id = -1 treated as insert', () => {
+  it('inserts a new trail when id is -1 (Draw Trail sentinel) and returns a positive id', async () => {
+    const { results, allOk, error } = await upsertTrailsDb(
+      serviceClient,
+      trailFeature('sentinel-insert', -1)
+    );
+
+    expect(error).toBeNull();
+    expect(allOk).toBe(true);
+    expect(results).toHaveLength(1);
+    expect(results[0].ok).toBe(true);
+    expect(results[0].id).toBeGreaterThan(0);
+
+    created.push(results[0].id!);
+  });
+});
