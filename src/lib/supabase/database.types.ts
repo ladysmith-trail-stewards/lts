@@ -95,6 +95,7 @@ export type Database = {
           bike: boolean;
           connector: boolean;
           created_at: string;
+          deleted_at: string | null;
           description: string | null;
           direction: string | null;
           geometry: unknown;
@@ -114,6 +115,7 @@ export type Database = {
           bike?: boolean;
           connector?: boolean;
           created_at?: string;
+          deleted_at?: string | null;
           description?: string | null;
           direction?: string | null;
           geometry: unknown;
@@ -133,6 +135,7 @@ export type Database = {
           bike?: boolean;
           connector?: boolean;
           created_at?: string;
+          deleted_at?: string | null;
           description?: string | null;
           direction?: string | null;
           geometry?: unknown;
@@ -207,6 +210,7 @@ export type Database = {
           bike: boolean | null;
           connector: boolean | null;
           created_at: string | null;
+          deleted_at: string | null;
           description: string | null;
           direction: string | null;
           distance_m: number | null;
@@ -227,6 +231,7 @@ export type Database = {
           bike?: boolean | null;
           connector?: boolean | null;
           created_at?: string | null;
+          deleted_at?: string | null;
           description?: string | null;
           direction?: string | null;
           distance_m?: never;
@@ -247,6 +252,7 @@ export type Database = {
           bike?: boolean | null;
           connector?: boolean | null;
           created_at?: string | null;
+          deleted_at?: string | null;
           description?: string | null;
           direction?: string | null;
           distance_m?: never;
