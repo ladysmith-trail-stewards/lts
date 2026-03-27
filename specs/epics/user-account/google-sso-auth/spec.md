@@ -123,10 +123,10 @@ No RLS policy grants `pending` any access, so unapproved users are locked out at
 
 ## Changelog
 
-| Date       | Description                                                                              | Initiated by | Why                                                                              |
-| ---------- | ---------------------------------------------------------------------------------------- | ------------ | -------------------------------------------------------------------------------- |
-| 2026-03-25 | Spec created                                                                             | kshaw        | Google SSO needed for production; email/password unsuitable for volunteer org    |
-| 2026-03-25 | Added approval gate: `pending` role for new OAuth sign-ups                               | kshaw        | Open self-registration unsafe; admins must vet new users before granting access  |
-| 2026-03-25 | Replaced `approved` boolean with `pending` role                                          | kshaw        | Role-as-state gives RLS enforcement for free; no per-policy `AND` clauses needed |
-| 2026-03-25 | Removed `isProduction` email/password gating; SSO only in all envs                       | kshaw        | Simplifies auth surface; dev seed users cover testing needs without a UI         |
-| 2026-03-25 | Closes [#27](https://github.com/ladysmith-trail-stewards/lts/issues/27) — Swapped to SSO | kshaw        | Email/password auth removed in favour of Google SSO                              |
+| Date       | Description                                                                              | Author | Driver                                                                           | Why | Stage |
+| ---------- | ---------------------------------------------------------------------------------------- | ------ | -------------------------------------------------------------------------------- | --- | ----- |
+| 2026-03-25 | Spec created                                                                             | kshaw  | Google SSO needed for production; email/password unsuitable for volunteer org    |
+| 2026-03-25 | Added approval gate: `pending` role for new OAuth sign-ups                               | kshaw  | Open self-registration unsafe; admins must vet new users before granting access  |
+| 2026-03-25 | Replaced `approved` boolean with `pending` role                                          | kshaw  | Role-as-state gives RLS enforcement for free; no per-policy `AND` clauses needed |
+| 2026-03-25 | Removed `isProduction` email/password gating; SSO only in all envs                       | kshaw  | Simplifies auth surface; dev seed users cover testing needs without a UI         |
+| 2026-03-25 | Closes [#27](https://github.com/ladysmith-trail-stewards/lts/issues/27) — Swapped to SSO | kshaw  | Email/password auth removed in favour of Google SSO                              |

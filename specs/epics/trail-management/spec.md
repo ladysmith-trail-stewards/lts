@@ -2,7 +2,7 @@
 id: E-001
 type: epic
 epic: null
-status: active
+status: in-progress
 created: 2026-03-24
 updated: 2026-03-24
 ---
@@ -11,7 +11,7 @@ updated: 2026-03-24
 
 ## Problem
 
-Primarily for Trail Stewards! We often use multiple apps like Gaia and Trailforks to locate areas for maintanance or for new trails. In addition we have to manage other spatial data ourselves, like elevation, land owner, and land cover. A trail management system integrated into the app would centralize all trail data, eliminate the need for external GIS tools, and allow stewards to maintain their trails end-to-end from the browser. This is a helpuful feature for steward adoption and long-term data integrity. Additionally Sharing read access between users / user groups outside of a payed app like trailforks would be valuable. 
+Primarily for Trail Stewards! We often use multiple apps like Gaia and Trailforks to locate areas for maintanance or for new trails. In addition we have to manage other spatial data ourselves, like elevation, land owner, and land cover. A trail management system integrated into the app would centralize all trail data, eliminate the need for external GIS tools, and allow stewards to maintain their trails end-to-end from the browser. This is a helpuful feature for steward adoption and long-term data integrity. Additionally Sharing read access between users / user groups outside of a payed app like trailforks would be valuable.
 
 ## Solution
 
@@ -32,19 +32,19 @@ Builders can share draft trail networks with other builders before any trail bre
 
 ## User Roles
 
-| Role    | Read | Write | Share drafts |
-|---------|------|-------|--------------|
-| Public  | ✓    |       |              |
-| Member  | ✓    |       |              |
+| Role    | Read | Write | Share drafts            |
+| ------- | ---- | ----- | ----------------------- |
+| Public  | ✓    |       |                         |
+| Member  | ✓    |       |                         |
 | Builder | ✓    | ✓     | ✓ (with other builders) |
-| Admin   | ✓    | ✓     | ✓            |
+| Admin   | ✓    | ✓     | ✓                       |
 
 ## Features
 
-| ID    | Type    | Name                                              | Status | Spec |
-|-------|---------|---------------------------------------------------|--------|------|
-| F-001 | feature | Draw Trail                                        | draft  | [spec](./draw-trail/spec.md) |
-| F-002 | feature | Trail Elevation Profile                           | draft  | [spec](./trail-elevation-profile/spec.md) |
+| ID    | Type    | Name                    | Status | Spec                                      |
+| ----- | ------- | ----------------------- | ------ | ----------------------------------------- |
+| F-001 | feature | Draw Trail              | draft  | [spec](./draw-trail/spec.md)              |
+| F-002 | feature | Trail Elevation Profile | draft  | [spec](./trail-elevation-profile/spec.md) |
 
 ## Work Plans (Future)
 
@@ -57,4 +57,3 @@ Items explicitly deferred to later epics — not out of scope forever:
 - **User-generated content** — allow users to submit photos, reviews, and trail conditions.
 - **Additional Layers** — support for overlaying additional data layers on the map, such as soil types, vegetation, and land use.
 - **Offline support** — cached map tiles and trail data for field use without connectivity.
-

@@ -2,7 +2,7 @@
 id: C-001
 type: chore
 epic: null
-status: draft
+status: planned
 created: 2026-03-24
 updated: 2026-03-24
 ---
@@ -11,17 +11,18 @@ updated: 2026-03-24
 
 ## Flags
 
-| Flag | |
-|------|-|
-| DB Change | ⬜ |
-| Style Only | ✅ |
-| Env Update Required | ⬜ |
+| Flag                |     |
+| ------------------- | --- |
+| DB Change           | ⬜  |
+| Style Only          | ✅  |
+| Env Update Required | ⬜  |
 
 ## Problem
 
 Several components mix Tailwind utility classes with arbitrary CSS values, hardcoded hex colors, and raw pixel values instead of the project's design tokens (oklch CSS custom properties, spacing scale, font-size scale). This creates visual inconsistencies and makes future theme changes expensive — a single color update requires touching many files rather than one CSS variable.
 
 Examples observed:
+
 - `Hero.tsx` uses `style={{ color: '#3a5a3c' }}` inline instead of a Tailwind token.
 - Some components use `text-[14px]` arbitrary values instead of `text-sm`.
 - `Footer.tsx` mixes `gap-4` and `gap-[18px]` for logically equivalent spacing.
@@ -43,6 +44,7 @@ Audit all files in `src/components/` and `src/pages/` and apply the following ru
 - `src/pages/*.tsx`
 
 Out of scope:
+
 - `src/components/ui/` — shadcn primitives; do not modify unless explicitly upgrading a component.
 - Generated files (`database.types.ts`).
 - Mapbox canvas layer styles (JSON paint properties — not Tailwind).
@@ -50,12 +52,14 @@ Out of scope:
 ## Impact
 
 **Benefits:**
+
 - Consistent visual output across components.
 - Single-source-of-truth for colors via CSS custom properties.
 - Faster future theme changes (e.g., dark mode or brand refresh).
 - Reduces reviewer cognitive load — no ad-hoc color archaeology.
 
 **Tradeoffs:**
+
 - Purely mechanical refactor — no user-visible feature change.
 - Low risk but touches many files; should be done in a single focused PR to keep the diff reviewable.
 - Requires careful visual regression check (manual or screenshot diff).
@@ -77,20 +81,20 @@ Out of scope:
 ## Related Issues
 
 | Issue | Description | Status |
-|-------|-------------|--------|
+| ----- | ----------- | ------ |
 
 ## Related PRs
 
-| PR | Description | Status |
-|----|-------------|--------|
+| PR  | Description | Status |
+| --- | ----------- | ------ |
 
 ## Changelog
 
-| Date | Description | Initiated by | Why |
-|------|-------------|--------------|-----|
-| 2026-03-24 | Spec created | KS | New spec system |
+| Date       | Description  | Author | Driver          | Why | Stage |
+| ---------- | ------------ | ------ | --------------- | --- | ----- |
+| 2026-03-24 | Spec created | KS     | New spec system |
 
 ## Related PRs
 
-| PR | Description | Status |
-|----|-------------|--------|
+| PR  | Description | Status |
+| --- | ----------- | ------ |

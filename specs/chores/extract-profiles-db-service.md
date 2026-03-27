@@ -2,7 +2,7 @@
 id: C-003
 type: chore
 epic: user-account
-status: draft
+status: planned
 created: 2026-03-26
 updated: 2026-03-26
 ---
@@ -67,6 +67,6 @@ Update `UserProfileDialog.tsx` to import and call these service functions instea
 
 ## Changelog
 
-| Date       | Description  | Initiated by | Why                                                             |
-| ---------- | ------------ | ------------ | --------------------------------------------------------------- |
-| 2026-03-26 | Spec created | copilot      | Feedback on PR #51 to move DB calls out of the dialog component |
+| Date       | Description  | Author  | Driver                                                          | Why | Stage |
+| ---------- | ------------ | ------- | --------------------------------------------------------------- | --- | ----- |
+| 2026-03-26 | Spec created | copilot | Feedback on PR #51 to move DB calls out of the dialog component |

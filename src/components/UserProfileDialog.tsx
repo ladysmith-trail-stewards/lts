@@ -34,23 +34,25 @@ export function UserProfileDialog({ open, onOpenChange }: Props) {
   useEffect(() => {
     if (!open || !user) return;
 
-    setLoadingProfile(true);
-    supabase
-      .from('profiles')
-      .select('name, bio')
-      .eq('auth_user_id', user.id)
-      .single()
-      .then(({ data, error }) => {
-        setLoadingProfile(false);
-        if (error) {
-          toast.error('Failed to load profile. Please try again.');
-          return;
-        }
-        if (data) {
-          setName(data.name ?? '');
-          setBio(data.bio ?? '');
-        }
-      });
+    async function fetchProfile() {
+      setLoadingProfile(true);
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('name, bio')
+        .eq('auth_user_id', user!.id)
+        .single();
+      setLoadingProfile(false);
+      if (error) {
+        toast.error('Failed to load profile. Please try again.');
+        return;
+      }
+      if (data) {
+        setName(data.name ?? '');
+        setBio(data.bio ?? '');
+      }
+    }
+
+    void fetchProfile();
   }, [open, user]);
 
   async function handleSave() {

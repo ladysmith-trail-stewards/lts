@@ -92,6 +92,6 @@ Replaced with `lint-staged` (`pnpm lint-staged`):
 
 ## Changelog
 
-| Date       | Description  | Initiated by | Why                                            |
-| ---------- | ------------ | ------------ | ---------------------------------------------- |
-| 2026-03-25 | Spec created | kshaw        | Four DX papercuts found during Google SSO work |
+| Date       | Description  | Author | Driver                                         | Why | Stage |
+| ---------- | ------------ | ------ | ---------------------------------------------- | --- | ----- |
+| 2026-03-25 | Spec created | kshaw  | Four DX papercuts found during Google SSO work |

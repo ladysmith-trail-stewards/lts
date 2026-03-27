@@ -39,6 +39,42 @@ Rules:
 
 ---
 
+## Status Values
+
+`status` in the front matter has three values:
+
+| `status`      | Meaning                                                                     |
+| ------------- | --------------------------------------------------------------------------- |
+| `planned`     | Feature is known and on the roadmap — spec may be at any level of fidelity. |
+| `in-progress` | Actively being worked on.                                                   |
+| `complete`    | Shipped and done.                                                           |
+
+Specs are **living documents** — they can receive changes from any team at any time, regardless of status. A design change, a new requirement, a tech assessment finding, or a dev discovery can all update a spec while it is `planned`, `in-progress`, or even after `complete` (for post-ship learnings). Always add a changelog entry when the spec changes.
+
+## Changelog
+
+The `## Changelog` table records every meaningful change to the spec. Columns:
+
+**`Author`** — who wrote this entry.
+
+**`Driver`** — the type of work or team that prompted the change:
+
+| `Driver`    | Meaning                                                                                 |
+| ----------- | --------------------------------------------------------------------------------------- |
+| `stubbed`   | Feature placeholder created — reserved but no detail yet.                               |
+| `spitball`  | Rough idea or early thinking captured.                                                  |
+| `blueprint` | Structured spec written or significantly updated — story, flow, and intent fleshed out. |
+| `design`    | UX or visual design decision.                                                           |
+| `ta`        | Tech assessment — architecture, feasibility, or sub-task breakdown.                     |
+| `dev`       | Finding or change that came out of active development.                                  |
+| `review`    | Change requested during code or spec review.                                            |
+
+**`Why`** — one sentence on why the change was made.
+
+**`Status`** — the feature's `status` at the time of this entry (`planned`, `in-progress`, or `complete`).
+
+---
+
 ## Templates
 
 ### Feature (`F-XXX`)
@@ -48,7 +84,7 @@ Rules:
 id: F-XXX
 type: feature
 epic: <epic-name>
-status: draft
+status: planned
 created: YYYY-MM-DD
 updated: YYYY-MM-DD
 ---
@@ -114,9 +150,9 @@ updated: YYYY-MM-DD
 
 ## Changelog
 
-| Date       | Description  | Initiated by | Why      |
-| ---------- | ------------ | ------------ | -------- |
-| YYYY-MM-DD | Spec created | <name>       | <reason> |
+| Date       | Description  | Author | Driver    | Why      | Status  |
+| ---------- | ------------ | ------ | --------- | -------- | ------- |
+| YYYY-MM-DD | Spec created | <name> | blueprint | <reason> | planned |
 ```
 
 ---
@@ -128,7 +164,7 @@ updated: YYYY-MM-DD
 id: B-XXX
 type: fix
 epic: <epic-name or null>
-status: draft
+status: planned
 created: YYYY-MM-DD
 updated: YYYY-MM-DD
 ---
@@ -189,9 +225,9 @@ updated: YYYY-MM-DD
 
 ## Changelog
 
-| Date       | Description  | Initiated by | Why      |
-| ---------- | ------------ | ------------ | -------- |
-| YYYY-MM-DD | Spec created | <name>       | <reason> |
+| Date       | Description  | Author | Driver    | Why      | Status  |
+| ---------- | ------------ | ------ | --------- | -------- | ------- |
+| YYYY-MM-DD | Spec created | <name> | blueprint | <reason> | planned |
 ```
 
 ---
@@ -203,7 +239,7 @@ updated: YYYY-MM-DD
 id: C-XXX
 type: chore
 epic: <epic-name or null>
-status: draft
+status: planned
 created: YYYY-MM-DD
 updated: YYYY-MM-DD
 ---
@@ -254,9 +290,9 @@ updated: YYYY-MM-DD
 
 ## Changelog
 
-| Date       | Description  | Initiated by | Why      |
-| ---------- | ------------ | ------------ | -------- |
-| YYYY-MM-DD | Spec created | <name>       | <reason> |
+| Date       | Description  | Author | Driver    | Why      | Status  |
+| ---------- | ------------ | ------ | --------- | -------- | ------- |
+| YYYY-MM-DD | Spec created | <name> | blueprint | <reason> | planned |
 ```
 
 ---
