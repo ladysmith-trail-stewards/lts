@@ -47,6 +47,7 @@ function MapPageInner() {
     handleContourStrength,
     handleContourScheme,
     handleTrailUpdated,
+    drawApi,
   } = useMapbox({
     onTrailClick: (id) =>
       setSearchParams((prev) => {
@@ -156,7 +157,11 @@ function MapPageInner() {
       </div>
 
       {/* Trail detail drawer — opens when ?trailId= is set in URL */}
-      <TrailDetailDrawer trails={trails} onTrailUpdated={handleTrailUpdated} />
+      <TrailDetailDrawer
+        trails={trails}
+        onTrailUpdated={handleTrailUpdated}
+        drawApi={drawApi}
+      />
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import mapboxgl, { type ExpressionSpecification } from 'mapbox-gl';
 import { useTrails } from '@/hooks/useTrails';
+import { useDrawTrail, type DrawTrailApi } from '@/hooks/useDrawTrail';
 import {
   MAP_STYLES,
   type StyleKey,
@@ -38,6 +39,7 @@ export interface UseMapboxReturn {
   trails: ReturnType<typeof useTrails>['trails'];
   loading: boolean;
   trailsError: string | null;
+  drawApi: DrawTrailApi;
   handleStyleChange: (style: StyleKey) => void;
   handleContourStrength: (value: number) => void;
   handleContourScheme: (scheme: ContourScheme) => void;
@@ -60,6 +62,8 @@ export function useMapbox({
   const [contourScheme, setContourScheme] = useState<ContourScheme>('dark');
   const contourSchemeRef = useRef<ContourScheme>('dark');
   const [mapReady, setMapReady] = useState(false);
+
+  const drawApi = useDrawTrail(mapRef);
 
   // Local copy of trails so we can patch individual rows after an edit.
   // useTrails fetches once; handleTrailUpdated patches locally to avoid refetch.
@@ -531,6 +535,7 @@ export function useMapbox({
     trails,
     loading,
     trailsError,
+    drawApi,
     handleStyleChange,
     handleContourStrength,
     handleContourScheme,
