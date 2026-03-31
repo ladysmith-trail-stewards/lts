@@ -84,6 +84,40 @@ insert into auth.users (
     '', '', '', ''
   );
 
+-- pending user: uses google provider so handle_new_user assigns role = 'pending'
+insert into auth.users (
+  id,
+  instance_id,
+  email,
+  encrypted_password,
+  email_confirmed_at,
+  role,
+  aud,
+  created_at,
+  updated_at,
+  raw_app_meta_data,
+  raw_user_meta_data,
+  is_super_admin,
+  confirmation_token,
+  recovery_token,
+  email_change_token_new,
+  email_change
+) values (
+  '00000000-0000-0000-0000-000000000005',
+  '00000000-0000-0000-0000-000000000000',
+  'pending@test.com',
+  crypt('password123', gen_salt('bf')),
+  now(),
+  'authenticated',
+  'authenticated',
+  now(),
+  now(),
+  '{"provider":"google","providers":["google"]}',
+  '{}',
+  false,
+  '', '', '', ''
+);
+
 -- ============================================================
 -- Regions
 -- ============================================================
