@@ -33,7 +33,9 @@ export default function MapPage() {
 }
 
 function MapPageInner() {
-  const [, setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const trailIdParam = searchParams.get('trailId');
+  const selectedTrailId = trailIdParam ? Number(trailIdParam) : null;
 
   const {
     mapContainerRef,
@@ -49,6 +51,7 @@ function MapPageInner() {
     handleTrailUpdated,
     drawApi,
   } = useMapbox({
+    selectedTrailId,
     onTrailClick: (id) =>
       setSearchParams((prev) => {
         const next = new URLSearchParams(prev);
@@ -156,7 +159,6 @@ function MapPageInner() {
         </div>
       </div>
 
-      {/* Trail detail drawer — opens when ?trailId= is set in URL */}
       <TrailDetailDrawer
         trails={trails}
         onTrailUpdated={handleTrailUpdated}

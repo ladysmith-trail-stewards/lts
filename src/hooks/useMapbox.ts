@@ -7,7 +7,11 @@ import {
   type StyleKey,
   TRAILS_SOURCE,
   TRAILS_LAYER,
+  TRAILS_SELECTED,
   TRAILS_LABELS,
+  TRAILS_ENDPOINTS,
+  TRAILS_START,
+  TRAILS_END,
   CONTOUR_SOURCE,
   CONTOUR_LAYER,
   CONTOUR_LABEL,
@@ -28,6 +32,8 @@ import {
 
 export interface UseMapboxOptions {
   onTrailClick?: (trailId: number) => void;
+  /** Trail id from the URL param — drives the selection highlight */
+  selectedTrailId?: number | null;
 }
 
 export interface UseMapboxReturn {
@@ -50,6 +56,7 @@ export interface UseMapboxReturn {
 
 export function useMapbox({
   onTrailClick,
+  selectedTrailId = null,
 }: UseMapboxOptions = {}): UseMapboxReturn {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -64,6 +71,25 @@ export function useMapbox({
   const [mapReady, setMapReady] = useState(false);
 
   const drawApi = useDrawTrail(mapRef);
+
+  // Selected trail highlight (view mode only)
+  const selectedTrailIdRef = useRef<number | null>(null);
+
+  function setSelectedTrail(id: number | null) {
+    const map = mapRef.current;
+    if (!map || !map.getSource(TRAILS_SOURCE)) return;
+    // Clear previous selection
+    if (selectedTrailIdRef.current != null) {
+      map.setFeatureState(
+        { source: TRAILS_SOURCE, id: selectedTrailIdRef.current },
+        { selected: false }
+      );
+    }
+    selectedTrailIdRef.current = id;
+    if (id != null) {
+      map.setFeatureState({ source: TRAILS_SOURCE, id }, { selected: true });
+    }
+  }
 
   // Local copy of trails so we can patch individual rows after an edit.
   // useTrails fetches once; handleTrailUpdated patches locally to avoid refetch.
@@ -99,6 +125,34 @@ export function useMapbox({
     [trails]
   );
 
+  const buildEndpointsGeoJSON = useCallback(
+    (forTrailId: number | null): GeoJSON.FeatureCollection => ({
+      type: 'FeatureCollection',
+      features: trails.flatMap((t) => {
+        if (t.id !== forTrailId) return [];
+        const coords = t.geometry_geojson?.coordinates;
+        if (!coords || coords.length < 2) return [];
+        const start = coords[0];
+        const end = coords[coords.length - 1];
+        return [
+          {
+            type: 'Feature' as const,
+            id: t.id * 2,
+            geometry: { type: 'Point' as const, coordinates: start },
+            properties: { trail_id: t.id, role: 'start' },
+          },
+          {
+            type: 'Feature' as const,
+            id: t.id * 2 + 1,
+            geometry: { type: 'Point' as const, coordinates: end },
+            properties: { trail_id: t.id, role: 'end' },
+          },
+        ];
+      }),
+    }),
+    [trails]
+  );
+
   function handleTrailUpdated(
     updated: ReturnType<typeof useTrails>['trails'][number]
   ) {
@@ -112,6 +166,11 @@ export function useMapbox({
           mapRef.current.getSource(TRAILS_SOURCE) as mapboxgl.GeoJSONSource
         ).setData(buildGeoJSON());
       }
+      if (mapRef.current?.getSource(TRAILS_ENDPOINTS)) {
+        (
+          mapRef.current.getSource(TRAILS_ENDPOINTS) as mapboxgl.GeoJSONSource
+        ).setData(buildEndpointsGeoJSON(selectedTrailIdRef.current));
+      }
     }, 0);
   }
 
@@ -122,9 +181,35 @@ export function useMapbox({
         (map.getSource(TRAILS_SOURCE) as mapboxgl.GeoJSONSource).setData(
           geojson
         );
+        (map.getSource(TRAILS_ENDPOINTS) as mapboxgl.GeoJSONSource)?.setData(
+          buildEndpointsGeoJSON(selectedTrailIdRef.current)
+        );
         return;
       }
       map.addSource(TRAILS_SOURCE, { type: 'geojson', data: geojson });
+      map.addSource(TRAILS_ENDPOINTS, {
+        type: 'geojson',
+        data: buildEndpointsGeoJSON(selectedTrailIdRef.current),
+      });
+      // Selection highlight — rendered below the trail line
+      map.addLayer({
+        id: TRAILS_SELECTED,
+        type: 'line',
+        source: TRAILS_SOURCE,
+        slot: 'middle',
+        layout: { 'line-join': 'round', 'line-cap': 'round' },
+        paint: {
+          'line-color': '#facc15', // yellow-400
+          'line-width': [
+            'case',
+            ['boolean', ['feature-state', 'selected'], false],
+            8,
+            0,
+          ],
+          'line-opacity': 0.8,
+          'line-blur': 2,
+        },
+      });
       map.addLayer({
         id: TRAILS_LAYER,
         type: 'line',
@@ -169,8 +254,38 @@ export function useMapbox({
           'text-opacity': ['interpolate', ['linear'], ['zoom'], 12, 0, 12.5, 1],
         },
       });
+      // Start dots (green) — only shown for the selected trail
+      map.addLayer({
+        id: TRAILS_START,
+        type: 'circle',
+        source: TRAILS_ENDPOINTS,
+        slot: 'top',
+        filter: ['==', ['get', 'role'], 'start'],
+        paint: {
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 13, 4, 16, 7],
+          'circle-color': '#22c55e',
+          'circle-stroke-color': '#fff',
+          'circle-stroke-width': 1.5,
+          'circle-opacity': 0.9,
+        },
+      });
+      // End dots (red)
+      map.addLayer({
+        id: TRAILS_END,
+        type: 'circle',
+        source: TRAILS_ENDPOINTS,
+        slot: 'top',
+        filter: ['==', ['get', 'role'], 'end'],
+        paint: {
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 13, 4, 16, 7],
+          'circle-color': '#ef4444',
+          'circle-stroke-color': '#fff',
+          'circle-stroke-width': 1.5,
+          'circle-opacity': 0.9,
+        },
+      });
     },
-    [buildGeoJSON]
+    [buildGeoJSON, buildEndpointsGeoJSON]
   );
 
   // ── Contour paint helpers ─────────────────────────────────────────────────────
@@ -461,7 +576,51 @@ export function useMapbox({
     addTrailsLayer(mapRef.current);
   }, [mapReady, loading, addTrailsLayer]);
 
-  // ── Trail hover cursor + click → URL param ───────────────────────────────────
+  // ── Trail hover cursor + click / dblclick → URL param / edit ────────────────
+
+  const isEditingRef = useRef(false);
+  useEffect(() => {
+    isEditingRef.current = drawApi.isEditing;
+    // When edit starts, clear any pointer cursor and selection highlight
+    if (drawApi.isEditing && mapRef.current) {
+      mapRef.current.getCanvas().style.cursor = '';
+      setSelectedTrail(null);
+      if (mapRef.current.getSource(TRAILS_ENDPOINTS)) {
+        (
+          mapRef.current.getSource(TRAILS_ENDPOINTS) as mapboxgl.GeoJSONSource
+        ).setData(buildEndpointsGeoJSON(null));
+      }
+    }
+  }, [drawApi.isEditing, mapRef]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Keep stable refs so the map event handlers don't need to re-register
+  const onTrailClickRef = useRef(onTrailClick);
+  useEffect(() => {
+    onTrailClickRef.current = onTrailClick;
+  }, [onTrailClick]);
+  const drawApiRef = useRef(drawApi);
+  useEffect(() => {
+    drawApiRef.current = drawApi;
+  }, [drawApi]);
+
+  // Drive the selection highlight + endpoints from the URL param.
+  // Depends on addTrailsLayer (stable after trails load) to ensure the source
+  // exists before calling setFeatureState / setData.
+  useEffect(() => {
+    if (!mapReady || loading) return;
+    setSelectedTrail(selectedTrailId);
+    if (mapRef.current?.getSource(TRAILS_ENDPOINTS)) {
+      (
+        mapRef.current.getSource(TRAILS_ENDPOINTS) as mapboxgl.GeoJSONSource
+      ).setData(buildEndpointsGeoJSON(selectedTrailId));
+    }
+  }, [
+    selectedTrailId,
+    mapReady,
+    loading,
+    addTrailsLayer,
+    buildEndpointsGeoJSON,
+  ]);
 
   useEffect(() => {
     if (!mapReady || !mapRef.current) return;
@@ -480,15 +639,33 @@ export function useMapbox({
       const features = map.queryRenderedFeatures(hitBox(e), {
         layers: [TRAILS_LAYER],
       });
-      map.getCanvas().style.cursor = features.length > 0 ? 'pointer' : '';
+      if (features.length > 0) {
+        // Always show pointer when hovering over a trail
+        map.getCanvas().style.cursor = 'pointer';
+      } else if (!isEditingRef.current) {
+        // Outside editing, clear the cursor on empty space
+        map.getCanvas().style.cursor = '';
+      }
+      // During editing on empty space: leave cursor alone so draw mode controls it
     };
+
+    // Single click: select trail (view mode) or notify draw hook when editing
     const onClick = (e: mapboxgl.MapMouseEvent) => {
       if (!map.getLayer(TRAILS_LAYER)) return;
       const features = map.queryRenderedFeatures(hitBox(e), {
         layers: [TRAILS_LAYER],
       });
-      const id = features[0]?.properties?.id;
-      if (id != null && onTrailClick) onTrailClick(Number(id));
+      if (features.length > 0) {
+        const id = features[0]?.properties?.id;
+        if (id != null) {
+          if (isEditingRef.current) {
+            // While editing, let the draw hook decide what to do (confirm dialog etc.)
+            drawApiRef.current.notifyOtherTrailClick(Number(id));
+          } else {
+            onTrailClickRef.current?.(Number(id));
+          }
+        }
+      }
     };
 
     map.on('mousemove', onMouseMove);
@@ -503,7 +680,7 @@ export function useMapbox({
         /* map already removed */
       }
     };
-  }, [mapReady, onTrailClick]);
+  }, [mapReady]);
 
   // ── Handlers ─────────────────────────────────────────────────────────────────
 

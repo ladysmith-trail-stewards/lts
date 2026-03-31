@@ -52,7 +52,7 @@ Cancel button in the drawer with a confirmation prompt. Reverts the Mapbox Draw 
 
 While geometry edits are in progress and unsaved:
 
-- **React Router navigation** — `useBlocker` intercepts in-app route changes and prompts the user to confirm before discarding unsaved geometry.
+- **React Router navigation** — `useBlocker` is currently **removed** pending migration to a data router (see [C-004](../../../../chores/migrate-to-data-router.md)). In-app link navigation silently discards unsaved geometry. Will be restored once C-004 is complete.
 - **Browser close / tab refresh** — a `beforeunload` listener shows the browser's built-in unload confirmation dialog.
 
 ### Editing Interactions
@@ -144,3 +144,4 @@ Draw mode is available to **builders and admins only**. Members and public visit
 | 2026-03-24 | Spec created                                                                                 | KS       | blueprint | New spec system                                              | planned     |
 | 2026-03-26 | Sub-tasks defined; edit/create/delete/backend issues created (#53–56); spec updated to match | KS       | ta        | Tech assessment surfaced backend gaps and sub-task breakdown | in-progress |
 | 2026-03-27 | Added Navigation Guards section; `useBlocker` and `beforeunload` guard behaviour documented  | @copilot | impl      | Implemented as part of #53 edit-existing-trail work          | in-progress |
+| 2026-03-31 | Navigation Guards updated — `useBlocker` removed; blocked on C-004 data router migration     | @copilot | impl      | `useBlocker` requires data router; removed short-term        | in-progress |

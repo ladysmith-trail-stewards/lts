@@ -7,6 +7,7 @@ import {
   SnapModeDrawStyles,
 } from 'mapbox-gl-draw-snap-mode';
 import type { Map as MapboxMap, MapMouseEvent } from 'mapbox-gl';
+import { TRAILS_LAYER } from '@/lib/map/config';
 
 export interface DrawTrailApi {
   /** Whether geometry-edit mode is currently active */
@@ -16,11 +17,24 @@ export interface DrawTrailApi {
   /** Whether the drawn geometry differs from the version loaded on activate */
   isDirty: boolean;
   /** Activate geometry editing and load the given LineString into the draw layer */
-  activateEdit: (geometry: GeoJSON.LineString) => void;
+  activateEdit: (
+    geometry: GeoJSON.LineString,
+    callbacks?: {
+      /** Called when the user clicks on empty map space while editing */
+      onClickNoTarget?: () => void;
+      /** Called when the user clicks on a different trail while editing */
+      onClickOtherTrail?: (trailId: number) => void;
+    }
+  ) => void;
   /** Remove the draw control and reset all state */
   deactivateEdit: () => void;
   /** Return the current drawn LineString, or null if not editing */
   getCurrentGeometry: () => GeoJSON.LineString | null;
+  /**
+   * If editing and an onClickOtherTrail callback was registered, fires it with
+   * the given trail id. Used by useMapbox to route trail clicks during editing.
+   */
+  notifyOtherTrailClick: (trailId: number) => void;
 }
 
 export function useDrawTrail(
@@ -33,6 +47,12 @@ export function useDrawTrail(
   const [isEditing, setIsEditing] = useState(false);
   const [snapEnabled, setSnapEnabled] = useState(true);
   const [isDirty, setIsDirty] = useState(false);
+
+  // Callbacks supplied at activateEdit time
+  const onClickNoTargetRef = useRef<(() => void) | undefined>(undefined);
+  const onClickOtherTrailRef = useRef<((id: number) => void) | undefined>(
+    undefined
+  );
 
   // Undo/redo history: indexed array of coordinate snapshots
   const historyRef = useRef<[number, number][][]>([]);
@@ -83,9 +103,19 @@ export function useDrawTrail(
   // ── Public API ────────────────────────────────────────────────────────────
 
   const activateEdit = useCallback(
-    (geometry: GeoJSON.LineString) => {
+    (
+      geometry: GeoJSON.LineString,
+      callbacks?: {
+        onClickNoTarget?: () => void;
+        onClickOtherTrail?: (trailId: number) => void;
+      }
+    ) => {
       const map = mapRef.current;
       if (!map) return;
+
+      // Store callbacks so the mode overrides can reach them
+      onClickNoTargetRef.current = callbacks?.onClickNoTarget;
+      onClickOtherTrailRef.current = callbacks?.onClickOtherTrail;
 
       // Remove any stale instance first
       if (drawRef.current) {
@@ -97,7 +127,27 @@ export function useDrawTrail(
         drawRef.current = null;
       }
 
-      const draw = new MapboxDraw({
+      // Override clickNoTarget / clickOnFeature so the user can only exit via
+      // Save or Cancel. The callbacks let the parent navigate to another trail
+      // or close the drawer without silently discarding geometry.
+      const LockedSnapDirectSelect = {
+        ...(SnapDirectSelect as unknown as Record<string, unknown>),
+        clickNoTarget: () => {
+          onClickNoTargetRef.current?.();
+        },
+        clickOnFeature: (
+          _state: unknown,
+          e: { featureTarget: { properties?: { id?: unknown } } }
+        ) => {
+          const rawId = e?.featureTarget?.properties?.id;
+          if (rawId != null) {
+            const id = Number(rawId);
+            if (!isNaN(id)) onClickOtherTrailRef.current?.(id);
+          }
+        },
+      };
+
+      const drawOptions = {
         displayControlsDefault: false,
         userProperties: true,
         // SnapModeDrawStyles includes the default styles plus snap-guide styles
@@ -105,10 +155,23 @@ export function useDrawTrail(
         modes: {
           ...MapboxDraw.modes,
           snap_direct_select:
-            SnapDirectSelect as unknown as MapboxDraw.DrawCustomMode,
+            LockedSnapDirectSelect as unknown as MapboxDraw.DrawCustomMode,
           snap_line: SnapLineMode as unknown as MapboxDraw.DrawCustomMode,
         },
-      });
+        // Enable snapping engine (options not in @types/mapbox-gl-draw, hence cast)
+        snap: true,
+        snapOptions: {
+          snapPx: 10, // px radius to trigger a snap
+          snapToMidPoints: false,
+          snapVertexPriorityDistance: 0.05, // km — ~50m; vertex gets priority over line within this distance
+          // Snap to all rendered trail features + anything already in the draw layer
+          snapGetFeatures: (map: MapboxMap, drawInstance: MapboxDraw) => [
+            ...map.queryRenderedFeatures({ layers: [TRAILS_LAYER] }),
+            ...drawInstance.getAll().features,
+          ],
+        },
+      } as unknown as MapboxDraw.MapboxDrawOptions;
+      const draw = new MapboxDraw(drawOptions);
 
       drawRef.current = draw;
       map.addControl(draw);
@@ -198,8 +261,10 @@ export function useDrawTrail(
         const next = !snapRef.current;
         snapRef.current = next;
         setSnapEnabled(next);
-        const mode = next ? 'snap_direct_select' : 'direct_select';
-        draw.changeMode(mode as 'direct_select', { featureId: id });
+        // The snap-mode library reads draw.options.snap on every mouse move
+        (
+          draw as unknown as Record<string, Record<string, unknown>>
+        ).options.snap = next;
         return;
       }
 
@@ -289,5 +354,8 @@ export function useDrawTrail(
     activateEdit,
     deactivateEdit,
     getCurrentGeometry,
+    notifyOtherTrailClick: (trailId: number) => {
+      onClickOtherTrailRef.current?.(trailId);
+    },
   };
 }

@@ -20,6 +20,7 @@ How can this possibly be maintained? Through the Use of LLM, and rulesheets, tha
   - **C-001** [Standardize Tailwind Class Usage Across Components](./chores/standardize-tailwind-class-usage.md) `draft`
   - **C-002** [DX Improvements: db:studio, db:reset Formatting, POLICIES.md Stability, pre-commit Hook](./chores/dx-improvements-db-tooling.md) `complete`
   - **C-003** [Extract Profiles DB Service from UserProfileDialog](./chores/extract-profiles-db-service.md) `draft`
+  - **C-004** [Migrate to createBrowserRouter (Data Router)](./chores/migrate-to-data-router.md) `planned`
 
 ---
 

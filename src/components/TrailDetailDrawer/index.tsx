@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { useSearchParams, useBlocker } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import * as v from 'valibot';
 import { toast } from 'sonner';
-import { Pencil, X, Check, Loader2, Magnet } from 'lucide-react';
+import { X, Check, Loader2, Magnet, Pencil } from 'lucide-react';
 
 import type { Trail } from '@/hooks/useTrails';
 import type { DrawTrailApi } from '@/hooks/useDrawTrail';
@@ -59,6 +59,7 @@ interface TrailPanelProps {
   drawApi: DrawTrailApi;
   onClose: () => void;
   onTrailUpdated: (updated: Trail) => void;
+  onNavigateToTrail: (id: number) => void;
 }
 
 function TrailPanel({
@@ -67,6 +68,7 @@ function TrailPanel({
   drawApi,
   onClose,
   onTrailUpdated,
+  onNavigateToTrail,
 }: TrailPanelProps) {
   // currentTrail is the live DB-backed copy; seeded from prop, refreshed on id change and after save
   const [currentTrail, setCurrentTrail] = useState<Trail>(trail);
@@ -83,6 +85,7 @@ function TrailPanel({
     drawApiRef.current = drawApi;
   });
 
+  // Deactivate draw on unmount
   useEffect(() => {
     return () => {
       if (drawApiRef.current.isEditing) {
@@ -91,27 +94,7 @@ function TrailPanel({
     };
   }, []);
 
-  const blocker = useBlocker(
-    ({ currentLocation, nextLocation }) =>
-      editing &&
-      drawApi.isDirty &&
-      currentLocation.pathname !== nextLocation.pathname
-  );
-
-  useEffect(() => {
-    if (blocker.state !== 'blocked') return;
-    if (
-      window.confirm(
-        'You have unsaved geometry changes. Leave the page and discard them?'
-      )
-    ) {
-      drawApiRef.current.deactivateEdit();
-      blocker.proceed();
-    } else {
-      blocker.reset();
-    }
-  }, [blocker]);
-
+  // Guard browser close/refresh while editing
   useEffect(() => {
     if (!editing) return;
     const handler = (e: BeforeUnloadEvent) => {
@@ -138,6 +121,26 @@ function TrailPanel({
     };
   }, [trail.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  function handleStartEdit() {
+    drawApi.activateEdit(currentTrail.geometry_geojson, {
+      // Clicking empty map does nothing — only Save/Cancel can exit
+      onClickNoTarget: () => {
+        /* locked */
+      },
+      // Clicking another trail asks to confirm before navigating
+      onClickOtherTrail: (id) => {
+        if (
+          window.confirm('Cancel your unsaved edits and switch to this trail?')
+        ) {
+          drawApiRef.current.deactivateEdit();
+          setEditing(false);
+          onNavigateToTrail(id);
+        }
+      },
+    });
+    setEditing(true);
+  }
+
   function handleActivityToggle(value: string) {
     setForm((f) => ({
       ...f,
@@ -145,11 +148,6 @@ function TrailPanel({
         ? f.activity_types.filter((a) => a !== value)
         : [...f.activity_types, value],
     }));
-  }
-
-  function handleStartEdit() {
-    drawApi.activateEdit(currentTrail.geometry_geojson);
-    setEditing(true);
   }
 
   async function handleSave() {
@@ -576,12 +574,14 @@ interface TrailDetailDrawerProps {
   trails: Trail[];
   onTrailUpdated: (updated: Trail) => void;
   drawApi: DrawTrailApi;
+  onClose?: () => void;
 }
 
 export default function TrailDetailDrawer({
   trails,
   onTrailUpdated,
   drawApi,
+  onClose: onCloseExternal,
 }: TrailDetailDrawerProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const trailIdParam = searchParams.get('trailId');
@@ -597,12 +597,21 @@ export default function TrailDetailDrawer({
   const { role } = useAuth();
   const canEdit = role !== null && EDIT_ROLES.includes(role);
 
+  function navigateToTrail(id: number) {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('trailId', String(id));
+      return next;
+    });
+  }
+
   function closeDrawer() {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
       next.delete('trailId');
       return next;
     });
+    onCloseExternal?.();
   }
 
   return (
@@ -622,6 +631,7 @@ export default function TrailDetailDrawer({
             drawApi={drawApi}
             onClose={closeDrawer}
             onTrailUpdated={onTrailUpdated}
+            onNavigateToTrail={navigateToTrail}
           />
         )}
       </div>
