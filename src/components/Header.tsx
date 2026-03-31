@@ -30,17 +30,15 @@ function RouterLink(props: NavigationMenu.Link.Props & { to: string }) {
 
 function HeaderMenu() {
   const [user, setUser] = useState<SupabaseUser | null>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const { isAdmin } = useAuth();
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUser(data.user ?? null));
-    supabase.rpc('is_admin').then(({ data }) => setIsAdmin(data === true));
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
-      supabase.rpc('is_admin').then(({ data }) => setIsAdmin(data === true));
     });
 
     return () => subscription.unsubscribe();

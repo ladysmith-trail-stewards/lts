@@ -14,6 +14,7 @@ export type Database = {
           auth_user_id: string;
           bio: string | null;
           created_at: string;
+          deleted_at: string | null;
           id: number;
           name: string;
           phone: string | null;
@@ -24,6 +25,7 @@ export type Database = {
           auth_user_id: string;
           bio?: string | null;
           created_at?: string;
+          deleted_at?: string | null;
           id?: number;
           name: string;
           phone?: string | null;
@@ -34,6 +36,7 @@ export type Database = {
           auth_user_id?: string;
           bio?: string | null;
           created_at?: string;
+          deleted_at?: string | null;
           id?: number;
           name?: string;
           phone?: string | null;
@@ -413,6 +416,7 @@ export type Database = {
             };
             Returns: string;
           };
+      custom_access_token_hook: { Args: { event: Json }; Returns: Json };
       disablelongtransactions: { Args: never; Returns: string };
       dropgeometrycolumn:
         | {
@@ -561,11 +565,6 @@ export type Database = {
           role: Database['public']['Enums']['app_role'];
         }[];
       };
-      get_my_region_id: { Args: never; Returns: number };
-      get_my_role: {
-        Args: never;
-        Returns: Database['public']['Enums']['app_role'];
-      };
       get_rls_policies: {
         Args: never;
         Returns: {
@@ -578,7 +577,6 @@ export type Database = {
         }[];
       };
       gettransactionid: { Args: never; Returns: unknown };
-      is_admin: { Args: never; Returns: boolean };
       longtransactionsenabled: { Args: never; Returns: boolean };
       populate_geometry_columns:
         | { Args: { tbl_oid: unknown; use_typmod?: boolean }; Returns: number }
@@ -620,6 +618,8 @@ export type Database = {
       };
       postgis_version: { Args: never; Returns: string };
       postgis_wagyu_version: { Args: never; Returns: string };
+      soft_delete_profiles: { Args: { ids: number[] }; Returns: undefined };
+      soft_delete_trails: { Args: { ids: number[] }; Returns: undefined };
       st_3dclosestpoint: {
         Args: { geom1: unknown; geom2: unknown };
         Returns: unknown;
@@ -1267,7 +1267,7 @@ export type Database = {
       };
     };
     Enums: {
-      app_role: 'super_admin' | 'admin' | 'super_user' | 'user' | 'pending';
+      app_role: 'pending' | 'user' | 'super_user' | 'admin' | 'super_admin';
     };
     CompositeTypes: {
       geometry_dump: {
@@ -1406,7 +1406,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ['super_admin', 'admin', 'super_user', 'user', 'pending'],
+      app_role: ['pending', 'user', 'super_user', 'admin', 'super_admin'],
     },
   },
 } as const;

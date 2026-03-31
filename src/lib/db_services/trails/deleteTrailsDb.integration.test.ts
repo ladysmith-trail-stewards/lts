@@ -14,10 +14,10 @@ import { fixtureCreateTrail } from './testHelpers';
 const P = '__delete_trails_test__';
 
 describe('deleteTrailsDb — anon (denied)', () => {
-  it('trail still exists and deleted_at is unset after anon attempts soft-delete (RLS silent no-op)', async () => {
+  it('returns an error and trail deleted_at remains unset', async () => {
     const id = await fixtureCreateTrail({ name: `${P}anon-target` });
     const { error } = await deleteTrailsDb(anonClient, id);
-    void error;
+    expect(error).not.toBeNull();
 
     const { data: row } = await serviceClient
       .from('trails')
@@ -32,10 +32,11 @@ describe('deleteTrailsDb — anon (denied)', () => {
 });
 
 describe('deleteTrailsDb — user role (denied)', () => {
-  it('trail still exists and deleted_at is unset after user attempts soft-delete', async () => {
+  it('returns an error and trail deleted_at remains unset', async () => {
     const id = await fixtureCreateTrail({ name: `${P}user-target` });
     const client = await signedInClient(SEED_USER.email, SEED_USER.password);
-    await deleteTrailsDb(client, id);
+    const { error } = await deleteTrailsDb(client, id);
+    expect(error).not.toBeNull();
 
     const { data: row } = await serviceClient
       .from('trails')
@@ -148,8 +149,11 @@ describe('deleteTrailsDb — bulk delete', () => {
       fixtureCreateTrail({ name: `${P}bulk-2` }),
       fixtureCreateTrail({ name: `${P}bulk-3` }),
     ]);
-
-    const { error } = await deleteTrailsDb(serviceClient, [id1, id2, id3]);
+    const client = await signedInClient(
+      SEED_SUPER_ADMIN.email,
+      SEED_SUPER_ADMIN.password
+    );
+    const { error } = await deleteTrailsDb(client, [id1, id2, id3]);
     expect(error).toBeNull();
 
     const { data: rows } = await serviceClient
@@ -171,7 +175,11 @@ describe('deleteTrailsDb — bulk delete', () => {
 
 describe('deleteTrailsDb — non-existent id', () => {
   it('is a no-op (no error)', async () => {
-    const { error } = await deleteTrailsDb(serviceClient, 999_999_999);
+    const client = await signedInClient(
+      SEED_SUPER_ADMIN.email,
+      SEED_SUPER_ADMIN.password
+    );
+    const { error } = await deleteTrailsDb(client, 999_999_999);
     expect(error).toBeNull();
   });
 });
