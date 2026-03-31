@@ -4,10 +4,11 @@
  * Requires local Supabase running (`pnpm db:start`) with migrations + seed applied.
  *
  * Seed users (password: "password123"):
- *   user@test.com        → role: user
- *   super_user@test.com  → role: super_user
- *   admin@test.com       → role: admin
- *   super_admin@test.com → role: super_admin
+ *   user@test.com        → role: user,        region: 1
+ *   super_user@test.com  → role: super_user,  region: 1
+ *   admin@test.com       → role: admin,        region: 1
+ *   super_admin@test.com → role: super_admin, region: 1
+ *   pending@test.com     → role: pending,     region: 0
  */
 
 import { createClient } from '@supabase/supabase-js';
@@ -54,5 +55,9 @@ export const SEED_SUPER_USER = {
 };
 export const SEED_SUPER_ADMIN = {
   email: 'super_admin@test.com',
+  password: 'password123',
+};
+export const SEED_PENDING = {
+  email: 'pending@test.com',
   password: 'password123',
 };

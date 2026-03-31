@@ -78,22 +78,19 @@ function TrailPanel({
   >({});
   const [form, setForm] = useState<TrailEditValues>(() => trailToForm(trail));
 
-  // Keep a stable ref to drawApi so the cleanup effect always sees the latest value
   const drawApiRef = useRef(drawApi);
   useEffect(() => {
     drawApiRef.current = drawApi;
   });
 
-  // Deactivate draw when this panel unmounts (trail changed or drawer closed)
   useEffect(() => {
     return () => {
       if (drawApiRef.current.isEditing) {
         drawApiRef.current.deactivateEdit();
       }
     };
-  }, []); // empty deps is intentional — cleanup only needs to run on unmount
+  }, []);
 
-  // Block React-Router navigation while editing with unsaved geometry changes
   const blocker = useBlocker(
     ({ currentLocation, nextLocation }) =>
       editing &&
@@ -115,12 +112,10 @@ function TrailPanel({
     }
   }, [blocker]);
 
-  // Warn before browser close / tab refresh while editing
   useEffect(() => {
     if (!editing) return;
     const handler = (e: BeforeUnloadEvent) => {
       e.preventDefault();
-      // Modern browsers ignore the message string but still show the dialog
       e.returnValue = '';
     };
     window.addEventListener('beforeunload', handler);
@@ -172,7 +167,6 @@ function TrailPanel({
       coordinates: [number, number][];
     };
 
-    // Use the geometry from the draw layer if editing, otherwise keep the existing geometry
     const geometry: LineStringGeometry =
       (drawApi.getCurrentGeometry() as LineStringGeometry | null) ??
       (currentTrail.geometry_geojson as LineStringGeometry);
@@ -286,7 +280,6 @@ function TrailPanel({
         </div>
       </div>
 
-      {/* ── Geometry editing banner ────────────────────────────────────── */}
       {editing && (
         <div className="mx-4 mb-1 rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800 flex items-center gap-2">
           <Magnet className="w-3.5 h-3.5 shrink-0" />

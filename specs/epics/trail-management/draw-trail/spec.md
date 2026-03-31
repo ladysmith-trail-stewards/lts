@@ -4,7 +4,7 @@ type: feature
 epic: trail-management
 status: in-progress
 created: 2026-03-24
-updated: 2026-03-26
+updated: 2026-03-27
 ---
 
 # Draw Trail
@@ -47,6 +47,13 @@ A **Delete** button in the drawer (edit mode, builders/admins only) with a confi
 ### Cancelling Edit
 
 Cancel button in the drawer with a confirmation prompt. Reverts the Mapbox Draw layer to its pre-edit geometry state and resets the form.
+
+### Navigation Guards
+
+While geometry edits are in progress and unsaved:
+
+- **React Router navigation** — `useBlocker` intercepts in-app route changes and prompts the user to confirm before discarding unsaved geometry.
+- **Browser close / tab refresh** — a `beforeunload` listener shows the browser's built-in unload confirmation dialog.
 
 ### Editing Interactions
 
@@ -132,7 +139,8 @@ Draw mode is available to **builders and admins only**. Members and public visit
 
 ## Changelog
 
-| Date       | Description                                                                                  | Author | Driver    | Why                                                          | Status      |
-| ---------- | -------------------------------------------------------------------------------------------- | ------ | --------- | ------------------------------------------------------------ | ----------- |
-| 2026-03-24 | Spec created                                                                                 | KS     | blueprint | New spec system                                              | planned     |
-| 2026-03-26 | Sub-tasks defined; edit/create/delete/backend issues created (#53–56); spec updated to match | KS     | ta        | Tech assessment surfaced backend gaps and sub-task breakdown | in-progress |
+| Date       | Description                                                                                  | Author   | Driver    | Why                                                          | Status      |
+| ---------- | -------------------------------------------------------------------------------------------- | -------- | --------- | ------------------------------------------------------------ | ----------- |
+| 2026-03-24 | Spec created                                                                                 | KS       | blueprint | New spec system                                              | planned     |
+| 2026-03-26 | Sub-tasks defined; edit/create/delete/backend issues created (#53–56); spec updated to match | KS       | ta        | Tech assessment surfaced backend gaps and sub-task breakdown | in-progress |
+| 2026-03-27 | Added Navigation Guards section; `useBlocker` and `beforeunload` guard behaviour documented  | @copilot | impl      | Implemented as part of #53 edit-existing-trail work          | in-progress |

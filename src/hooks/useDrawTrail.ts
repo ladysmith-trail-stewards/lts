@@ -245,8 +245,6 @@ export function useDrawTrail(
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isEditing]);
 
-  // ── Shift+Click → append / Shift+Alt+Click → prepend vertex ─────────────
-
   useEffect(() => {
     if (!isEditing) return;
     const map = mapRef.current;
