@@ -13,7 +13,11 @@ export type StyleKey = keyof typeof MAP_STYLES;
 
 export const TRAILS_SOURCE = 'trails';
 export const TRAILS_LAYER = 'trails-line';
+export const TRAILS_SELECTED = 'trails-selected';
 export const TRAILS_LABELS = 'trails-labels';
+export const TRAILS_ENDPOINTS = 'trails-endpoints';
+export const TRAILS_START = 'trails-start';
+export const TRAILS_END = 'trails-end';
 export const TRAILS_HALO = 'trails-halo';
 export const CONTOUR_SOURCE = 'mapbox-terrain';
 export const CONTOUR_LAYER = 'contour-lines';
