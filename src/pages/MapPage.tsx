@@ -1,9 +1,12 @@
 import 'mapbox-gl/dist/mapbox-gl.css';
 import mapboxgl from 'mapbox-gl';
 import { useSearchParams } from 'react-router-dom';
+import { Plus } from 'lucide-react';
 import { useMapbox } from '@/hooks/useMapbox';
 import { MAP_STYLES, type StyleKey } from '@/lib/map/config';
 import TrailDetailDrawer from '@/components/TrailDetailDrawer';
+import { useAuth } from '@/contexts/AuthContext';
+import type { Trail } from '@/hooks/useTrails';
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN as
   | string
@@ -37,6 +40,10 @@ function MapPageInner() {
   const trailIdParam = searchParams.get('trailId');
   const selectedTrailId = trailIdParam ? Number(trailIdParam) : null;
 
+  const { role } = useAuth();
+  const canEdit =
+    role !== null && ['admin', 'super_user', 'super_admin'].includes(role);
+
   const {
     mapContainerRef,
     currentStyle,
@@ -59,6 +66,15 @@ function MapPageInner() {
         return next;
       }),
   });
+
+  // regionId: derive from the first loaded trail (all trails share a region in this app).
+  // Falls back to null when no trails are loaded yet.
+  const regionId: number | null =
+    trails.length > 0 ? (trails[0].region_id ?? null) : null;
+
+  function handleTrailCreated(created: Trail) {
+    handleTrailUpdated(created);
+  }
 
   return (
     <div className="relative overflow-hidden">
@@ -110,11 +126,24 @@ function MapPageInner() {
             </div>
           </div>
 
-          {/* Trail count */}
+          {/* Trail count + Add Trail button */}
           {!loading && !trailsError && (
-            <p className="text-xs text-slate-500 border-t pt-2">
-              {trails.length} trail{trails.length !== 1 ? 's' : ''} loaded
-            </p>
+            <div className="border-t pt-2 space-y-2">
+              <p className="text-xs text-slate-500">
+                {trails.length} trail{trails.length !== 1 ? 's' : ''} loaded
+              </p>
+              {canEdit && !drawApi.isEditing && (
+                <button
+                  onClick={() => drawApi.activateCreate()}
+                  className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md
+                    bg-slate-800 hover:bg-slate-700 text-white text-xs font-medium
+                    transition-colors cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Add Trail
+                </button>
+              )}
+            </div>
           )}
 
           {/* Contour controls */}
@@ -162,7 +191,9 @@ function MapPageInner() {
       <TrailDetailDrawer
         trails={trails}
         onTrailUpdated={handleTrailUpdated}
+        onTrailCreated={handleTrailCreated}
         drawApi={drawApi}
+        regionId={regionId}
       />
     </div>
   );
