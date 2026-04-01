@@ -27,3 +27,4 @@ package-lock.json
 
 # Database backups — never commit dump files
 backups/
+.vercel
