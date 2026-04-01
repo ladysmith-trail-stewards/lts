@@ -15,8 +15,13 @@ How can this possibly be maintained? Through the Use of LLM, and rulesheets, tha
   - **F-004** [Google SSO Authentication](./epics/user-account/google-sso-auth/spec.md) `complete`
   - **F-003** [User Profile Dialog](./epics/user-account/user-profile-dialog/spec.md) `draft`
 
+- **E-003** [Production](./epics/production/spec.md) `active`
+  - **F-005** [Setup Supabase Prod DB](./epics/production/setup-supabase-prod-db/spec.md) `planned`
+  - **F-006** [Populate Supabase Prod DB](./epics/production/populate-supabase-prod-db/spec.md) `planned`
+  - **F-007** [Host Static Code](./epics/production/host-static-code/spec.md) `planned`
+  - **F-008** [Setup GitHub CD](./epics/production/setup-github-cd/spec.md) `planned`
+
 - **Chores**
-  - **C-002** [DX Improvements: db:studio, db:reset Formatting, POLICIES.md Stability](./chores/dx-improvements-db-tooling.md) `complete`
   - **C-001** [Standardize Tailwind Class Usage Across Components](./chores/standardize-tailwind-class-usage.md) `draft`
   - **C-002** [DX Improvements: db:studio, db:reset Formatting, POLICIES.md Stability, pre-commit Hook](./chores/dx-improvements-db-tooling.md) `complete`
   - **C-003** [Extract Profiles DB Service from UserProfileDialog](./chores/extract-profiles-db-service.md) `draft`
