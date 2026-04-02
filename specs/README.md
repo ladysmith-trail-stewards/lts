@@ -21,6 +21,11 @@ How can this possibly be maintained? Through the Use of LLM, and rulesheets, tha
   - **F-007** [Host Static Code](./epics/production/host-static-code/spec.md) `planned`
   - **F-008** [Setup GitHub CD](./epics/production/setup-github-cd/spec.md) `planned`
 
+- **E-004** [User Management Improvements](./epics/user-management/spec.md) `planned`
+  - **F-009** [Policy Acknowledgement on Signup](./epics/user-management/policy-acknowledgement/spec.md) `planned`
+  - **F-010** [New User Admin Notification](./epics/user-management/new-user-admin-notification/spec.md) `planned`
+  - **F-011** [Force Sign-Out on Role Change](./epics/user-management/force-signout-on-role-change/spec.md) `planned`
+
 - **Chores**
   - **C-001** [Standardize Tailwind Class Usage Across Components](./chores/standardize-tailwind-class-usage.md) `draft`
   - **C-002** [DX Improvements: db:studio, db:reset Formatting, POLICIES.md Stability, pre-commit Hook](./chores/dx-improvements-db-tooling.md) `complete`
