@@ -1,5 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }],
-  "ignoreCommand": "git diff --name-only HEAD^ HEAD | grep -qvE '\\.(md)$|^(docs|specs)/'"
+  "ignoreCommand": "git diff --name-only $VERCEL_GIT_PREVIOUS_SHA $VERCEL_GIT_COMMIT_SHA | grep -qvE '\\.(md)$|^(docs/|specs/)'"
 }
