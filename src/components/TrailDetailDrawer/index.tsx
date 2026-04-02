@@ -2,12 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import * as v from 'valibot';
 import { toast } from 'sonner';
-import { X, Check, Loader2, Magnet, Pencil } from 'lucide-react';
+import { X, Check, Loader2, Magnet, Pencil, Trash2 } from 'lucide-react';
 
 import type { Trail } from '@/hooks/useTrails';
 import type { DrawTrailApi } from '@/hooks/useDrawTrail';
 import { supabase } from '@/lib/supabase/client';
 import { upsertTrailsDb } from '@/lib/db_services/trails/upsertTrailsDb';
+import { deleteTrailsDb } from '@/lib/db_services/trails/deleteTrailsDb';
 import { getTrailsDb } from '@/lib/db_services/trails/getTrailsDb';
 import { useAuth } from '@/contexts/AuthContext';
 import type { Database } from '@/lib/supabase/database.types';
@@ -48,6 +49,7 @@ import { Button } from '@/components/ui/button';
 type AppRole = Database['public']['Enums']['app_role'];
 
 const EDIT_ROLES: AppRole[] = ['admin', 'super_user', 'super_admin'];
+const DELETE_ROLES: AppRole[] = ['admin', 'super_user', 'super_admin'];
 
 const NEW_TRAIL_DEFAULTS: TrailEditValues = {
   name: '',
@@ -66,10 +68,12 @@ const NEW_TRAIL_DEFAULTS: TrailEditValues = {
 interface TrailPanelProps {
   trail: Trail | null;
   canEdit: boolean;
+  canDelete: boolean;
   drawApi: DrawTrailApi;
   regionId: number | null;
   onClose: () => void;
   onTrailSaved: (saved: Trail, isNew: boolean) => void;
+  onTrailDeleted: (id: number) => void;
   onNavigateToTrail: (id: number) => void;
   /** Called with the trail id when editing starts, null when editing ends. */
   onEditingTrailChange?: (id: number | null) => void;
@@ -78,10 +82,12 @@ interface TrailPanelProps {
 function TrailPanel({
   trail,
   canEdit,
+  canDelete,
   drawApi,
   regionId,
   onClose,
   onTrailSaved,
+  onTrailDeleted,
   onNavigateToTrail,
   onEditingTrailChange,
 }: TrailPanelProps) {
@@ -91,6 +97,7 @@ function TrailPanel({
   const [editing, setEditing] = useState(isNew);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [validationErrors, setValidationErrors] = useState<
     Partial<Record<keyof TrailEditValues, string>>
   >({});
@@ -292,6 +299,30 @@ function TrailPanel({
       setSaveError(null);
       setValidationErrors({});
     }
+  }
+
+  async function handleDelete() {
+    if (!currentTrail) return;
+    if (
+      !window.confirm(
+        `Are you sure you want to delete "${currentTrail.name}"? This action cannot be undone.`
+      )
+    ) {
+      return;
+    }
+    setDeleting(true);
+    setSaveError(null);
+    const { error } = await deleteTrailsDb(supabase, currentTrail.id);
+    setDeleting(false);
+    if (error) {
+      setSaveError(error.message ?? 'Delete failed. Check your permissions.');
+      return;
+    }
+    drawApi.deactivateEdit();
+    onEditingTrailChange?.(null);
+    onTrailDeleted(currentTrail.id);
+    toast.success(`"${currentTrail.name}" deleted successfully.`);
+    onClose();
   }
 
   return (
@@ -584,14 +615,14 @@ function TrailPanel({
               variant="outline"
               className="flex-1"
               onClick={handleCancelEdit}
-              disabled={saving}
+              disabled={saving || deleting}
             >
               Cancel
             </Button>
             <Button
               className="flex-1 bg-slate-800 hover:bg-slate-700 text-white"
               onClick={handleSave}
-              disabled={saving}
+              disabled={saving || deleting}
             >
               {saving ? (
                 <>
@@ -602,6 +633,29 @@ function TrailPanel({
                 <>
                   <Check className="w-3.5 h-3.5 mr-1.5" />
                   Save
+                </>
+              )}
+            </Button>
+          </div>
+        )}
+        {/* ── Delete button ─────────────────────────────────────────────── */}
+        {editing && !isNew && canDelete && (
+          <div className="pt-1">
+            <Button
+              variant="outline"
+              className="w-full border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300"
+              onClick={handleDelete}
+              disabled={saving || deleting}
+            >
+              {deleting ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                  Deleting…
+                </>
+              ) : (
+                <>
+                  <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+                  Delete Trail
                 </>
               )}
             </Button>
@@ -832,6 +886,7 @@ function DrawHintBar({
 interface TrailDetailDrawerProps {
   trails: Trail[];
   onTrailSaved: (saved: Trail, isNew: boolean) => void;
+  onTrailDeleted: (id: number) => void;
   drawApi: DrawTrailApi;
   regionId: number | null;
   onClose?: () => void;
@@ -841,6 +896,7 @@ interface TrailDetailDrawerProps {
 export default function TrailDetailDrawer({
   trails,
   onTrailSaved,
+  onTrailDeleted,
   drawApi,
   regionId,
   onClose: onCloseExternal,
@@ -861,6 +917,7 @@ export default function TrailDetailDrawer({
 
   const { role } = useAuth();
   const canEdit = role !== null && EDIT_ROLES.includes(role);
+  const canDelete = role !== null && DELETE_ROLES.includes(role);
 
   function navigateToTrail(id: number) {
     setSearchParams((prev) => {
@@ -897,10 +954,12 @@ export default function TrailDetailDrawer({
             key={isNewTrail ? 'new' : String(trail?.id)}
             trail={isNewTrail ? null : trail}
             canEdit={canEdit}
+            canDelete={canDelete}
             drawApi={drawApi}
             regionId={regionId}
             onClose={closeDrawer}
             onTrailSaved={handleTrailSaved}
+            onTrailDeleted={onTrailDeleted}
             onNavigateToTrail={navigateToTrail}
             onEditingTrailChange={onEditingTrailChange}
           />
