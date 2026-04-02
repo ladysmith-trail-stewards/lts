@@ -31,7 +31,7 @@ export function useTrails(opts: { hidden?: boolean } = {}) {
   useEffect(() => {
     let cancelled = false;
 
-    async function fetch() {
+    async function load() {
       setState((s) => ({ ...s, loading: true, error: null }));
 
       const { data, error } = await getTrailsDb(supabase, {
@@ -52,7 +52,7 @@ export function useTrails(opts: { hidden?: boolean } = {}) {
       });
     }
 
-    fetch();
+    load();
     return () => {
       cancelled = true;
     };

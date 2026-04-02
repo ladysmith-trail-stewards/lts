@@ -1,12 +1,23 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useCallback,
+} from 'react';
 import mapboxgl, { type ExpressionSpecification } from 'mapbox-gl';
-import { useTrails } from '@/hooks/useTrails';
+import { useTrails, type Trail } from '@/hooks/useTrails';
+import { useDrawTrail, type DrawTrailApi } from '@/hooks/useDrawTrail';
 import {
   MAP_STYLES,
   type StyleKey,
   TRAILS_SOURCE,
   TRAILS_LAYER,
+  TRAILS_SELECTED,
   TRAILS_LABELS,
+  TRAILS_ENDPOINTS,
+  TRAILS_START,
+  TRAILS_END,
   CONTOUR_SOURCE,
   CONTOUR_LAYER,
   CONTOUR_LABEL,
@@ -25,8 +36,31 @@ import {
   CONTOUR_STRENGTH_DEFAULT,
 } from '@/lib/map/config';
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function trailToFeature(t: Trail): GeoJSON.Feature {
+  return {
+    type: 'Feature',
+    id: t.id,
+    geometry: t.geometry_geojson,
+    properties: {
+      id: t.id,
+      name: t.name,
+      trail_class: t.trail_class,
+      visibility: t.visibility,
+      hidden: t.hidden,
+      planned: t.planned,
+      connector: t.connector,
+      bike: t.bike,
+      tf_popularity: t.tf_popularity,
+    },
+  };
+}
+
 export interface UseMapboxOptions {
   onTrailClick?: (trailId: number) => void;
+  /** Trail id from the URL param — drives the selection highlight */
+  selectedTrailId?: number | null;
 }
 
 export interface UseMapboxReturn {
@@ -38,16 +72,18 @@ export interface UseMapboxReturn {
   trails: ReturnType<typeof useTrails>['trails'];
   loading: boolean;
   trailsError: string | null;
+  drawApi: DrawTrailApi;
   handleStyleChange: (style: StyleKey) => void;
   handleContourStrength: (value: number) => void;
   handleContourScheme: (scheme: ContourScheme) => void;
-  handleTrailUpdated: (
-    updated: ReturnType<typeof useTrails>['trails'][number]
-  ) => void;
+  handleTrailUpdated: (updated: Trail) => void;
+  /** Hide the given trail from the source layer while it is being edited in Draw. */
+  setEditingTrailId: (id: number | null) => void;
 }
 
 export function useMapbox({
   onTrailClick,
+  selectedTrailId = null,
 }: UseMapboxOptions = {}): UseMapboxReturn {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -61,54 +97,154 @@ export function useMapbox({
   const contourSchemeRef = useRef<ContourScheme>('dark');
   const [mapReady, setMapReady] = useState(false);
 
-  // Local copy of trails so we can patch individual rows after an edit.
+  const drawApi = useDrawTrail(mapRef);
+
+  // Selected trail highlight (view mode only)
+  const selectedTrailIdRef = useRef<number | null>(null);
+  // Trail currently being edited in Draw — hidden from the source layer
+  const editingTrailIdRef = useRef<number | null>(null);
+
+  function setEditingTrailId(id: number | null) {
+    const map = mapRef.current;
+    // Clear previous
+    if (editingTrailIdRef.current != null && map?.getSource(TRAILS_SOURCE)) {
+      map.setFeatureState(
+        { source: TRAILS_SOURCE, id: editingTrailIdRef.current },
+        { editing: false }
+      );
+    }
+    editingTrailIdRef.current = id;
+    if (id != null && map?.getSource(TRAILS_SOURCE)) {
+      map.setFeatureState({ source: TRAILS_SOURCE, id }, { editing: true });
+    }
+  }
+
+  function setSelectedTrail(id: number | null) {
+    const map = mapRef.current;
+    if (!map || !map.getSource(TRAILS_SOURCE)) return;
+    // Clear previous selection
+    if (selectedTrailIdRef.current != null) {
+      map.setFeatureState(
+        { source: TRAILS_SOURCE, id: selectedTrailIdRef.current },
+        { selected: false }
+      );
+    }
+    selectedTrailIdRef.current = id;
+    if (id != null) {
+      map.setFeatureState({ source: TRAILS_SOURCE, id }, { selected: true });
+    }
+  }
+
+  // Local copy of trails so we can patch individual rows after an edit/create.
   // useTrails fetches once; handleTrailUpdated patches locally to avoid refetch.
   const { trails: fetchedTrails, loading, error: trailsError } = useTrails();
   const [trails, setTrails] = useState(fetchedTrails);
-  // Sync when the initial fetch lands (or if re-fetched)
-  if (trails !== fetchedTrails && !loading) {
+  // Mirror trails state in a ref so handleTrailUpdated can read the current
+  // list synchronously (outside of a setState updater) to avoid the flicker
+  // caused by a deferred setData call.
+  const trailsRef = useRef(trails);
+  useLayoutEffect(() => {
+    trailsRef.current = trails;
+  });
+  // Sync only when fetchedTrails reference changes (i.e. the async fetch
+  // completes or re-runs). A plain render-time comparison would overwrite
+  // local patches made by handleTrailUpdated on every re-render.
+  useEffect(() => {
     setTrails(fetchedTrails);
-  }
+  }, [fetchedTrails]);
 
   // ── GeoJSON ──────────────────────────────────────────────────────────────────
 
   const buildGeoJSON = useCallback(
     (): GeoJSON.FeatureCollection => ({
       type: 'FeatureCollection',
-      features: trails.map((t) => ({
-        type: 'Feature',
-        id: t.id,
-        geometry: t.geometry_geojson,
-        properties: {
-          id: t.id,
-          name: t.name,
-          trail_class: t.trail_class,
-          visibility: t.visibility,
-          hidden: t.hidden,
-          planned: t.planned,
-          connector: t.connector,
-          bike: t.bike,
-          tf_popularity: t.tf_popularity,
-        },
-      })),
+      features: trails.map(trailToFeature),
     }),
     [trails]
   );
 
-  function handleTrailUpdated(
-    updated: ReturnType<typeof useTrails>['trails'][number]
-  ) {
-    setTrails((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
-    // Refresh the Mapbox GeoJSON source after React flushes the state update.
-    // buildGeoJSON is captured in a stable closure via useCallback([trails]),
-    // so we schedule the setData call after the state has been applied.
-    setTimeout(() => {
-      if (mapRef.current?.getSource(TRAILS_SOURCE)) {
-        (
-          mapRef.current.getSource(TRAILS_SOURCE) as mapboxgl.GeoJSONSource
-        ).setData(buildGeoJSON());
+  const buildEndpointsGeoJSON = useCallback(
+    (forTrailId: number | null): GeoJSON.FeatureCollection => ({
+      type: 'FeatureCollection',
+      features: trails.flatMap((t) => {
+        if (t.id !== forTrailId) return [];
+        const coords = t.geometry_geojson?.coordinates;
+        if (!coords || coords.length < 2) return [];
+        const start = coords[0];
+        const end = coords[coords.length - 1];
+        return [
+          {
+            type: 'Feature' as const,
+            id: t.id * 2,
+            geometry: { type: 'Point' as const, coordinates: start },
+            properties: { trail_id: t.id, role: 'start' },
+          },
+          {
+            type: 'Feature' as const,
+            id: t.id * 2 + 1,
+            geometry: { type: 'Point' as const, coordinates: end },
+            properties: { trail_id: t.id, role: 'end' },
+          },
+        ];
+      }),
+    }),
+    [trails]
+  );
+
+  function handleTrailUpdated(updated: Trail) {
+    // Compute next trails list eagerly so we can push to Mapbox synchronously
+    // before the draw control is removed (avoids a stale-geometry flash).
+    const trailsSnapshot = trailsRef.current;
+    const exists = trailsSnapshot.some((t) => t.id === updated.id);
+    const next = exists
+      ? trailsSnapshot.map((t) => (t.id === updated.id ? updated : t))
+      : [...trailsSnapshot, updated];
+
+    const map = mapRef.current;
+    if (map) {
+      const geojson: GeoJSON.FeatureCollection = {
+        type: 'FeatureCollection',
+        features: next.map(trailToFeature),
+      };
+      if (map.getSource(TRAILS_SOURCE)) {
+        (map.getSource(TRAILS_SOURCE) as mapboxgl.GeoJSONSource).setData(
+          geojson
+        );
       }
-    }, 0);
+      if (map.getSource(TRAILS_ENDPOINTS)) {
+        const forId = selectedTrailIdRef.current;
+        const endpointsGeoJSON: GeoJSON.FeatureCollection = {
+          type: 'FeatureCollection',
+          features: next.flatMap((t) => {
+            if (t.id !== forId) return [];
+            const coords = t.geometry_geojson?.coordinates;
+            if (!coords || coords.length < 2) return [];
+            return [
+              {
+                type: 'Feature' as const,
+                id: t.id * 2,
+                geometry: { type: 'Point' as const, coordinates: coords[0] },
+                properties: { trail_id: t.id, role: 'start' },
+              },
+              {
+                type: 'Feature' as const,
+                id: t.id * 2 + 1,
+                geometry: {
+                  type: 'Point' as const,
+                  coordinates: coords[coords.length - 1],
+                },
+                properties: { trail_id: t.id, role: 'end' },
+              },
+            ];
+          }),
+        };
+        (map.getSource(TRAILS_ENDPOINTS) as mapboxgl.GeoJSONSource).setData(
+          endpointsGeoJSON
+        );
+      }
+    }
+
+    setTrails(next);
   }
 
   const addTrailsLayer = useCallback(
@@ -118,9 +254,35 @@ export function useMapbox({
         (map.getSource(TRAILS_SOURCE) as mapboxgl.GeoJSONSource).setData(
           geojson
         );
+        (map.getSource(TRAILS_ENDPOINTS) as mapboxgl.GeoJSONSource)?.setData(
+          buildEndpointsGeoJSON(selectedTrailIdRef.current)
+        );
         return;
       }
       map.addSource(TRAILS_SOURCE, { type: 'geojson', data: geojson });
+      map.addSource(TRAILS_ENDPOINTS, {
+        type: 'geojson',
+        data: buildEndpointsGeoJSON(selectedTrailIdRef.current),
+      });
+      // Selection highlight — rendered below the trail line
+      map.addLayer({
+        id: TRAILS_SELECTED,
+        type: 'line',
+        source: TRAILS_SOURCE,
+        slot: 'middle',
+        layout: { 'line-join': 'round', 'line-cap': 'round' },
+        paint: {
+          'line-color': '#facc15', // yellow-400
+          'line-width': [
+            'case',
+            ['boolean', ['feature-state', 'selected'], false],
+            8,
+            0,
+          ],
+          'line-opacity': 0.8,
+          'line-blur': 2,
+        },
+      });
       map.addLayer({
         id: TRAILS_LAYER,
         type: 'line',
@@ -130,7 +292,12 @@ export function useMapbox({
         paint: {
           'line-color': TRAIL_COLOR_EXPR,
           'line-width': TRAIL_WIDTH_EXPR,
-          'line-opacity': 1,
+          'line-opacity': [
+            'case',
+            ['boolean', ['feature-state', 'editing'], false],
+            0,
+            1,
+          ],
         },
       });
       // Trail name labels — only on named, non-hidden, non-connector trails
@@ -165,8 +332,38 @@ export function useMapbox({
           'text-opacity': ['interpolate', ['linear'], ['zoom'], 12, 0, 12.5, 1],
         },
       });
+      // Start dots (green) — only shown for the selected trail
+      map.addLayer({
+        id: TRAILS_START,
+        type: 'circle',
+        source: TRAILS_ENDPOINTS,
+        slot: 'top',
+        filter: ['==', ['get', 'role'], 'start'],
+        paint: {
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 13, 4, 16, 7],
+          'circle-color': '#22c55e',
+          'circle-stroke-color': '#fff',
+          'circle-stroke-width': 1.5,
+          'circle-opacity': 0.9,
+        },
+      });
+      // End dots (red)
+      map.addLayer({
+        id: TRAILS_END,
+        type: 'circle',
+        source: TRAILS_ENDPOINTS,
+        slot: 'top',
+        filter: ['==', ['get', 'role'], 'end'],
+        paint: {
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 13, 4, 16, 7],
+          'circle-color': '#ef4444',
+          'circle-stroke-color': '#fff',
+          'circle-stroke-width': 1.5,
+          'circle-opacity': 0.9,
+        },
+      });
     },
-    [buildGeoJSON]
+    [buildGeoJSON, buildEndpointsGeoJSON]
   );
 
   // ── Contour paint helpers ─────────────────────────────────────────────────────
@@ -457,7 +654,51 @@ export function useMapbox({
     addTrailsLayer(mapRef.current);
   }, [mapReady, loading, addTrailsLayer]);
 
-  // ── Trail hover cursor + click → URL param ───────────────────────────────────
+  // ── Trail hover cursor + click / dblclick → URL param / edit ────────────────
+
+  const isEditingRef = useRef(false);
+  useEffect(() => {
+    isEditingRef.current = drawApi.isEditing;
+    // When edit starts, clear any pointer cursor and selection highlight
+    if (drawApi.isEditing && mapRef.current) {
+      mapRef.current.getCanvas().style.cursor = '';
+      setSelectedTrail(null);
+      if (mapRef.current.getSource(TRAILS_ENDPOINTS)) {
+        (
+          mapRef.current.getSource(TRAILS_ENDPOINTS) as mapboxgl.GeoJSONSource
+        ).setData(buildEndpointsGeoJSON(null));
+      }
+    }
+  }, [drawApi.isEditing, mapRef]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Keep stable refs so the map event handlers don't need to re-register
+  const onTrailClickRef = useRef(onTrailClick);
+  useEffect(() => {
+    onTrailClickRef.current = onTrailClick;
+  }, [onTrailClick]);
+  const drawApiRef = useRef(drawApi);
+  useEffect(() => {
+    drawApiRef.current = drawApi;
+  }, [drawApi]);
+
+  // Drive the selection highlight + endpoints from the URL param.
+  // Depends on addTrailsLayer (stable after trails load) to ensure the source
+  // exists before calling setFeatureState / setData.
+  useEffect(() => {
+    if (!mapReady || loading) return;
+    setSelectedTrail(selectedTrailId);
+    if (mapRef.current?.getSource(TRAILS_ENDPOINTS)) {
+      (
+        mapRef.current.getSource(TRAILS_ENDPOINTS) as mapboxgl.GeoJSONSource
+      ).setData(buildEndpointsGeoJSON(selectedTrailId));
+    }
+  }, [
+    selectedTrailId,
+    mapReady,
+    loading,
+    addTrailsLayer,
+    buildEndpointsGeoJSON,
+  ]);
 
   useEffect(() => {
     if (!mapReady || !mapRef.current) return;
@@ -476,15 +717,32 @@ export function useMapbox({
       const features = map.queryRenderedFeatures(hitBox(e), {
         layers: [TRAILS_LAYER],
       });
-      map.getCanvas().style.cursor = features.length > 0 ? 'pointer' : '';
+      if (features.length > 0 && !isEditingRef.current) {
+        // Only show pointer over trails when not editing
+        map.getCanvas().style.cursor = 'pointer';
+      } else {
+        // Off a trail, or editing: clear so the map/draw mode sets its own cursor
+        map.getCanvas().style.cursor = '';
+      }
     };
+
+    // Single click: select trail (view mode) or notify draw hook when editing
     const onClick = (e: mapboxgl.MapMouseEvent) => {
       if (!map.getLayer(TRAILS_LAYER)) return;
       const features = map.queryRenderedFeatures(hitBox(e), {
         layers: [TRAILS_LAYER],
       });
-      const id = features[0]?.properties?.id;
-      if (id != null && onTrailClick) onTrailClick(Number(id));
+      if (features.length > 0) {
+        const id = features[0]?.properties?.id;
+        if (id != null) {
+          if (isEditingRef.current) {
+            // While editing, let the draw hook decide what to do (confirm dialog etc.)
+            drawApiRef.current.notifyOtherTrailClick(Number(id));
+          } else {
+            onTrailClickRef.current?.(Number(id));
+          }
+        }
+      }
     };
 
     map.on('mousemove', onMouseMove);
@@ -499,7 +757,7 @@ export function useMapbox({
         /* map already removed */
       }
     };
-  }, [mapReady, onTrailClick]);
+  }, [mapReady]);
 
   // ── Handlers ─────────────────────────────────────────────────────────────────
 
@@ -531,9 +789,11 @@ export function useMapbox({
     trails,
     loading,
     trailsError,
+    drawApi,
     handleStyleChange,
     handleContourStrength,
     handleContourScheme,
     handleTrailUpdated,
+    setEditingTrailId,
   };
 }

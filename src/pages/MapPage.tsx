@@ -1,9 +1,11 @@
 import 'mapbox-gl/dist/mapbox-gl.css';
 import mapboxgl from 'mapbox-gl';
 import { useSearchParams } from 'react-router-dom';
+import { Plus } from 'lucide-react';
 import { useMapbox } from '@/hooks/useMapbox';
 import { MAP_STYLES, type StyleKey } from '@/lib/map/config';
 import TrailDetailDrawer from '@/components/TrailDetailDrawer';
+import { useAuth } from '@/contexts/AuthContext';
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN as
   | string
@@ -33,7 +35,13 @@ export default function MapPage() {
 }
 
 function MapPageInner() {
-  const [, setSearchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const trailIdParam = searchParams.get('trailId');
+  const selectedTrailId = trailIdParam ? Number(trailIdParam) : null;
+
+  const { role, regionId } = useAuth();
+  const canEdit =
+    role !== null && ['admin', 'super_user', 'super_admin'].includes(role);
 
   const {
     mapContainerRef,
@@ -47,7 +55,10 @@ function MapPageInner() {
     handleContourStrength,
     handleContourScheme,
     handleTrailUpdated,
+    drawApi,
+    setEditingTrailId,
   } = useMapbox({
+    selectedTrailId,
     onTrailClick: (id) =>
       setSearchParams((prev) => {
         const next = new URLSearchParams(prev);
@@ -106,11 +117,30 @@ function MapPageInner() {
             </div>
           </div>
 
-          {/* Trail count */}
+          {/* Trail count + Add Trail button */}
           {!loading && !trailsError && (
-            <p className="text-xs text-slate-500 border-t pt-2">
-              {trails.length} trail{trails.length !== 1 ? 's' : ''} loaded
-            </p>
+            <div className="border-t pt-2 space-y-2">
+              <p className="text-xs text-slate-500">
+                {trails.length} trail{trails.length !== 1 ? 's' : ''} loaded
+              </p>
+              {canEdit && !drawApi.isEditing && (
+                <button
+                  onClick={() =>
+                    setSearchParams((prev) => {
+                      const next = new URLSearchParams(prev);
+                      next.set('trailId', '-1');
+                      return next;
+                    })
+                  }
+                  className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md
+                    bg-slate-800 hover:bg-slate-700 text-white text-xs font-medium
+                    transition-colors cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Add Trail
+                </button>
+              )}
+            </div>
           )}
 
           {/* Contour controls */}
@@ -155,8 +185,13 @@ function MapPageInner() {
         </div>
       </div>
 
-      {/* Trail detail drawer — opens when ?trailId= is set in URL */}
-      <TrailDetailDrawer trails={trails} onTrailUpdated={handleTrailUpdated} />
+      <TrailDetailDrawer
+        trails={trails}
+        onTrailSaved={(saved) => handleTrailUpdated(saved)}
+        drawApi={drawApi}
+        regionId={regionId}
+        onEditingTrailChange={setEditingTrailId}
+      />
     </div>
   );
 }
