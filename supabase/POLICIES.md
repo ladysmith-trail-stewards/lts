@@ -28,8 +28,8 @@
 | Role        | SELECT | INSERT | UPDATE | DELETE |
 | ----------- | :----: | :----: | :----: | :----: |
 | Anon        |   —    |   —    |   —    |   —    |
-| User        |   👤   |   —    |   👤   |   —    |
-| Super User  |   👤   |   —    |   👤   |   —    |
+| User        |   —    |   —    |   —    |   —    |
+| Super User  |   —    |   —    |   —    |   —    |
 | Admin       |   📍   |   📍   |   📍   |   —    |
 | Super Admin |   ✅   |   ✅   |   ✅   |   ✅   |
 
@@ -47,7 +47,7 @@
 
 | Role        | SELECT | INSERT | UPDATE | DELETE |
 | ----------- | :----: | :----: | :----: | :----: |
-| Anon        |   ✅   |   —    |   —    |   —    |
+| Anon        |   —    |   —    |   —    |   —    |
 | User        |   ✅   |   —    |   —    |   —    |
 | Super User  |   ✅   |   📍   |   📍   |   —    |
 | Admin       |   ✅   |   📍   |   📍   |   —    |
@@ -59,6 +59,7 @@
 
 | RPC                    | Callable by     |  Security  | Notes                                                                                   |
 | ---------------------- | --------------- | :--------: | --------------------------------------------------------------------------------------- |
+| `accept_policy`        | `authenticated` | 🔒 DEFINER | Sets policy_accepted_at = now() for the calling pending user.                           |
 | `soft_delete_profiles` | `authenticated` | 🔒 DEFINER | Sets deleted_at = now() on profiles. SECURITY DEFINER to bypass column-level privilege. |
 | `soft_delete_trails`   | `authenticated` | 🔒 DEFINER | Sets deleted_at = now() on trails. SECURITY DEFINER to bypass column-level privilege.   |
 | `upsert_trails`        | `authenticated` |  INVOKER   | —                                                                                       |

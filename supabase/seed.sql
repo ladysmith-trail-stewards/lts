@@ -135,6 +135,8 @@ update public.profiles set name = 'Test User',        role = 'user',        regi
 update public.profiles set name = 'Admin User',       role = 'admin',       region_id = 1 where auth_user_id = '00000000-0000-0000-0000-000000000002';
 update public.profiles set name = 'Super User',       role = 'super_user',  region_id = 1 where auth_user_id = '00000000-0000-0000-0000-000000000003';
 update public.profiles set name = 'Super Admin User', role = 'super_admin', region_id = 1 where auth_user_id = '00000000-0000-0000-0000-000000000004';
+-- pending user: policy_accepted_at left NULL so the /accept-policy gate is exercisable in dev.
+-- To test the "already-accepted pending" path, run: update public.profiles set policy_accepted_at = now() where auth_user_id = '00000000-0000-0000-0000-000000000005';
 -- ============================================================
 -- Trails (seeded from trails.geojson)
 -- ============================================================

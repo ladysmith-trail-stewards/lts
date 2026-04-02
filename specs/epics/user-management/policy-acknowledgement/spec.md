@@ -2,7 +2,7 @@
 id: F-009
 type: feature
 epic: user-management
-status: planned
+status: in-progress
 created: 2026-04-02
 updated: 2026-04-02
 ---
@@ -124,8 +124,9 @@ The actual policy text is out of scope for this spec — placeholder copy will b
 
 ## Related Issues
 
-| Issue | Description | Status |
-| ----- | ----------- | ------ |
+| Issue                                                            | Description                              | Status |
+| ---------------------------------------------------------------- | ---------------------------------------- | ------ |
+| [#77](https://github.com/ladysmith-trail-stewards/lts/issues/77) | [F-009] Policy Acknowledgement on Signup | Open   |
 
 ## Related PRs
 
@@ -134,6 +135,7 @@ The actual policy text is out of scope for this spec — placeholder copy will b
 
 ## Changelog
 
-| Date       | Description  | Author  | Driver    | Why                                                                      | Status  |
-| ---------- | ------------ | ------- | --------- | ------------------------------------------------------------------------ | ------- |
-| 2026-04-02 | Spec created | Copilot | blueprint | Organisation needs explicit consent before users enter the pending queue | planned |
+| Date       | Description          | Author  | Driver    | Why                                                                      | Status      |
+| ---------- | -------------------- | ------- | --------- | ------------------------------------------------------------------------ | ----------- |
+| 2026-04-02 | Spec created         | Copilot | blueprint | Organisation needs explicit consent before users enter the pending queue | planned     |
+| 2026-04-02 | Implementation begun | Copilot | dev       | Issue #77 picked up                                                      | in-progress |

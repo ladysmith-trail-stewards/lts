@@ -142,6 +142,7 @@ No special frontend handling is needed for the affected user — the existing `o
 
 | Issue | Description | Status |
 | ----- | ----------- | ------ |
+| [#79](https://github.com/ladysmith-trail-stewards/lts/issues/79) | [F-011] Force Sign-Out on Role Change | Open |
 
 ## Related PRs
 

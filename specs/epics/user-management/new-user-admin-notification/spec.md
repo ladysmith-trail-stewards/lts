@@ -150,6 +150,7 @@ Document the exact configuration steps in `supabase/ARCHITECTURE.md` under a new
 
 | Issue | Description | Status |
 | ----- | ----------- | ------ |
+| [#78](https://github.com/ladysmith-trail-stewards/lts/issues/78) | [F-010] New User Admin Notification | Open |
 
 ## Related PRs
 

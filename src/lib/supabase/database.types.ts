@@ -18,6 +18,7 @@ export type Database = {
           id: number;
           name: string;
           phone: string | null;
+          policy_accepted_at: string | null;
           region_id: number;
           role: Database['public']['Enums']['app_role'];
         };
@@ -29,6 +30,7 @@ export type Database = {
           id?: number;
           name: string;
           phone?: string | null;
+          policy_accepted_at?: string | null;
           region_id: number;
           role?: Database['public']['Enums']['app_role'];
         };
@@ -40,6 +42,7 @@ export type Database = {
           id?: number;
           name?: string;
           phone?: string | null;
+          policy_accepted_at?: string | null;
           region_id?: number;
           role?: Database['public']['Enums']['app_role'];
         };
@@ -378,6 +381,7 @@ export type Database = {
         Args: { geom1: unknown; geom2: unknown };
         Returns: boolean;
       };
+      accept_policy: { Args: never; Returns: undefined };
       addauth: { Args: { '': string }; Returns: boolean };
       addgeometrycolumn:
         | {
@@ -560,6 +564,7 @@ export type Database = {
           email: string;
           name: string;
           phone: string;
+          policy_accepted_at: string;
           profile_id: number;
           region_name: string;
           role: Database['public']['Enums']['app_role'];

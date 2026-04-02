@@ -139,19 +139,37 @@ function inferRoles(policy_name, using_expr, check_expr) {
 }
 
 /**
- * Is the policy scoped to a region?
- * Detects both old get_my_region_id() and new auth.jwt() ->> 'region_id' patterns.
+ * Is the policy scoped to a region for a *specific* role?
+ * Returns true only when the region_id check is NOT guarded by a super_admin
+ * short-circuit for that role.
+ *
+ * Pattern: super_admin gets global access when the expression reads:
+ *   user_role = 'super_admin'
+ *   OR (user_role = 'admin' AND region_id = ...)
+ *
+ * For super_admin we return false (global); for admin we return true (region).
  */
-function isRegionScoped(using_expr, check_expr) {
+function isRegionScopedForRole(using_expr, check_expr, role) {
   const expr = `${using_expr ?? ''} ${check_expr ?? ''}`;
-  return expr.includes('get_my_region_id') || expr.includes("'region_id'");
+  if (!expr.includes("'region_id'") && !expr.includes('get_my_region_id')) {
+    return false;
+  }
+  // super_admin has an unconditional branch in the same policy — treat as global.
+  if (role === 'super_admin') return false;
+  return true;
 }
 
 /**
- * Is the policy scoped to the calling user's own row (contains auth.uid())?
+ * Is the policy scoped to the calling user's own row for a specific role?
+ * super_admin has an unconditional branch in the SELECT/UPDATE policies
+ * alongside the auth.uid() own-row branch — treat as global.
  */
-function isOwnScoped(using_expr, check_expr) {
-  return `${using_expr ?? ''} ${check_expr ?? ''}`.includes('auth.uid()');
+function isOwnScopedForRole(using_expr, check_expr, role) {
+  if (!`${using_expr ?? ''} ${check_expr ?? ''}`.includes('auth.uid()')) {
+    return false;
+  }
+  if (role === 'super_admin') return false;
+  return true;
 }
 
 // Scope priority: higher index wins
@@ -185,12 +203,14 @@ function buildMatrix(policies) {
 
     const cmds = command === 'ALL' ? COMMANDS : [command];
 
-    let scope;
-    if (isRegionScoped(using_expr, check_expr)) scope = 'region';
-    else if (isOwnScoped(using_expr, check_expr)) scope = 'own';
-    else scope = 'always';
-
     for (const r of targetRoles) {
+      // Evaluate scope per-role so that a policy covering both super_admin
+      // (global) and admin (region-scoped) doesn't stamp region on super_admin.
+      let scope;
+      if (isRegionScopedForRole(using_expr, check_expr, r)) scope = 'region';
+      else if (isOwnScopedForRole(using_expr, check_expr, r)) scope = 'own';
+      else scope = 'always';
+
       for (const cmd of cmds) {
         const current = matrix[r][cmd];
         if (current === null || SCOPE_RANK[scope] > SCOPE_RANK[current]) {
