@@ -194,6 +194,22 @@ function MapPageInner() {
         regionId={regionId}
         onEditingTrailChange={setEditingTrailId}
       />
+
+      {/* Data attribution */}
+      <div className="absolute bottom-2 left-2 z-10">
+        <p className="text-xs text-white/90 bg-black/50 backdrop-blur-sm rounded px-2 py-1 leading-5">
+          Trail geometry from{' '}
+          <a
+            href="https://www.trailforks.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline underline-offset-2 hover:text-white transition-colors"
+          >
+            Trailforks
+          </a>{' '}
+          — for personal use only.
+        </p>
+      </div>
     </div>
   );
 }

@@ -1,7 +1,15 @@
 import { Link } from 'react-router-dom';
 import { menuRoutes } from '@/routes';
+import { useAuth } from '@/contexts/AuthContext';
 
 function Footer() {
+  const { role } = useAuth();
+  const isAdmin = role !== null && ['admin', 'super_admin'].includes(role);
+
+  const visibleRoutes = menuRoutes.filter(
+    (r) => r.access !== 'ADMIN' || isAdmin
+  );
+
   return (
     <footer className="bg-slate-800 text-white py-5 mt-auto">
       <div className="container mx-auto px-4">
@@ -29,7 +37,7 @@ function Footer() {
               Quick Links
             </h3>
             <ul className="my-0 ml-0 list-none space-y-1">
-              {menuRoutes.map(({ to, title }) => (
+              {visibleRoutes.map(({ to, title }) => (
                 <li key={to}>
                   <Link
                     to={to}
