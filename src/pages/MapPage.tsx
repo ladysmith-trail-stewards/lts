@@ -55,6 +55,7 @@ function MapPageInner() {
     handleContourStrength,
     handleContourScheme,
     handleTrailUpdated,
+    handleTrailDeleted,
     drawApi,
     setEditingTrailId,
   } = useMapbox({
@@ -188,6 +189,7 @@ function MapPageInner() {
       <TrailDetailDrawer
         trails={trails}
         onTrailSaved={(saved) => handleTrailUpdated(saved)}
+        onTrailDeleted={(id) => handleTrailDeleted(id)}
         drawApi={drawApi}
         regionId={regionId}
         onEditingTrailChange={setEditingTrailId}

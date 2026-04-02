@@ -77,6 +77,8 @@ export interface UseMapboxReturn {
   handleContourStrength: (value: number) => void;
   handleContourScheme: (scheme: ContourScheme) => void;
   handleTrailUpdated: (updated: Trail) => void;
+  /** Remove the given trail from local state and the map source layer. */
+  handleTrailDeleted: (id: number) => void;
   /** Hide the given trail from the source layer while it is being edited in Draw. */
   setEditingTrailId: (id: number | null) => void;
 }
@@ -241,6 +243,32 @@ export function useMapbox({
         (map.getSource(TRAILS_ENDPOINTS) as mapboxgl.GeoJSONSource).setData(
           endpointsGeoJSON
         );
+      }
+    }
+
+    setTrails(next);
+  }
+
+  function handleTrailDeleted(id: number) {
+    const trailsSnapshot = trailsRef.current;
+    const next = trailsSnapshot.filter((t) => t.id !== id);
+
+    const map = mapRef.current;
+    if (map) {
+      const geojson: GeoJSON.FeatureCollection = {
+        type: 'FeatureCollection',
+        features: next.map(trailToFeature),
+      };
+      if (map.getSource(TRAILS_SOURCE)) {
+        (map.getSource(TRAILS_SOURCE) as mapboxgl.GeoJSONSource).setData(
+          geojson
+        );
+      }
+      if (map.getSource(TRAILS_ENDPOINTS)) {
+        (map.getSource(TRAILS_ENDPOINTS) as mapboxgl.GeoJSONSource).setData({
+          type: 'FeatureCollection',
+          features: [],
+        });
       }
     }
 
@@ -794,6 +822,7 @@ export function useMapbox({
     handleContourStrength,
     handleContourScheme,
     handleTrailUpdated,
+    handleTrailDeleted,
     setEditingTrailId,
   };
 }
