@@ -53,7 +53,7 @@ export const routes: RouteConfig[] = [
       'Explore interactive maps of trails in the Ladysmith area with satellite and outdoor views',
     icon: Map,
     includeInMenu: true,
-    access: 'USER',
+    access: 'PUBLIC',
     linkProps: {
       label: 'Explore Maps',
       variant: 'forest-shadow',

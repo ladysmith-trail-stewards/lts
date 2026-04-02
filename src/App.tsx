@@ -16,7 +16,6 @@ import LogoutPage from './pages/LogoutPage';
 import UsersPage from './pages/UsersPage';
 import PendingApprovalPage from './pages/PendingApprovalPage';
 import RequireAdmin from './components/RequireAdmin';
-import RequireAuth from './components/RequireAuth';
 
 function App() {
   const location = useLocation();
@@ -33,14 +32,7 @@ function App() {
                 <Route path="/" element={<HomePage />} />
                 <Route path="/charter" element={<CharterPage />} />
                 <Route path="/contact" element={<ContactPage />} />
-                <Route
-                  path="/map"
-                  element={
-                    <RequireAuth>
-                      <MapPage />
-                    </RequireAuth>
-                  }
-                />
+                <Route path="/map" element={<MapPage />} />
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/sign-up" element={<SignUpPage />} />
                 <Route
