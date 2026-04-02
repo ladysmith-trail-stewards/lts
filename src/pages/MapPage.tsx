@@ -6,7 +6,6 @@ import { useMapbox } from '@/hooks/useMapbox';
 import { MAP_STYLES, type StyleKey } from '@/lib/map/config';
 import TrailDetailDrawer from '@/components/TrailDetailDrawer';
 import { useAuth } from '@/contexts/AuthContext';
-import type { Trail } from '@/hooks/useTrails';
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN as
   | string
@@ -40,7 +39,7 @@ function MapPageInner() {
   const trailIdParam = searchParams.get('trailId');
   const selectedTrailId = trailIdParam ? Number(trailIdParam) : null;
 
-  const { role } = useAuth();
+  const { role, regionId } = useAuth();
   const canEdit =
     role !== null && ['admin', 'super_user', 'super_admin'].includes(role);
 
@@ -57,6 +56,7 @@ function MapPageInner() {
     handleContourScheme,
     handleTrailUpdated,
     drawApi,
+    setEditingTrailId,
   } = useMapbox({
     selectedTrailId,
     onTrailClick: (id) =>
@@ -66,15 +66,6 @@ function MapPageInner() {
         return next;
       }),
   });
-
-  // regionId: derive from the first loaded trail (all trails share a region in this app).
-  // Falls back to null when no trails are loaded yet.
-  const regionId: number | null =
-    trails.length > 0 ? (trails[0].region_id ?? null) : null;
-
-  function handleTrailCreated(created: Trail) {
-    handleTrailUpdated(created);
-  }
 
   return (
     <div className="relative overflow-hidden">
@@ -196,10 +187,10 @@ function MapPageInner() {
 
       <TrailDetailDrawer
         trails={trails}
-        onTrailUpdated={handleTrailUpdated}
-        onTrailCreated={handleTrailCreated}
+        onTrailSaved={(saved) => handleTrailUpdated(saved)}
         drawApi={drawApi}
         regionId={regionId}
+        onEditingTrailChange={setEditingTrailId}
       />
     </div>
   );

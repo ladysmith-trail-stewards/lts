@@ -278,7 +278,7 @@ export function useDrawTrail(
         try {
           map.removeControl(drawRef.current);
         } catch {
-          /* ignore */
+          /* map may already have removed it */
         }
         drawRef.current = null;
       }
@@ -315,7 +315,7 @@ export function useDrawTrail(
       try {
         map?.removeControl(drawRef.current);
       } catch {
-        /* ignore */
+        /* map may already have removed it */
       }
       drawRef.current = null;
     }

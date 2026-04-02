@@ -83,10 +83,6 @@ export const TRAIL_COLOR_EXPR: ExpressionSpecification = [
   '#818cf8',
   ['==', ['get', 'trail_class'], 'LIFT'],
   '#fde68a',
-  ['==', ['get', 'trail_class'], 'IMBY'],
-  '#94a3b8',
-  ['==', ['get', 'trail_class'], 'TBD'],
-  '#cbd5e1',
   '#cbd5e1',
 ];
 

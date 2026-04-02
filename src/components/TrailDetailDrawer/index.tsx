@@ -18,7 +18,6 @@ import {
   TRAIL_CLASS_LABELS,
   DIRECTION_LABELS,
   VISIBILITY_LABELS,
-  ACTIVITY_OPTIONS,
 } from './trailEditSchema';
 import {
   trailToForm,
@@ -26,9 +25,8 @@ import {
   formatDistance,
 } from './trailEditHelpers';
 import {
-  TrailClassDot,
   InfoBadge,
-  PillToggle,
+  TrailClassDot,
   StatusPill,
 } from './TrailDetailSubcomponents';
 
@@ -51,34 +49,54 @@ type AppRole = Database['public']['Enums']['app_role'];
 
 const EDIT_ROLES: AppRole[] = ['admin', 'super_user', 'super_admin'];
 
-// ── Inner panel (keyed by trail.id so all state resets on trail change) ───────
+const NEW_TRAIL_DEFAULTS: TrailEditValues = {
+  name: '',
+  description: undefined,
+  trail_class: 'EASY',
+  direction: 'both',
+  activity_types: [],
+  planned: false,
+  connector: false,
+  visibility: 'public',
+};
+
+// ── TrailPanel ────────────────────────────────────────────────────────────────
+// Handles both existing trails (trail != null) and new trail creation (trail == null).
 
 interface TrailPanelProps {
-  trail: Trail;
+  trail: Trail | null;
   canEdit: boolean;
   drawApi: DrawTrailApi;
+  regionId: number | null;
   onClose: () => void;
-  onTrailUpdated: (updated: Trail) => void;
+  onTrailSaved: (saved: Trail, isNew: boolean) => void;
   onNavigateToTrail: (id: number) => void;
+  /** Called with the trail id when editing starts, null when editing ends. */
+  onEditingTrailChange?: (id: number | null) => void;
 }
 
 function TrailPanel({
   trail,
   canEdit,
   drawApi,
+  regionId,
   onClose,
-  onTrailUpdated,
+  onTrailSaved,
   onNavigateToTrail,
+  onEditingTrailChange,
 }: TrailPanelProps) {
-  // currentTrail is the live DB-backed copy; seeded from prop, refreshed on id change and after save
-  const [currentTrail, setCurrentTrail] = useState<Trail>(trail);
-  const [editing, setEditing] = useState(false);
+  const isNew = trail === null;
+
+  const [currentTrail, setCurrentTrail] = useState<Trail | null>(trail);
+  const [editing, setEditing] = useState(isNew);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<
     Partial<Record<keyof TrailEditValues, string>>
   >({});
-  const [form, setForm] = useState<TrailEditValues>(() => trailToForm(trail));
+  const [form, setForm] = useState<TrailEditValues>(
+    trail ? trailToForm(trail) : NEW_TRAIL_DEFAULTS
+  );
 
   const drawApiRef = useRef(drawApi);
   useEffect(() => {
@@ -99,16 +117,19 @@ function TrailPanel({
     if (!editing) return;
     const handler = (e: BeforeUnloadEvent) => {
       e.preventDefault();
-      e.returnValue = '';
     };
     window.addEventListener('beforeunload', handler);
     return () => window.removeEventListener('beforeunload', handler);
   }, [editing]);
 
-  // Refetch from DB whenever the selected trail changes
+  // Refetch from DB when navigating to a different trail (id changes).
+  // We intentionally do NOT re-run this when the trail object reference changes
+  // after a local save — currentTrail is already up-to-date from handleSave.
   useEffect(() => {
+    if (!trail) return;
+    const id = trail.id;
     let cancelled = false;
-    getTrailsDb(supabase, { ids: [trail.id] }).then(({ data }) => {
+    getTrailsDb(supabase, { ids: [id] }).then(({ data }) => {
       const row = data?.[0];
       if (!cancelled && row) {
         const fresh = { ...trail, ...row } as unknown as Trail;
@@ -119,20 +140,22 @@ function TrailPanel({
     return () => {
       cancelled = true;
     };
-  }, [trail.id]); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trail?.id]);
 
   function handleStartEdit() {
+    if (!currentTrail) return;
+    onEditingTrailChange?.(currentTrail.id);
     drawApi.activateEdit(currentTrail.geometry_geojson, {
-      // Clicking empty map does nothing — only Save/Cancel can exit
       onClickNoTarget: () => {
         /* locked */
       },
-      // Clicking another trail asks to confirm before navigating
       onClickOtherTrail: (id) => {
         if (
           window.confirm('Cancel your unsaved edits and switch to this trail?')
         ) {
           drawApiRef.current.deactivateEdit();
+          onEditingTrailChange?.(null);
           setEditing(false);
           onNavigateToTrail(id);
         }
@@ -141,39 +164,44 @@ function TrailPanel({
     setEditing(true);
   }
 
-  function handleActivityToggle(value: string) {
-    setForm((f) => ({
-      ...f,
-      activity_types: f.activity_types.includes(value)
-        ? f.activity_types.filter((a) => a !== value)
-        : [...f.activity_types, value],
-    }));
-  }
-
   async function handleSave() {
     const result = v.safeParse(TrailEditSchema, form);
     if (!result.success) {
       setValidationErrors(extractFormErrors(result.issues));
       return;
     }
-    setValidationErrors({});
-    setSaving(true);
-    setSaveError(null);
 
     type LineStringGeometry = {
       type: 'LineString';
       coordinates: [number, number][];
     };
 
-    const geometry: LineStringGeometry =
-      (drawApi.getCurrentGeometry() as LineStringGeometry | null) ??
-      (currentTrail.geometry_geojson as LineStringGeometry);
+    const drawnGeometry =
+      drawApi.getCurrentGeometry() as LineStringGeometry | null;
 
-    const { allOk, error } = await upsertTrailsDb(supabase, {
+    if (isNew) {
+      if (!drawnGeometry || drawnGeometry.coordinates.length < 2) {
+        setSaveError('Draw at least two points on the map before saving.');
+        return;
+      }
+      if (regionId === null) {
+        setSaveError('No region is configured. Contact an administrator.');
+        return;
+      }
+    }
+
+    const geometry: LineStringGeometry =
+      drawnGeometry ?? (currentTrail!.geometry_geojson as LineStringGeometry);
+
+    setValidationErrors({});
+    setSaving(true);
+    setSaveError(null);
+
+    const { results, allOk, error } = await upsertTrailsDb(supabase, {
       type: 'Feature',
       geometry,
       properties: {
-        id: currentTrail.id,
+        ...(isNew ? {} : { id: currentTrail!.id }),
         name: result.output.name,
         description: result.output.description ?? null,
         trail_class: result.output.trail_class,
@@ -182,8 +210,8 @@ function TrailPanel({
         planned: result.output.planned,
         connector: result.output.connector,
         visibility: result.output.visibility,
-        region_id: currentTrail.region_id,
-        type: currentTrail.type,
+        region_id: isNew ? regionId! : currentTrail!.region_id,
+        type: isNew ? 'trail' : currentTrail!.type,
       },
     });
 
@@ -194,39 +222,76 @@ function TrailPanel({
       return;
     }
 
-    drawApi.deactivateEdit();
-
-    const updated: Trail = {
-      ...currentTrail,
-      name: result.output.name,
-      description: result.output.description ?? null,
-      trail_class: result.output.trail_class,
-      direction: result.output.direction,
-      activity_types: result.output.activity_types,
-      planned: result.output.planned,
-      connector: result.output.connector,
-      visibility: result.output.visibility,
-      geometry_geojson: geometry as GeoJSON.LineString,
-    };
-    setCurrentTrail(updated);
-    onTrailUpdated(updated);
-    setForm(trailToForm(updated));
-    setEditing(false);
-    toast.success(`"${updated.name}" saved successfully.`);
+    if (isNew) {
+      const created: Trail = {
+        id: results[0].id,
+        name: result.output.name,
+        description: result.output.description ?? null,
+        trail_class: result.output.trail_class,
+        direction: result.output.direction,
+        activity_types: result.output.activity_types,
+        planned: result.output.planned,
+        connector: result.output.connector,
+        visibility: result.output.visibility,
+        geometry_geojson: geometry as GeoJSON.LineString,
+        distance_m: null,
+        tf_popularity: null,
+        region_id: regionId!,
+        type: 'trail',
+        hidden: false,
+        bike: false,
+        deleted_at: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      onTrailSaved(created, true);
+      onEditingTrailChange?.(null);
+      drawApi.deactivateEdit();
+      toast.success(`"${created.name}" created successfully.`);
+    } else {
+      const updated: Trail = {
+        ...currentTrail!,
+        name: result.output.name,
+        description: result.output.description ?? null,
+        trail_class: result.output.trail_class,
+        direction: result.output.direction,
+        activity_types: result.output.activity_types,
+        planned: result.output.planned,
+        connector: result.output.connector,
+        visibility: result.output.visibility,
+        geometry_geojson: geometry as GeoJSON.LineString,
+      };
+      setCurrentTrail(updated);
+      setForm(trailToForm(updated));
+      setEditing(false);
+      onTrailSaved(updated, false);
+      onEditingTrailChange?.(null);
+      drawApi.deactivateEdit();
+      toast.success(`"${updated.name}" saved successfully.`);
+    }
   }
 
   function handleCancelEdit() {
     if (
       drawApi.isDirty &&
-      !window.confirm('Discard geometry changes and cancel editing?')
+      !window.confirm(
+        isNew
+          ? 'Discard the new trail and cancel?'
+          : 'Discard geometry changes and cancel editing?'
+      )
     ) {
       return;
     }
     drawApi.deactivateEdit();
-    setForm(trailToForm(currentTrail));
-    setEditing(false);
-    setSaveError(null);
-    setValidationErrors({});
+    onEditingTrailChange?.(null);
+    if (isNew) {
+      onClose();
+    } else {
+      setForm(trailToForm(currentTrail!));
+      setEditing(false);
+      setSaveError(null);
+      setValidationErrors({});
+    }
   }
 
   return (
@@ -251,7 +316,7 @@ function TrailPanel({
             </div>
           ) : (
             <h2 className="text-xl font-bold leading-tight text-slate-900">
-              {currentTrail.name}
+              {currentTrail?.name}
             </h2>
           )}
         </div>
@@ -268,22 +333,28 @@ function TrailPanel({
         </div>
       </div>
 
-      {/* Edit mode toggle — shown for editors; hides entirely for viewers */}
-      {canEdit && (
+      {/* Edit mode toggle */}
+      {(isNew || canEdit) && (
         <EditModeToggle
           drawApi={drawApi}
-          canEdit={canEdit}
-          hasGeometry
+          canEdit={isNew || canEdit}
+          hasGeometry={isNew ? drawApi.isEditing : true}
           onCancel={handleCancelEdit}
           onDone={() => drawApi.finishEdit()}
           onSave={handleSave}
           onDrawClick={() => {
-            if (!editing) {
-              // First click: activate edit (starts in snap_direct_select / move)
-              handleStartEdit();
+            if (isNew) {
+              if (!drawApi.isEditing) {
+                drawApi.activateCreate();
+              } else {
+                drawApi.toggleDraw();
+              }
             } else {
-              // Toggle between draw and move sub-modes
-              drawApi.toggleDraw();
+              if (!editing) {
+                handleStartEdit();
+              } else {
+                drawApi.toggleDraw();
+              }
             }
           }}
         />
@@ -293,41 +364,48 @@ function TrailPanel({
         <DrawHintBar drawApi={drawApi} mode={drawApi.drawMode} />
       )}
 
+      {/* Hint when new trail hasn't started drawing yet */}
+      {isNew && !drawApi.isEditing && (
+        <div className="mx-4 mb-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          No trail drawn yet — tap <span className="font-medium">Edit</span> to
+          start drawing.
+        </div>
+      )}
+
       {/* ── Body ────────────────────────────────────────────────────────── */}
       <div className="px-4 pb-6 space-y-5">
-        {/* ── Stats ─────────────────────────────────────────────────────── */}
-        <div className="flex gap-2">
-          {/* Distance */}
-          <div className="border rounded-lg p-2 text-center text-xs text-slate-500 w-20 shrink-0 flex flex-col justify-center">
-            <div className="font-semibold text-slate-700 text-sm">
-              {formatDistance(currentTrail.distance_m)}
-            </div>
-            <div>Distance</div>
-          </div>
-          {/* Elevation */}
-          <div className="flex-1 border rounded-lg p-2 text-xs text-slate-500">
-            <div className="text-center mb-1 font-medium uppercase tracking-wide text-slate-400 text-[10px]">
-              Elevation
-            </div>
-            <div className="flex divide-x">
-              <div className="text-center flex-1 pr-2">
-                <div className="font-semibold text-slate-700 text-sm">—</div>
-                <div>Gain</div>
+        {/* ── Stats — existing trails only ──────────────────────────────── */}
+        {!isNew && currentTrail && (
+          <div className="flex gap-2">
+            <div className="border rounded-lg p-2 text-center text-xs text-slate-500 w-20 shrink-0 flex flex-col justify-center">
+              <div className="font-semibold text-slate-700 text-sm">
+                {formatDistance(currentTrail.distance_m)}
               </div>
-              <div className="text-center flex-1 pl-2">
-                <div className="font-semibold text-slate-700 text-sm">—</div>
-                <div>Descent</div>
+              <div>Distance</div>
+            </div>
+            <div className="flex-1 border rounded-lg p-2 text-xs text-slate-500">
+              <div className="text-center mb-1 font-medium uppercase tracking-wide text-slate-400 text-[10px]">
+                Elevation
+              </div>
+              <div className="flex divide-x">
+                <div className="text-center flex-1 pr-2">
+                  <div className="font-semibold text-slate-700 text-sm">—</div>
+                  <div>Gain</div>
+                </div>
+                <div className="text-center flex-1 pl-2">
+                  <div className="font-semibold text-slate-700 text-sm">—</div>
+                  <div>Descent</div>
+                </div>
               </div>
             </div>
-          </div>
-          {/* TF Score */}
-          <div className="border rounded-lg p-2 text-center text-xs text-slate-500 w-20 shrink-0 flex flex-col justify-center">
-            <div className="font-semibold text-slate-700 text-sm">
-              {currentTrail.tf_popularity ?? '—'}
+            <div className="border rounded-lg p-2 text-center text-xs text-slate-500 w-20 shrink-0 flex flex-col justify-center">
+              <div className="font-semibold text-slate-700 text-sm">
+                {currentTrail.tf_popularity ?? '—'}
+              </div>
+              <div>TF Score</div>
             </div>
-            <div>TF Score</div>
           </div>
-        </div>
+        )}
         {/* ── Description ──────────────────────────────────────────────── */}
         <div className="space-y-1.5">
           <Label className="text-xs text-slate-500 uppercase tracking-wide">
@@ -348,13 +426,13 @@ function TrailPanel({
             />
           ) : (
             <p className="text-sm text-slate-700 whitespace-pre-wrap">
-              {currentTrail.description ?? (
+              {currentTrail?.description ?? (
                 <span className="text-slate-400">—</span>
               )}
             </p>
           )}
         </div>
-        {/* ── Rating ────────────────────────────────────────────────────── */}{' '}
+        {/* ── Rating ────────────────────────────────────────────────────── */}
         <div className="space-y-1.5">
           <Label className="text-xs text-slate-500 uppercase tracking-wide">
             Rating
@@ -385,10 +463,10 @@ function TrailPanel({
             </Select>
           ) : (
             <div className="flex items-center gap-2">
-              <TrailClassDot trailClass={currentTrail.trail_class} />
+              <TrailClassDot trailClass={currentTrail?.trail_class ?? null} />
               <span className="text-sm text-slate-700">
-                {TRAIL_CLASS_LABELS[currentTrail.trail_class ?? ''] ??
-                  currentTrail.trail_class ??
+                {TRAIL_CLASS_LABELS[currentTrail?.trail_class ?? ''] ??
+                  currentTrail?.trail_class ??
                   '—'}
               </span>
             </div>
@@ -422,36 +500,11 @@ function TrailPanel({
             </Select>
           ) : (
             <span className="text-sm text-slate-700">
-              {DIRECTION_LABELS[currentTrail.direction ?? ''] ??
-                currentTrail.direction ??
+              {DIRECTION_LABELS[currentTrail?.direction ?? ''] ??
+                currentTrail?.direction ??
                 '—'}
             </span>
           )}
-        </div>
-        {/* ── Trail Type (activity_types) ───────────────────────────────── */}
-        <div className="space-y-2">
-          <Label className="text-xs text-slate-500 uppercase tracking-wide">
-            Trail Type
-          </Label>
-          <div className="flex flex-wrap gap-1.5">
-            {editing ? (
-              ACTIVITY_OPTIONS.map(({ value, label }) => (
-                <PillToggle
-                  key={value}
-                  label={label}
-                  checked={form.activity_types.includes(value)}
-                  onChange={() => handleActivityToggle(value)}
-                />
-              ))
-            ) : currentTrail.activity_types &&
-              currentTrail.activity_types.length > 0 ? (
-              currentTrail.activity_types.map((a) => (
-                <InfoBadge key={a}>{a}</InfoBadge>
-              ))
-            ) : (
-              <span className="text-sm text-slate-400">—</span>
-            )}
-          </div>
         </div>
         {/* ── Planning / Connector ──────────────────────────────────────── */}
         <div className="space-y-2">
@@ -465,7 +518,7 @@ function TrailPanel({
                 }
               />
             ) : (
-              <StatusPill on={currentTrail.planned} />
+              <StatusPill on={currentTrail?.planned ?? false} />
             )}
           </div>
           <div className="flex items-center justify-between">
@@ -478,7 +531,7 @@ function TrailPanel({
                 }
               />
             ) : (
-              <StatusPill on={currentTrail.connector} />
+              <StatusPill on={currentTrail?.connector ?? false} />
             )}
           </div>
         </div>
@@ -512,8 +565,8 @@ function TrailPanel({
             </div>
           ) : (
             <InfoBadge>
-              {VISIBILITY_LABELS[currentTrail.visibility ?? ''] ??
-                currentTrail.visibility ??
+              {VISIBILITY_LABELS[currentTrail?.visibility ?? ''] ??
+                currentTrail?.visibility ??
                 '—'}
             </InfoBadge>
           )}
@@ -590,7 +643,6 @@ function EditModeToggle({
   onDrawClick,
 }: EditModeToggleProps) {
   const isDrawActive = drawApi.isEditing && drawApi.drawMode === 'draw';
-  const isEditActive = drawApi.isEditing;
   const isPreview = drawApi.isEditing && drawApi.drawMode === 'preview';
 
   const btnBase =
@@ -599,7 +651,7 @@ function EditModeToggle({
   const inactiveStyle =
     'text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed';
 
-  if (!isEditActive) {
+  if (!drawApi.isEditing) {
     // Not editing — show a single Edit button
     return (
       <div className="flex items-center gap-0.5 rounded-md border border-slate-200 bg-slate-50 p-0.5 mx-4 mb-2">
@@ -775,400 +827,24 @@ function DrawHintBar({
   );
 }
 
-// ── New-trail default form values ─────────────────────────────────────────────
-
-const NEW_TRAIL_DEFAULTS: TrailEditValues = {
-  name: '',
-  description: undefined,
-  trail_class: 'TBD',
-  direction: 'both',
-  activity_types: [],
-  planned: false,
-  connector: false,
-  visibility: 'public',
-};
-
-// ── NewTrailPanel — always in edit mode, sentinel id = -1 ─────────────────────
-
-interface NewTrailPanelProps {
-  drawApi: DrawTrailApi;
-  onClose: () => void;
-  onTrailCreated: (created: Trail) => void;
-  regionId: number | null;
-}
-
-function NewTrailPanel({
-  drawApi,
-  onClose,
-  onTrailCreated,
-  regionId,
-}: NewTrailPanelProps) {
-  const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [validationErrors, setValidationErrors] = useState<
-    Partial<Record<keyof TrailEditValues, string>>
-  >({});
-  const [form, setForm] = useState<TrailEditValues>(NEW_TRAIL_DEFAULTS);
-
-  const drawApiRef = useRef(drawApi);
-  useEffect(() => {
-    drawApiRef.current = drawApi;
-  });
-
-  // Deactivate draw when this panel unmounts
-  useEffect(() => {
-    return () => {
-      if (drawApiRef.current.isEditing) {
-        drawApiRef.current.deactivateEdit();
-      }
-    };
-  }, []);
-
-  // Guard browser close/refresh while drawing
-  useEffect(() => {
-    const handler = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      e.returnValue = '';
-    };
-    window.addEventListener('beforeunload', handler);
-    return () => window.removeEventListener('beforeunload', handler);
-  }, []);
-
-  function handleActivityToggle(value: string) {
-    setForm((f) => ({
-      ...f,
-      activity_types: f.activity_types.includes(value)
-        ? f.activity_types.filter((a) => a !== value)
-        : [...f.activity_types, value],
-    }));
-  }
-
-  async function handleSave() {
-    const result = v.safeParse(TrailEditSchema, form);
-    if (!result.success) {
-      setValidationErrors(extractFormErrors(result.issues));
-      return;
-    }
-
-    // Draw control is still alive in preview mode — geometry always available
-    const geometry = drawApi.getCurrentGeometry();
-    if (!geometry || geometry.coordinates.length < 2) {
-      setSaveError('Draw at least two points on the map before saving.');
-      return;
-    }
-
-    if (regionId === null) {
-      setSaveError('No region is configured. Contact an administrator.');
-      return;
-    }
-
-    setValidationErrors({});
-    setSaving(true);
-    setSaveError(null);
-
-    const { results, allOk, error } = await upsertTrailsDb(supabase, {
-      type: 'Feature',
-      geometry: geometry as {
-        type: 'LineString';
-        coordinates: [number, number][];
-      },
-      properties: {
-        name: result.output.name,
-        description: result.output.description ?? null,
-        trail_class: result.output.trail_class,
-        direction: result.output.direction,
-        activity_types: result.output.activity_types,
-        planned: result.output.planned,
-        connector: result.output.connector,
-        visibility: result.output.visibility,
-        region_id: regionId,
-        type: 'trail',
-      },
-    });
-
-    setSaving(false);
-
-    if (error || !allOk || !results[0]?.id) {
-      setSaveError(error?.message ?? 'Save failed. Check your permissions.');
-      return;
-    }
-
-    drawApi.deactivateEdit();
-
-    const created: Trail = {
-      id: results[0].id,
-      name: result.output.name,
-      description: result.output.description ?? null,
-      trail_class: result.output.trail_class,
-      direction: result.output.direction,
-      activity_types: result.output.activity_types,
-      planned: result.output.planned,
-      connector: result.output.connector,
-      visibility: result.output.visibility,
-      geometry_geojson: geometry as GeoJSON.LineString,
-      distance_m: null,
-      tf_popularity: null,
-      region_id: regionId,
-      type: 'trail',
-      hidden: false,
-      bike: false,
-      deleted_at: null,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-
-    toast.success(`"${created.name}" created successfully.`);
-    onTrailCreated(created);
-  }
-
-  function handleCancel() {
-    if (
-      drawApi.isDirty &&
-      !window.confirm('Discard the new trail and cancel?')
-    ) {
-      return;
-    }
-    drawApi.deactivateEdit();
-    onClose();
-  }
-
-  const hasGeometry = drawApi.isEditing;
-  return (
-    <>
-      {/* ── Header ──────────────────────────────────────────────────────── */}
-      <div className="flex flex-row items-start justify-between gap-2 px-4 pt-4 pb-2">
-        <div className="flex-1 min-w-0 space-y-1">
-          <Input
-            value={form.name}
-            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-            className="text-lg font-bold h-9"
-            placeholder="Trail name"
-            autoFocus
-          />
-          {validationErrors.name && (
-            <p className="text-xs text-red-500">{validationErrors.name}</p>
-          )}
-        </div>
-        <div className="flex items-center gap-1 shrink-0">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 shrink-0"
-            onClick={handleCancel}
-            disabled={saving}
-            title="Cancel"
-          >
-            <X className="w-4 h-4" />
-          </Button>
-        </div>
-      </div>
-
-      {/* Edit mode toggle — always shown for new-trail panel */}
-      <EditModeToggle
-        drawApi={drawApi}
-        canEdit
-        hasGeometry={hasGeometry}
-        onCancel={handleCancel}
-        onDone={() => drawApi.finishEdit()}
-        onSave={handleSave}
-        onDrawClick={() => {
-          if (!drawApi.isEditing) {
-            // No draw control yet — start fresh
-            drawApi.activateCreate();
-          } else {
-            // Toggle draw ↔ move (also handles preview → move)
-            drawApi.toggleDraw();
-          }
-        }}
-      />
-
-      {drawApi.isEditing && drawApi.drawMode && (
-        <DrawHintBar drawApi={drawApi} mode={drawApi.drawMode} />
-      )}
-
-      {/* Show hint when draw hasn't been started yet */}
-      {!drawApi.isEditing && (
-        <div className="mx-4 mb-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-          No trail drawn yet — tap <span className="font-medium">Edit</span> to
-          start drawing.
-        </div>
-      )}
-
-      {/* ── Body ────────────────────────────────────────────────────────── */}
-      <div className="px-4 pb-6 space-y-5">
-        {/* ── Description ─────────────────────────────────────────────── */}
-        <div className="space-y-1.5">
-          <Label className="text-xs text-slate-500 uppercase tracking-wide">
-            Description
-          </Label>
-          <Textarea
-            value={form.description ?? ''}
-            onChange={(e) =>
-              setForm((f) => ({
-                ...f,
-                description: e.target.value || undefined,
-              }))
-            }
-            placeholder="Optional description…"
-            rows={3}
-            className="resize-none"
-          />
-        </div>
-
-        {/* ── Rating ──────────────────────────────────────────────────── */}
-        <div className="space-y-1.5">
-          <Label className="text-xs text-slate-500 uppercase tracking-wide">
-            Rating
-          </Label>
-          <Select
-            value={form.trail_class}
-            onValueChange={(val) =>
-              setForm((f) => ({
-                ...f,
-                trail_class: val as TrailEditValues['trail_class'],
-              }))
-            }
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {Object.entries(TRAIL_CLASS_LABELS).map(([val, label]) => (
-                <SelectItem key={val} value={val}>
-                  <span className="flex items-center gap-2">
-                    <TrailClassDot trailClass={val} />
-                    {label}
-                  </span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* ── Direction ───────────────────────────────────────────────── */}
-        <div className="space-y-1.5">
-          <Label className="text-xs text-slate-500 uppercase tracking-wide">
-            Direction
-          </Label>
-          <Select
-            value={form.direction}
-            onValueChange={(val) =>
-              setForm((f) => ({
-                ...f,
-                direction: val as TrailEditValues['direction'],
-              }))
-            }
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {Object.entries(DIRECTION_LABELS).map(([val, label]) => (
-                <SelectItem key={val} value={val}>
-                  {label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* ── Trail Type ──────────────────────────────────────────────── */}
-        <div className="space-y-2">
-          <Label className="text-xs text-slate-500 uppercase tracking-wide">
-            Trail Type
-          </Label>
-          <div className="flex flex-wrap gap-1.5">
-            {ACTIVITY_OPTIONS.map(({ value, label }) => (
-              <PillToggle
-                key={value}
-                label={label}
-                checked={form.activity_types.includes(value)}
-                onChange={() => handleActivityToggle(value)}
-              />
-            ))}
-          </div>
-        </div>
-
-        {/* ── Planning / Connector ────────────────────────────────────── */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label className="text-sm">Planning?</Label>
-            <Switch
-              checked={form.planned}
-              onCheckedChange={(val) =>
-                setForm((f) => ({ ...f, planned: val }))
-              }
-            />
-          </div>
-          <div className="flex items-center justify-between">
-            <Label className="text-sm">Connector?</Label>
-            <Switch
-              checked={form.connector}
-              onCheckedChange={(val) =>
-                setForm((f) => ({ ...f, connector: val }))
-              }
-            />
-          </div>
-        </div>
-
-        {/* ── Visibility ──────────────────────────────────────────────── */}
-        <div className="space-y-2">
-          <Label className="text-xs text-slate-500 uppercase tracking-wide">
-            Visibility
-          </Label>
-          <div className="flex flex-wrap gap-1.5">
-            {Object.entries(VISIBILITY_LABELS).map(([val, label]) => (
-              <button
-                key={val}
-                type="button"
-                onClick={() =>
-                  setForm((f) => ({
-                    ...f,
-                    visibility: val as TrailEditValues['visibility'],
-                  }))
-                }
-                className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors cursor-pointer
-                  ${
-                    form.visibility === val
-                      ? 'bg-slate-800 text-white border-slate-800'
-                      : 'bg-white text-slate-600 border-slate-300 hover:border-slate-500'
-                  }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* ── Save error ───────────────────────────────────────────────── */}
-        {saveError && (
-          <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded p-2">
-            {saveError}
-          </p>
-        )}
-      </div>
-    </>
-  );
-}
-
 // ── Shell: reads URL param, finds trail, owns the Drawer open state ───────────
 
 interface TrailDetailDrawerProps {
   trails: Trail[];
-  onTrailUpdated: (updated: Trail) => void;
-  onTrailCreated: (created: Trail) => void;
+  onTrailSaved: (saved: Trail, isNew: boolean) => void;
   drawApi: DrawTrailApi;
   regionId: number | null;
   onClose?: () => void;
+  onEditingTrailChange?: (id: number | null) => void;
 }
 
 export default function TrailDetailDrawer({
   trails,
-  onTrailUpdated,
-  onTrailCreated,
+  onTrailSaved,
   drawApi,
   regionId,
   onClose: onCloseExternal,
+  onEditingTrailChange,
 }: TrailDetailDrawerProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const trailIdParam = searchParams.get('trailId');
@@ -1183,7 +859,6 @@ export default function TrailDetailDrawer({
 
   const open = trail !== null || isNewTrail;
 
-  // ── Auth / role ──────────────────────────────────────────────────────────
   const { role } = useAuth();
   const canEdit = role !== null && EDIT_ROLES.includes(role);
 
@@ -1204,9 +879,9 @@ export default function TrailDetailDrawer({
     onCloseExternal?.();
   }
 
-  function handleTrailCreated(created: Trail) {
-    navigateToTrail(created.id);
-    onTrailCreated(created);
+  function handleTrailSaved(saved: Trail, isNew: boolean) {
+    if (isNew) navigateToTrail(saved.id);
+    onTrailSaved(saved, isNew);
   }
 
   return (
@@ -1217,25 +892,17 @@ export default function TrailDetailDrawer({
         ${open ? 'translate-x-0' : 'translate-x-full'}`}
     >
       <div className="flex-1 overflow-y-auto">
-        {/* New trail panel — shown when trailId=-1 */}
-        {isNewTrail && (
-          <NewTrailPanel
+        {open && (
+          <TrailPanel
+            key={isNewTrail ? 'new' : String(trail?.id)}
+            trail={isNewTrail ? null : trail}
+            canEdit={canEdit}
             drawApi={drawApi}
             regionId={regionId}
             onClose={closeDrawer}
-            onTrailCreated={handleTrailCreated}
-          />
-        )}
-        {/* key={trail.id} resets all inner state when the selected trail changes */}
-        {trail && (
-          <TrailPanel
-            key={trail.id}
-            trail={trail}
-            canEdit={canEdit}
-            drawApi={drawApi}
-            onClose={closeDrawer}
-            onTrailUpdated={onTrailUpdated}
+            onTrailSaved={handleTrailSaved}
             onNavigateToTrail={navigateToTrail}
+            onEditingTrailChange={onEditingTrailChange}
           />
         )}
       </div>
