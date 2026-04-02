@@ -1,5 +1,7 @@
 # Ladysmith Trail Stewards
 
+**Web app (temporary):** https://ladysmithtrailstewards.vercel.app/
+
 Web application for the Ladysmith Trail Stewards — a trail stewardship organization in Ladysmith, BC, Canada. Provides public-facing information, user authentication with role-based access control, and an admin dashboard with interactive GIS trail mapping.
 
 ## Project Management
@@ -10,13 +12,13 @@ Planned work is tracked as specs — the source of truth for all features, bugs,
 
 ## Prerequisites
 
-| Tool | Version | Install |
-|---|---|---|
-| Node.js | 20+ | [nodejs.org](https://nodejs.org) |
-| pnpm | latest | `npm i -g pnpm` |
-| Docker Desktop | latest | [docker.com](https://www.docker.com/products/docker-desktop) |
-| Supabase CLI | latest | `brew install supabase/tap/supabase` |
-| Mapbox account | — | [mapbox.com](https://mapbox.com) — free tier is sufficient |
+| Tool           | Version | Install                                                      |
+| -------------- | ------- | ------------------------------------------------------------ |
+| Node.js        | 20+     | [nodejs.org](https://nodejs.org)                             |
+| pnpm           | latest  | `npm i -g pnpm`                                              |
+| Docker Desktop | latest  | [docker.com](https://www.docker.com/products/docker-desktop) |
+| Supabase CLI   | latest  | `brew install supabase/tap/supabase`                         |
+| Mapbox account | —       | [mapbox.com](https://mapbox.com) — free tier is sufficient   |
 
 ---
 
@@ -40,12 +42,12 @@ Open `.env` and fill in your values. For **local development** use the local Sup
 
 Required variables:
 
-| Variable | Where to get it |
-|---|---|
-| `VITE_SUPABASE_URL` | `http://127.0.0.1:54321` (local) or Supabase cloud dashboard |
-| `VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY` | `supabase status` → **Publishable** key |
-| `VITE_SUPABASE_SECRET_KEY` | `supabase status` → **Secret** key — integration tests only, never in browser code |
-| `VITE_MAPBOX_ACCESS_TOKEN` | [Mapbox account tokens page](https://account.mapbox.com/access-tokens/) |
+| Variable                                | Where to get it                                                                    |
+| --------------------------------------- | ---------------------------------------------------------------------------------- |
+| `VITE_SUPABASE_URL`                     | `http://127.0.0.1:54321` (local) or Supabase cloud dashboard                       |
+| `VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY` | `supabase status` → **Publishable** key                                            |
+| `VITE_SUPABASE_SECRET_KEY`              | `supabase status` → **Secret** key — integration tests only, never in browser code |
+| `VITE_MAPBOX_ACCESS_TOKEN`              | [Mapbox account tokens page](https://account.mapbox.com/access-tokens/)            |
 
 ### 3. Start local Supabase
 
@@ -70,11 +72,11 @@ pnpm dev            # http://localhost:5173
 
 Available after `pnpm db:reset` (password: `password123`):
 
-| Email | Role |
-|---|---|
-| `user@test.com` | user |
-| `super_user@test.com` | super_user |
-| `admin@test.com` | admin |
+| Email                  | Role        |
+| ---------------------- | ----------- |
+| `user@test.com`        | user        |
+| `super_user@test.com`  | super_user  |
+| `admin@test.com`       | admin       |
 | `super_admin@test.com` | super_admin |
 
 ---
@@ -92,6 +94,7 @@ Available after `pnpm db:reset` (password: `password123`):
 ### Granting region access and elevated roles
 
 #### In-app
+
 Not yet implemented — user role and region management should eventually be handled through the admin UI at `/users`. For now use the dashboard options below.
 
 #### Dev: Supabase Studio
@@ -105,6 +108,7 @@ Not yet implemented — user role and region management should eventually be han
 5. Save.
 
 Or use the **SQL Editor**:
+
 ```sql
 update public.profiles
 set role = 'admin', region_id = 1
@@ -121,6 +125,7 @@ where auth_user_id = '<uuid>';
 4. Save.
 
 Or use the **SQL Editor** (left sidebar):
+
 ```sql
 update public.profiles
 set role = 'admin', region_id = 1
