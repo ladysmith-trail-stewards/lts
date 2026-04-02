@@ -126,6 +126,7 @@ The actual policy text is out of scope for this spec — placeholder copy will b
 
 | Issue | Description | Status |
 | ----- | ----------- | ------ |
+| [#77](https://github.com/ladysmith-trail-stewards/lts/issues/77) | [F-009] Policy Acknowledgement on Signup | Open |
 
 ## Related PRs
 
