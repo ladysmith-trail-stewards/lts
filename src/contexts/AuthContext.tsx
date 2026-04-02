@@ -14,6 +14,9 @@ export interface AuthState {
   regionId: number | null;
   /** Convenience helper — true when role is 'admin' or 'super_admin'. */
   isAdmin: boolean;
+  /** True when the user has accepted the membership policy. Sourced from the
+   *  `policy_accepted` JWT claim stamped by custom_access_token_hook. */
+  policyAccepted: boolean;
   loading: boolean;
 }
 
@@ -22,6 +25,7 @@ const AuthContext = createContext<AuthState>({
   role: null,
   regionId: null,
   isAdmin: false,
+  policyAccepted: false,
   loading: true,
 });
 
@@ -31,29 +35,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null | undefined>(undefined);
   const [role, setRole] = useState<AppRole | null>(null);
   const [regionId, setRegionId] = useState<number | null>(null);
+  const [policyAccepted, setPolicyAccepted] = useState(false);
   const [loading, setLoading] = useState(true);
 
   /** isAdmin is derived from role — no separate state needed. */
   const isAdmin = role === 'admin' || role === 'super_admin';
 
   /**
-   * Load claims from the verified JWT via getClaims().
-   *
-   * getClaims() verifies the JWT against the server's JWKS endpoint (cached),
-   * returning the decoded payload without a DB round-trip. Our custom access
-   * token hook injects user_role and region_id into every JWT, so we read
-   * them directly from the verified claims here.
+   * Apply claims from a JWT payload to context state.
+   * When onAuthStateChange fires with a fresh session we decode the access
+   * token directly — this is always the newest JWT, avoiding getClaims()
+   * returning a stale cached token after a refresh.
+   * On mount (no session yet) we fall back to getClaims().
    */
-  async function loadClaims() {
-    const { data, error } = await supabase.auth.getClaims();
-    if (error || !data) {
-      setRole(null);
-      setRegionId(null);
+  async function loadClaims(session?: { access_token: string } | null) {
+    let claims: Record<string, unknown> = {};
+
+    if (session?.access_token) {
+      // Decode the JWT payload directly — no network call, always fresh.
+      try {
+        const payload = session.access_token.split('.')[1];
+        claims = JSON.parse(atob(payload));
+      } catch {
+        // Malformed token — fall through to empty claims
+      }
     } else {
-      const claims = data.claims as Record<string, unknown>;
-      setRole((claims.user_role as AppRole) ?? null);
-      setRegionId(claims.region_id != null ? Number(claims.region_id) : null);
+      // Fallback for initial mount where we don't have a session object handy.
+      const { data, error } = await supabase.auth.getClaims();
+      if (!error && data) {
+        claims = data.claims as Record<string, unknown>;
+      }
     }
+
+    setRole((claims.user_role as AppRole) ?? null);
+    setRegionId(claims.region_id != null ? Number(claims.region_id) : null);
+    setPolicyAccepted(claims.policy_accepted === true);
     setLoading(false);
   }
 
@@ -71,18 +87,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     // Keep state in sync on sign-in, sign-out, and token-refresh.
-    // getClaims() is called after every token refresh so custom claims
-    // (role, region) always reflect the latest minted JWT.
+    // We pass the session directly so loadClaims can decode the fresh JWT
+    // rather than relying on getClaims() which may return a cached token.
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       const resolved = session?.user ?? null;
       setUser(resolved);
       if (resolved) {
-        loadClaims();
+        loadClaims(session);
       } else {
         setRole(null);
         setRegionId(null);
+        setPolicyAccepted(false);
         setLoading(false);
       }
     });
@@ -91,7 +108,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, role, regionId, isAdmin, loading }}>
+    <AuthContext.Provider
+      value={{ user, role, regionId, isAdmin, policyAccepted, loading }}
+    >
       {children}
     </AuthContext.Provider>
   );

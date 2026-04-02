@@ -1,4 +1,4 @@
-import { Routes, Route, useLocation } from 'react-router-dom';
+import { Routes, Route, useLocation, Navigate } from 'react-router-dom';
 import Header from './components/Header';
 import Footer from './components/Footer';
 import { Toaster } from '@/components/ui/sonner';
@@ -14,8 +14,26 @@ import AuthConfirmPage from './pages/AuthConfirmPage';
 import AuthErrorPage from './pages/AuthErrorPage';
 import LogoutPage from './pages/LogoutPage';
 import UsersPage from './pages/UsersPage';
-import PendingApprovalPage from './pages/PendingApprovalPage';
+import AcceptPolicyPage from './pages/AcceptPolicyPage';
 import RequireAdmin from './components/RequireAdmin';
+import { useAuth } from './contexts/AuthContext';
+
+/**
+ * Intercepts authenticated users who land on "/" before completing signup flow.
+ * Unauthenticated visitors see the normal home page.
+ */
+function HomeRoute() {
+  const { user, policyAccepted, loading } = useAuth();
+
+  if (loading) return null;
+
+  // Signed in but hasn't accepted policy → must accept first
+  if (user && !policyAccepted) {
+    return <Navigate to="/accept-policy" replace />;
+  }
+
+  return <HomePage />;
+}
 
 function App() {
   const location = useLocation();
@@ -29,7 +47,7 @@ function App() {
           <div className="flex flex-col flex-1">
             <div className="flex-1">
               <Routes>
-                <Route path="/" element={<HomePage />} />
+                <Route path="/" element={<HomeRoute />} />
                 <Route path="/charter" element={<CharterPage />} />
                 <Route path="/contact" element={<ContactPage />} />
                 <Route path="/map" element={<MapPage />} />
@@ -46,10 +64,8 @@ function App() {
                 <Route path="/auth/confirm" element={<AuthConfirmPage />} />
                 <Route path="/auth/error" element={<AuthErrorPage />} />
                 <Route path="/logout" element={<LogoutPage />} />
-                <Route
-                  path="/pending-approval"
-                  element={<PendingApprovalPage />}
-                />
+                {/* /accept-policy must be outside RequireAuth to avoid redirect loops */}
+                <Route path="/accept-policy" element={<AcceptPolicyPage />} />
                 <Route
                   path="/users"
                   element={
