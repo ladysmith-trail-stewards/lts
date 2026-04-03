@@ -381,7 +381,7 @@ export type Database = {
         Args: { geom1: unknown; geom2: unknown };
         Returns: boolean;
       };
-      accept_policy: { Args: never; Returns: undefined };
+      accept_policy: { Args: { p_region_id: number }; Returns: undefined };
       addauth: { Args: { '': string }; Returns: boolean };
       addgeometrycolumn:
         | {

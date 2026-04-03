@@ -35,9 +35,10 @@ Because Google OAuth is a full-browser redirect, consent cannot be captured _bef
 
 - Add `policy_accepted_at timestamptz default null` to `public.profiles`.
 - The `handle_new_user()` trigger continues to insert new OAuth users with `role = 'pending'` but now leaves `policy_accepted_at = NULL`.
-- Add `accept_policy()` SECURITY DEFINER RPC:
-  - Accepts no arguments; resolves the caller via `auth.uid()`.
-  - Sets `policy_accepted_at = now()` on the matching profile row.
+- Add `accept_policy(p_region_id bigint)` SECURITY DEFINER RPC:
+  - Accepts a `p_region_id bigint` argument; resolves the caller via `auth.uid()`.
+  - Validates that `p_region_id > 0` and that the region exists.
+  - Sets `policy_accepted_at = now()` and `region_id = p_region_id` on the matching profile row atomically.
   - Restricted: `REVOKE EXECUTE FROM public`; `GRANT EXECUTE TO authenticated`.
   - Body performs an explicit check that the calling user's profile has `role = 'pending'` and `policy_accepted_at IS NULL` — prevents re-invocation by non-pending users.
 - Add `policy_accepted_at` to the `get_admin_users()` RPC return set so admins can see whether a pending user accepted the policy.
@@ -71,8 +72,9 @@ if (role === 'pending') → <Navigate to="/pending-approval" />
 **`AcceptPolicyPage` (`src/pages/AcceptPolicyPage.tsx`)** — new page:
 
 - Displays the policy text (inline or from a static asset — content TBD by the org).
+- Requires the user to select their **region** from a dropdown populated via `getRegionsDb()` (regions with `id > 0`; the Default placeholder region is excluded). Region selection is required — the Submit button stays disabled until a valid region is chosen.
 - Requires the user to scroll to a checkbox: "I have read and agree to the Ladysmith Trail Stewards membership policy."
-- **Submit** button calls `supabase.rpc('accept_policy')`, forces a session refresh (`supabase.auth.refreshSession()`), then navigates to `/pending-approval`.
+- **Submit** button calls `supabase.rpc('accept_policy', { p_region_id })`, forces a session refresh (`supabase.auth.refreshSession()`), then navigates to `/pending-approval`.
 - If the RPC returns an error, show an inline error message — do not silently fail.
 - Already-accepted users who navigate directly to `/accept-policy` are redirected to `/` by a guard in the page itself.
 
@@ -97,14 +99,15 @@ The actual policy text is out of scope for this spec — placeholder copy will b
 
 **Unit tests:**
 
-- `AcceptPolicyPage`: checkbox starts unchecked; Submit is disabled until checked; Submit calls `supabase.rpc('accept_policy')`; on success, navigates to `/pending-approval`.
+- `AcceptPolicyPage`: checkbox starts unchecked; region selector starts empty; Submit is disabled until both checked and a region is selected; Submit calls `supabase.rpc('accept_policy', { p_region_id })` with the chosen region; on success, navigates to `/pending-approval`.
 - `RequireAuth`: renders `/accept-policy` redirect when `policyAccepted === false`; renders `/pending-approval` redirect when `policyAccepted === true && role === 'pending'`; renders children when `policyAccepted === true && role !== 'pending'`.
 
 **Integration tests:**
 
-- `accept_policy()` RPC sets `policy_accepted_at` for the calling user's profile.
+- `accept_policy()` RPC sets `policy_accepted_at` and `region_id` for the calling user's profile.
 - `accept_policy()` RPC raises an error if called by a non-`pending` user.
 - `accept_policy()` RPC raises an error if `policy_accepted_at` is already set.
+- `accept_policy()` RPC raises an error if `p_region_id` is 0 or invalid.
 - `custom_access_token_hook` sets `policy_accepted = false` when `policy_accepted_at IS NULL`.
 - `custom_access_token_hook` sets `policy_accepted = true` when `policy_accepted_at IS NOT NULL`.
 - A `pending` user with `policy_accepted_at = NULL` cannot read any rows from `profiles` or `trails`.
