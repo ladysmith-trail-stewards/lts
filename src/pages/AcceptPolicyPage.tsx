@@ -12,7 +12,18 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { ScrollText } from 'lucide-react';
+import {
+  getRegionsDb,
+  type RegionRow,
+} from '@/lib/db_services/regions/getRegionsDb';
 
 export default function AcceptPolicyPage() {
   const { user, policyAccepted } = useAuth();
@@ -20,6 +31,18 @@ export default function AcceptPolicyPage() {
   const [checked, setChecked] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [regions, setRegions] = useState<RegionRow[]>([]);
+  const [regionId, setRegionId] = useState<number | null>(null);
+
+  useEffect(() => {
+    getRegionsDb(supabase).then(({ data, error: fetchError }) => {
+      if (data) setRegions(data);
+      if (fetchError)
+        setError('Failed to load regions. Please refresh and try again.');
+    });
+    // supabase is a stable module-level singleton; no re-run needed
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Navigate home only after AuthContext confirms policyAccepted = true.
   // This ensures PendingApprovalPage never sees stale state.
@@ -45,10 +68,16 @@ export default function AcceptPolicyPage() {
   }
 
   async function handleAccept() {
+    if (!regionId || regionId <= 0) {
+      setError('Please select your region before continuing.');
+      return;
+    }
     setError(null);
     setSubmitting(true);
 
-    const { error: rpcError } = await supabase.rpc('accept_policy');
+    const { error: rpcError } = await supabase.rpc('accept_policy', {
+      p_region_id: regionId,
+    });
 
     if (rpcError) {
       setError((rpcError as { message: string }).message);
@@ -115,6 +144,28 @@ export default function AcceptPolicyPage() {
 
             {error && <p className="text-sm text-red-500">{error}</p>}
 
+            <div className="flex flex-col gap-2">
+              <label className="text-sm font-medium">
+                Region <span className="text-red-500">*</span>
+              </label>
+              <Select
+                value={regionId !== null ? String(regionId) : ''}
+                onValueChange={(val) => setRegionId(Number(val))}
+                disabled={submitting}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select your region…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {regions.map((r) => (
+                    <SelectItem key={r.id} value={String(r.id)}>
+                      {r.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <label className="flex items-start gap-3 cursor-pointer select-none">
               <input
                 type="checkbox"
@@ -131,7 +182,7 @@ export default function AcceptPolicyPage() {
 
             <Button
               onClick={handleAccept}
-              disabled={!checked || submitting}
+              disabled={!checked || !regionId || regionId <= 0 || submitting}
               className="w-full"
             >
               {submitting ? 'Submitting…' : 'Accept & Continue'}
