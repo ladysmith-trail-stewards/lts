@@ -43,11 +43,13 @@ def densify_trail(geojson_str: str, interval_m: float = 5.0) -> list[tuple[float
                          ogr.wkbLineString25D, ogr.wkbMultiLineString25D):
         raise ValueError(f"Expected a LineString geometry, got type {geom_type}")
 
-    # Determine UTM zone from the geometry centroid.
+    # Determine the UTM zone and hemisphere from the geometry centroid.
     env = geom.GetEnvelope()  # (min_lon, max_lon, min_lat, max_lat)
     lon_centre = (env[0] + env[1]) / 2.0
+    lat_centre = (env[2] + env[3]) / 2.0
     utm_zone = int((lon_centre + 180.0) / 6.0) + 1
-    utm_epsg = 32600 + utm_zone  # WGS84 UTM North
+    # WGS84 UTM North = 326xx, WGS84 UTM South = 327xx
+    utm_epsg = 32600 + utm_zone if lat_centre >= 0.0 else 32700 + utm_zone
 
     wgs84 = osr.SpatialReference()
     wgs84.ImportFromEPSG(4326)

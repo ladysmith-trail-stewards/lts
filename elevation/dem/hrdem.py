@@ -120,7 +120,7 @@ class HRDEMProvider(DemProvider):
             log.debug("HRDEM tile: %dx%d pixels", ds.RasterXSize, ds.RasterYSize)
             return {"dataset": ds, "path": tmp.name}
 
-        except Exception as exc:  # noqa: BLE001
+        except (OSError, RuntimeError, Exception) as exc:  # gdal.GDALError is a subclass of RuntimeError
             log.warning("HRDEM tile preparation failed: %s", exc)
             if os.path.exists(tmp.name):
                 os.unlink(tmp.name)
@@ -194,7 +194,7 @@ class HRDEMProvider(DemProvider):
                     log.info("HRDEM: using coverage '%s'", self._coverage_id)
                     return self._coverage_id
 
-        except Exception as exc:  # noqa: BLE001
+        except (requests.RequestException, ElementTree.ParseError, ValueError) as exc:
             log.warning("Could not parse HRDEM GetCapabilities: %s — using default", exc)
 
         self._coverage_id = _DEFAULT_DTM_COVERAGE

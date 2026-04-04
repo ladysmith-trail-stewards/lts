@@ -11,7 +11,8 @@ import json
 import math
 from typing import Optional
 
-# Earth mean radius in metres (WGS84 semi-major axis ≈ 6 378 137 m).
+# Earth mean radius in metres (used for haversine; slightly shorter than the
+# WGS84 semi-major axis of 6 378 137 m but appropriate for geographic distances).
 _EARTH_RADIUS_M = 6_371_000.0
 
 

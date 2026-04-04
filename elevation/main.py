@@ -112,6 +112,16 @@ def _process_trail(conn, trail: dict, hrdem: HRDEMProvider, fallback: OpenMeteoP
         hrdem.close_tile(hrdem_tile)
 
     # Step 5: build output structures
+    # PostGIS LineStringZ requires a numeric Z for every vertex; fall back to
+    # 0.0 when both DEM providers returned no data.  Log a warning so the
+    # operator knows the profile may contain zeroed-out sea-level artefacts.
+    missing = sum(1 for e in elevations if e is None)
+    if missing:
+        log.warning(
+            "  Trail %d: %d/%d points have no elevation data from either DEM "
+            "— Z will be stored as 0.0 for those points",
+            trail_id, missing, len(elevations),
+        )
     coords_3d = [
         (lon, lat, elev if elev is not None else 0.0)
         for (lon, lat), elev in zip(points, elevations)
