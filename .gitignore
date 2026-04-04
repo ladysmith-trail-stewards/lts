@@ -28,3 +28,12 @@ package-lock.json
 # Database backups — never commit dump files
 backups/
 .vercel
+
+# Python (elevation app)
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+elevation/.venv/
+elevation/venv/
+elevation/.env
