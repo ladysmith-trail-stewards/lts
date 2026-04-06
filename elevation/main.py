@@ -32,8 +32,9 @@ DEM sources
    Docs: https://www.download-telecharger.services.geo.ca/pub/elevation/dem_mne/
          HRDEMmosaic_mosaiqueMNEHR/HRDEM_Mosaic_WCS-WMS_instructions_EN.pdf
 
-2. Copernicus DEM GLO-30 via opentopodata.org (~30 m, global fallback)
-   https://api.opentopodata.org/v1/copernicus30
+2. Copernicus DEM GLO-30 via AWS Open Data COG tiles (~30 m, global fallback)
+   Tile URL: https://copernicus-dem-30m.s3.amazonaws.com/<name>/<name>.tif
+   GDAL /vsicurl/ streams only the needed COG blocks (HTTP range requests).
 """
 
 import argparse
@@ -69,7 +70,8 @@ def _process_trail(conn, trail: dict, hrdem: HRDEMProvider, fallback: Copernicus
     1. Densify the 2D trail geometry to DENSIFY_INTERVAL_M-metre spacing.
     2. Fetch a high-resolution HRDEM tile covering the trail's bounding box.
     3. Sample elevation at every densified vertex (HRDEM first).
-    4. For vertices where HRDEM has no data, query Copernicus GLO-30 in batch.
+    4. For vertices where HRDEM has no data, fetch a Copernicus GLO-30 raster
+       tile for their bounding box and sample from it.
     5. Build the 3D LineString and elevation profile and upsert to DB.
     """
     trail_id: int = trail["id"]
@@ -94,7 +96,8 @@ def _process_trail(conn, trail: dict, hrdem: HRDEMProvider, fallback: Copernicus
         # Step 3: sample HRDEM for all points
         elevations = hrdem.sample_points(hrdem_tile, points)
 
-        # Step 4: Copernicus GLO-30 fallback for None elevations
+        # Step 4: Copernicus GLO-30 fallback — fetch raster tile for the
+        # bounding box of the missing points, then sample from it.
         fallback_indices = [i for i, e in enumerate(elevations) if e is None]
         if fallback_indices:
             log.info(
@@ -104,7 +107,14 @@ def _process_trail(conn, trail: dict, hrdem: HRDEMProvider, fallback: Copernicus
                 len(points),
             )
             fallback_points = [points[i] for i in fallback_indices]
-            fallback_elevs = fallback.sample_points(None, fallback_points)
+            fb_lons = [p[0] for p in fallback_points]
+            fb_lats = [p[1] for p in fallback_points]
+            fallback_bbox = (min(fb_lons), min(fb_lats), max(fb_lons), max(fb_lats))
+            fallback_tile = fallback.fetch_tile(fallback_bbox)
+            try:
+                fallback_elevs = fallback.sample_points(fallback_tile, fallback_points)
+            finally:
+                fallback.close_tile(fallback_tile)
             for i, idx in enumerate(fallback_indices):
                 elevations[idx] = fallback_elevs[i]
 

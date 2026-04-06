@@ -8,7 +8,9 @@ Standalone Python tool that enriches trail data with elevation profiles.
 2. Fetches a high-resolution Digital Elevation Model (DEM) tile from the
    **NRCan HRDEM Mosaic** (≤ 1 m resolution, Canada) via OGC WCS 2.0.1.
 3. For any point outside the HRDEM coverage, falls back to the
-   **Copernicus DEM GLO-30** (~30 m, global) via opentopodata.org.
+   **Copernicus DEM GLO-30** (~30 m, global) streamed from the AWS Open Data
+   public bucket via GDAL's /vsicurl/ driver (HTTP range requests — only the
+   COG tile blocks covering the trail are downloaded).
 4. Uses GDAL to densify each trail to a vertex every **5 m** along the line.
 5. Samples elevation at each vertex (HRDEM first, Copernicus GLO-30 fallback).
 6. Writes the results back to the `trail_elevations` table as:
@@ -91,13 +93,20 @@ python main.py update-outdated
 The tool discovers the DTM coverage identifier automatically from
 `GetCapabilities` on first run and caches it for subsequent trails.
 
-### Copernicus DEM GLO-30 via opentopodata.org (~30 m, global fallback)
+### Copernicus DEM GLO-30 via AWS Open Data (~30 m, global fallback)
 
 - **Resolution**: ~30 m (1 arc-second, Copernicus DEM GLO-30)
 - **Coverage**: global (80°S – 90°N)
-- **API**: `https://api.opentopodata.org/v1/copernicus30`
-- **Cost**: free, no API key required
-- **Docs**: https://www.opentopodata.org/#copernicus30-dem
+- **Source**: [AWS Open Data — Copernicus DEM GLO-30](https://registry.opendata.aws/copernicus-dem/)
+- **Access**: GDAL `/vsicurl/` HTTP range requests against the public S3 bucket  
+  `https://copernicus-dem-30m.s3.amazonaws.com/`
+- **Cost**: free, no API key or AWS account required
+
+Tiles are 1°×1° COG (Cloud-Optimised GeoTIFF) files.  The tool identifies
+which tiles cover the trail's bounding box, opens them via GDAL's virtual
+file-system (`/vsicurl/`), merges them into a GDAL VRT, and samples elevation
+at each vertex — only the tile blocks that contain the requested points are
+fetched over the network.
 
 ## Database changes
 
@@ -118,7 +127,7 @@ elevation/
   dem/
     base.py             Abstract DemProvider
     hrdem.py            NRCan HRDEM via WCS (high-res, Canada)
-    copernicus.py       Copernicus GLO-30 via opentopodata.org (~30 m, global fallback)
+    copernicus.py       Copernicus GLO-30 via AWS Open Data COG tiles (~30 m, global fallback)
   db/
     client.py           psycopg2 connection helper
     trails.py           Trail fetch queries
