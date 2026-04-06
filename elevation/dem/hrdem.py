@@ -21,11 +21,20 @@ Official access guide (PDF):
 
 STAC API (modern alternative, not used here):
   https://datacube.services.geo.ca/stac/api/
+
+Local tile cache
+----------------
+When cache_dir is provided (or taken from the DEM_CACHE_DIR environment
+variable), downloaded GeoTIFF tiles are stored on disk under that directory
+and reused on subsequent runs.  The cache file name encodes the buffered
+bounding box so different trails that share the same bbox hit the same file.
+Cached tiles are never deleted by close_tile(); only non-cached temp files are.
 """
 
 import logging
 import os
 import tempfile
+from pathlib import Path
 from typing import Any, Optional
 from xml.etree import ElementTree
 
@@ -52,20 +61,39 @@ _WCS_NS = "http://www.opengis.net/wcs/2.0"
 _DEFAULT_BUFFER_DEG = 0.002
 
 
+def _hrdem_cache_filename(
+    min_lon: float, min_lat: float, max_lon: float, max_lat: float
+) -> str:
+    """Return a deterministic, filesystem-safe filename for a buffered bbox tile."""
+
+    def _fmt(v: float) -> str:
+        return f"{v:.4f}".replace("-", "n").replace(".", "d")
+
+    return f"hrdem_{_fmt(min_lon)}_{_fmt(min_lat)}_{_fmt(max_lon)}_{_fmt(max_lat)}.tif"
+
+
 class HRDEMProvider(DemProvider):
     """NRCan HRDEM Mosaic DTM provider (WCS 2.0.1).
 
     Tile lifecycle
     --------------
-    fetch_tile()   downloads one GeoTIFF per trail and writes it to a temp
-                   file that GDAL keeps open.
+    fetch_tile()    checks the local cache first; on a miss it downloads the
+                    GeoTIFF from WCS, saves it to the cache dir, and opens it
+                    with GDAL.  When no cache_dir is configured a temp file is
+                    used instead (old behaviour).
     sample_points() reads pixel values directly from the open dataset.
-    close_tile()   closes the GDAL dataset and deletes the temp file.
+    close_tile()    closes the GDAL dataset.  Cached files are kept on disk;
+                    non-cached temp files are deleted.
     """
 
-    def __init__(self, buffer_deg: float = _DEFAULT_BUFFER_DEG) -> None:
+    def __init__(
+        self,
+        buffer_deg: float = _DEFAULT_BUFFER_DEG,
+        cache_dir: Optional[str] = None,
+    ) -> None:
         self._buffer = buffer_deg
         self._coverage_id: Optional[str] = None
+        self._cache_dir: Optional[Path] = Path(cache_dir) if cache_dir else None
 
     # ── tile management ──────────────────────────────────────────────────────
 
@@ -76,6 +104,24 @@ class HRDEMProvider(DemProvider):
         max_lon += self._buffer
         max_lat += self._buffer
 
+        # ── cache hit? ────────────────────────────────────────────────────────
+        cache_path: Optional[Path] = None
+        if self._cache_dir:
+            self._cache_dir.mkdir(parents=True, exist_ok=True)
+            cache_path = self._cache_dir / _hrdem_cache_filename(
+                min_lon, min_lat, max_lon, max_lat
+            )
+            if cache_path.exists():
+                try:
+                    ds = gdal.Open(str(cache_path))
+                    if ds is not None:
+                        log.debug("HRDEM: cache hit — %s", cache_path.name)
+                        return {"dataset": ds, "path": str(cache_path), "from_cache": True}
+                except RuntimeError as exc:
+                    log.warning("HRDEM: cached tile unreadable (%s) — re-downloading", exc)
+                    cache_path.unlink(missing_ok=True)
+
+        # ── download from WCS ─────────────────────────────────────────────────
         coverage_id = self._get_dtm_coverage_id()
         log.debug("HRDEM GetCoverage: coverage=%s bbox=(%.4f %.4f %.4f %.4f)",
                   coverage_id, min_lon, min_lat, max_lon, max_lat)
@@ -104,26 +150,38 @@ class HRDEMProvider(DemProvider):
                       resp.status_code, content_type)
             return None
 
-        # Write to a named temp file so GDAL can open it.
-        tmp = tempfile.NamedTemporaryFile(suffix=".tif", delete=False)
-        try:
-            tmp.write(resp.content)
-            tmp.flush()
+        # ── save to cache or temp file ────────────────────────────────────────
+        out_path: str
+        from_cache: bool
+        if cache_path is not None:
+            out_path = str(cache_path)
+            from_cache = True
+        else:
+            tmp = tempfile.NamedTemporaryFile(suffix=".tif", delete=False)
+            out_path = tmp.name
             tmp.close()
+            from_cache = False
 
-            ds = gdal.Open(tmp.name)
+        try:
+            with open(out_path, "wb") as fh:
+                fh.write(resp.content)
+
+            ds = gdal.Open(out_path)
             if ds is None:
                 log.warning("GDAL could not open HRDEM GeoTIFF")
-                os.unlink(tmp.name)
+                if not from_cache:
+                    os.unlink(out_path)
                 return None
 
-            log.debug("HRDEM tile: %dx%d pixels", ds.RasterXSize, ds.RasterYSize)
-            return {"dataset": ds, "path": tmp.name}
+            log.debug("HRDEM tile: %dx%d pixels%s",
+                      ds.RasterXSize, ds.RasterYSize,
+                      " (cached)" if from_cache else "")
+            return {"dataset": ds, "path": out_path, "from_cache": from_cache}
 
-        except (OSError, RuntimeError, Exception) as exc:  # gdal.GDALError is a subclass of RuntimeError
+        except (OSError, RuntimeError) as exc:  # gdal.GDALError is a subclass of RuntimeError
             log.warning("HRDEM tile preparation failed: %s", exc)
-            if os.path.exists(tmp.name):
-                os.unlink(tmp.name)
+            if not from_cache and os.path.exists(out_path):
+                os.unlink(out_path)
             return None
 
     def sample_points(
@@ -163,9 +221,10 @@ class HRDEMProvider(DemProvider):
         if tile is None:
             return
         tile["dataset"] = None  # close GDAL dataset
-        path = tile.get("path")
-        if path and os.path.exists(path):
-            os.unlink(path)
+        if not tile.get("from_cache"):
+            path = tile.get("path")
+            if path and os.path.exists(path):
+                os.unlink(path)
 
     # ── internal helpers ─────────────────────────────────────────────────────
 

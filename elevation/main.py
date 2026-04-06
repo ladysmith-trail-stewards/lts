@@ -34,12 +34,20 @@ DEM sources
 
 2. Copernicus DEM GLO-30 via AWS Open Data COG tiles (~30 m, global fallback)
    Tile URL: https://copernicus-dem-30m.s3.amazonaws.com/<name>/<name>.tif
-   GDAL /vsicurl/ streams only the needed COG blocks (HTTP range requests).
+   Tiles are downloaded in full on first use and reused from the local cache.
+
+Tile cache
+----------
+Downloaded DEM tiles are stored in DEM_CACHE_DIR (default: ~/.cache/lts_dem).
+Set DEM_CACHE_DIR to a different path in .env or as an environment variable.
+Delete the directory to clear the cache and force fresh downloads.
 """
 
 import argparse
 import logging
+import os
 import sys
+from pathlib import Path
 
 from db.client import get_connection
 from db.elevations import upsert_trail_elevation
@@ -58,6 +66,11 @@ log = logging.getLogger(__name__)
 
 # Desired spacing between consecutive elevation samples in metres.
 DENSIFY_INTERVAL_M = 5.0
+
+# Local directory where DEM tiles are cached between runs.
+# Override via the DEM_CACHE_DIR environment variable.
+_DEFAULT_CACHE_DIR = Path.home() / ".cache" / "lts_dem"
+_CACHE_DIR: str = os.environ.get("DEM_CACHE_DIR") or str(_DEFAULT_CACHE_DIR)
 
 
 # ── core processing ───────────────────────────────────────────────────────────
@@ -151,8 +164,8 @@ def _process_trail(conn, trail: dict, hrdem: HRDEMProvider, fallback: Copernicus
 def update_trail_by_id(trail_id: int) -> None:
     """Update the 3D geometry and elevation profile for a single trail."""
     conn = get_connection()
-    hrdem = HRDEMProvider()
-    fallback = CopernicusProvider()
+    hrdem = HRDEMProvider(cache_dir=_CACHE_DIR)
+    fallback = CopernicusProvider(cache_dir=_CACHE_DIR)
 
     try:
         trail = fetch_trail(conn, trail_id)
@@ -167,8 +180,8 @@ def update_trail_by_id(trail_id: int) -> None:
 def update_all_trails() -> None:
     """Update 3D geometry and elevation profiles for all active trails."""
     conn = get_connection()
-    hrdem = HRDEMProvider()
-    fallback = CopernicusProvider()
+    hrdem = HRDEMProvider(cache_dir=_CACHE_DIR)
+    fallback = CopernicusProvider(cache_dir=_CACHE_DIR)
 
     try:
         trails = fetch_all_trails(conn)
@@ -183,8 +196,8 @@ def update_all_trails() -> None:
 def update_outdated_trails() -> None:
     """Update trails whose geometry changed more than 30 s after last elevation compute."""
     conn = get_connection()
-    hrdem = HRDEMProvider()
-    fallback = CopernicusProvider()
+    hrdem = HRDEMProvider(cache_dir=_CACHE_DIR)
+    fallback = CopernicusProvider(cache_dir=_CACHE_DIR)
 
     try:
         trails = fetch_outdated_trails(conn)

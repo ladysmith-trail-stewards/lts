@@ -98,15 +98,32 @@ The tool discovers the DTM coverage identifier automatically from
 - **Resolution**: ~30 m (1 arc-second, Copernicus DEM GLO-30)
 - **Coverage**: global (80°S – 90°N)
 - **Source**: [AWS Open Data — Copernicus DEM GLO-30](https://registry.opendata.aws/copernicus-dem/)
-- **Access**: GDAL `/vsicurl/` HTTP range requests against the public S3 bucket  
+- **Access**: direct HTTPS download from the public S3 bucket  
   `https://copernicus-dem-30m.s3.amazonaws.com/`
 - **Cost**: free, no API key or AWS account required
 
-Tiles are 1°×1° COG (Cloud-Optimised GeoTIFF) files.  The tool identifies
-which tiles cover the trail's bounding box, opens them via GDAL's virtual
-file-system (`/vsicurl/`), merges them into a GDAL VRT, and samples elevation
-at each vertex — only the tile blocks that contain the requested points are
-fetched over the network.
+Tiles are 1°×1° GeoTIFF files.  The tool identifies which tiles cover the
+trail's bounding box, downloads any that are not already cached, and merges
+them into a GDAL VRT for sampling.
+
+## Tile cache
+
+Downloaded DEM tiles are stored locally so subsequent runs reuse them without
+network access.
+
+| Setting | Default | Notes |
+|---------|---------|-------|
+| `DEM_CACHE_DIR` (env var) | `~/.cache/lts_dem` | Override in `.env` or shell |
+
+**HRDEM tiles** are cached per buffered bounding box (filename encodes the
+bbox coordinates).  **Copernicus tiles** are cached as one file per 1°×1°
+degree cell (e.g. `Copernicus_DSM_COG_10_N48_00_W124_00_DEM.tif`).
+
+To clear the cache and force fresh downloads, delete the cache directory:
+
+```bash
+rm -rf ~/.cache/lts_dem   # or the path set in DEM_CACHE_DIR
+```
 
 ## Database changes
 

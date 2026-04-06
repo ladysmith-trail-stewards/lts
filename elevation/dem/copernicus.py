@@ -1,10 +1,7 @@
 """Copernicus DEM GLO-30 provider — global ~30 m fallback.
 
 Fetches COG (Cloud-Optimised GeoTIFF) tiles from the AWS Open Data public
-bucket via GDAL's /vsicurl/ virtual file-system and samples elevation values
-directly from the raster.  HTTP range requests ensure only the COG tile blocks
-that contain the requested points are transferred over the network — there is
-no full-tile download.
+bucket and samples elevation values directly from the raster.
 
 AWS Open Data registry:
   https://registry.opendata.aws/copernicus-dem/
@@ -21,11 +18,25 @@ Example — trail near (lat ≈ 48.9°N, lon ≈ 123.8°W):
       Copernicus_DSM_COG_10_N48_00_W124_00_DEM/
       Copernicus_DSM_COG_10_N48_00_W124_00_DEM.tif
 
+Local tile cache
+----------------
+When cache_dir is configured, each 1°×1° GeoTIFF tile is downloaded in full
+on its first use and written to the cache directory as ``{name}.tif``.
+Subsequent runs open the local file instead of making any network requests.
+
+If a tile is not yet cached, it is streamed via GDAL's /vsicurl/ virtual
+file-system using HTTP range requests (only the COG blocks covering the
+requested points are fetched); it is then immediately also saved to the cache
+directory for future use.
+
+When cache_dir is None, the original /vsicurl/ streaming behaviour is used
+without any local storage.
+
 Tile lifecycle (matching HRDEMProvider)
 ---------------------------------------
-  fetch_tile()    identifies which 1°×1° tiles cover the trail bbox, verifies
-                  each is accessible via a GDAL /vsicurl/ open (COG header
-                  read, a few KB), and builds a GDAL VRT mosaic over the bbox.
+  fetch_tile()    resolves each needed 1°×1° tile to a local path (cached) or
+                  a /vsicurl/ path (not cached), downloads missing tiles when
+                  cache_dir is set, and builds a GDAL VRT mosaic over the bbox.
   sample_points() reads pixel values directly from the open VRT dataset.
   close_tile()    closes the GDAL dataset and removes the temp VRT file.
 """
@@ -34,8 +45,10 @@ import logging
 import math
 import os
 import tempfile
+from pathlib import Path
 from typing import Optional
 
+import requests
 from osgeo import gdal
 
 from dem.base import DemProvider
@@ -67,28 +80,34 @@ def _vsicurl_path(name: str) -> str:
 class CopernicusProvider(DemProvider):
     """Copernicus DEM GLO-30 (~30 m, global) via AWS Open Data COG tiles.
 
-    Uses GDAL's /vsicurl/ driver to stream individual COG tile blocks via HTTP
-    range requests, avoiding full GeoTIFF downloads.  Multiple 1°×1° tiles
-    are merged into a single GDAL VRT when the trail's bounding box spans
-    more than one degree cell.
+    On cache miss the tile is streamed via GDAL /vsicurl/ (COG range requests)
+    and, when cache_dir is set, also downloaded in full so future runs can read
+    it entirely from disk without any network access.
+
+    Multiple 1°×1° tiles are merged into a single GDAL VRT when the trail's
+    bounding box spans more than one degree cell.
 
     Tile lifecycle
     --------------
-    fetch_tile()    opens the tiles covering the trail bbox via GDAL /vsicurl/
-                    and merges them into a GDAL VRT dataset.
+    fetch_tile()    resolves tiles to local paths (cached) or /vsicurl/ paths
+                    (uncached), downloads tiles to cache when cache_dir is set,
+                    and builds a GDAL VRT mosaic dataset.
     sample_points() reads pixel values from the open VRT dataset.
     close_tile()    closes the dataset and removes the temp VRT file.
     """
 
+    def __init__(self, cache_dir: Optional[str] = None) -> None:
+        self._cache_dir: Optional[Path] = Path(cache_dir) if cache_dir else None
+
     # ── tile management ──────────────────────────────────────────────────────
 
     def fetch_tile(self, bbox: tuple[float, float, float, float]) -> Optional[dict]:
-        """Open Copernicus GLO-30 COG tile(s) covering the given bounding box.
+        """Open Copernicus GLO-30 tile(s) covering the given bounding box.
 
-        Identifies every 1°×1° tile whose extent intersects the bbox, verifies
-        each is accessible (GDAL reads the COG header via a range request), and
-        builds a GDAL VRT mosaic from the valid tiles.  Returns None when no
-        tiles are accessible (e.g. the trail is entirely over open ocean).
+        Resolves each needed 1°×1° tile to a local cached file (downloading it
+        if necessary) or to a GDAL /vsicurl/ path.  Merges all accessible tiles
+        into a GDAL VRT mosaic.  Returns None when no tiles are accessible (e.g.
+        the trail is entirely over open ocean).
         """
         min_lon, min_lat, max_lon, max_lat = bbox
 
@@ -100,14 +119,9 @@ class CopernicusProvider(DemProvider):
         for lat_f in lat_floors:
             for lon_f in lon_floors:
                 name = _tile_name(lat_f, lon_f)
-                path = _vsicurl_path(name)
-                try:
-                    ds = gdal.Open(path)
-                    if ds is not None:
-                        valid_sources.append(path)
-                        ds = None  # close immediately; VRT will re-open
-                except RuntimeError:
-                    log.debug("Copernicus: tile not accessible: %s", path)
+                source = self._resolve_tile(name)
+                if source:
+                    valid_sources.append(source)
 
         if not valid_sources:
             log.warning(
@@ -182,3 +196,58 @@ class CopernicusProvider(DemProvider):
         vrt_path = tile.get("vrt_path")
         if vrt_path and os.path.exists(vrt_path):
             os.unlink(vrt_path)
+
+    # ── internal helpers ─────────────────────────────────────────────────────
+
+    def _resolve_tile(self, name: str) -> Optional[str]:
+        """Return the source path to use for the given tile name.
+
+        Resolution order:
+        1. Local cache file (if cache_dir is set and the file exists).
+        2. Download from S3 to cache_dir (if cache_dir is set but not yet cached).
+        3. GDAL /vsicurl/ path (if cache_dir is not set or download fails).
+
+        Returns None if the tile is not accessible from any source.
+        """
+        if self._cache_dir is not None:
+            self._cache_dir.mkdir(parents=True, exist_ok=True)
+            local_path = self._cache_dir / f"{name}.tif"
+
+            if local_path.exists():
+                log.debug("Copernicus: cache hit — %s", local_path.name)
+                return str(local_path)
+
+            # Cache miss — download the full tile.
+            url = f"{_S3_HTTPS_BASE}/{name}/{name}.tif"
+            log.debug("Copernicus: downloading tile %s", name)
+            try:
+                resp = requests.get(url, timeout=120, stream=True)
+                if resp.status_code == 200:
+                    with open(local_path, "wb") as fh:
+                        for chunk in resp.iter_content(chunk_size=65536):
+                            fh.write(chunk)
+                    log.debug("Copernicus: cached %s → %s", name, local_path)
+                    return str(local_path)
+                else:
+                    log.debug(
+                        "Copernicus: tile not found on S3: %s (HTTP %d)",
+                        name, resp.status_code,
+                    )
+                    return None
+            except requests.RequestException as exc:
+                log.warning("Copernicus: download failed for %s: %s", name, exc)
+                if local_path.exists():
+                    local_path.unlink()
+                # Fall through to /vsicurl/ as last resort.
+
+        # No cache_dir, or download failed — stream via /vsicurl/.
+        vsicurl = _vsicurl_path(name)
+        try:
+            ds = gdal.Open(vsicurl)
+            if ds is not None:
+                ds = None  # close immediately; VRT will re-open
+                return vsicurl
+        except RuntimeError:
+            pass
+        log.debug("Copernicus: tile not accessible: %s", name)
+        return None
