@@ -3,7 +3,7 @@
 
 Standalone Python tool that pulls trail geometries from the Supabase/PostgreSQL
 database, fetches elevation data from the NRCan HRDEM (high-resolution Canada
-DEM) with an Open-Meteo global fallback, and stores 3D geometries plus
+DEM) with a Copernicus GLO-30 global fallback, and stores 3D geometries plus
 distance/elevation profiles back into the trail_elevations table.
 
 Usage
@@ -32,8 +32,8 @@ DEM sources
    Docs: https://www.download-telecharger.services.geo.ca/pub/elevation/dem_mne/
          HRDEMmosaic_mosaiqueMNEHR/HRDEM_Mosaic_WCS-WMS_instructions_EN.pdf
 
-2. Open-Meteo Elevation API (~90 m Copernicus DEM, global fallback)
-   https://api.open-meteo.com/v1/elevation
+2. Copernicus DEM GLO-30 via opentopodata.org (~30 m, global fallback)
+   https://api.opentopodata.org/v1/copernicus30
 """
 
 import argparse
@@ -44,7 +44,7 @@ from db.client import get_connection
 from db.elevations import upsert_trail_elevation
 from db.trails import fetch_all_trails, fetch_outdated_trails, fetch_trail
 from dem.hrdem import HRDEMProvider
-from dem.open_meteo import OpenMeteoProvider
+from dem.copernicus import CopernicusProvider
 from processing.densify import densify_trail
 from processing.profile import build_3d_linestring_geojson, build_elevation_profile
 
@@ -62,14 +62,14 @@ DENSIFY_INTERVAL_M = 5.0
 # ── core processing ───────────────────────────────────────────────────────────
 
 
-def _process_trail(conn, trail: dict, hrdem: HRDEMProvider, fallback: OpenMeteoProvider) -> None:
+def _process_trail(conn, trail: dict, hrdem: HRDEMProvider, fallback: CopernicusProvider) -> None:
     """Compute and persist the elevation profile for one trail.
 
     Steps:
     1. Densify the 2D trail geometry to DENSIFY_INTERVAL_M-metre spacing.
     2. Fetch a high-resolution HRDEM tile covering the trail's bounding box.
     3. Sample elevation at every densified vertex (HRDEM first).
-    4. For vertices where HRDEM has no data, query Open-Meteo in batch.
+    4. For vertices where HRDEM has no data, query Copernicus GLO-30 in batch.
     5. Build the 3D LineString and elevation profile and upsert to DB.
     """
     trail_id: int = trail["id"]
@@ -94,11 +94,11 @@ def _process_trail(conn, trail: dict, hrdem: HRDEMProvider, fallback: OpenMeteoP
         # Step 3: sample HRDEM for all points
         elevations = hrdem.sample_points(hrdem_tile, points)
 
-        # Step 4: Open-Meteo fallback for None elevations
+        # Step 4: Copernicus GLO-30 fallback for None elevations
         fallback_indices = [i for i, e in enumerate(elevations) if e is None]
         if fallback_indices:
             log.info(
-                "  Trail %d: %d/%d points need Open-Meteo fallback",
+                "  Trail %d: %d/%d points need Copernicus GLO-30 fallback",
                 trail_id,
                 len(fallback_indices),
                 len(points),
@@ -142,7 +142,7 @@ def update_trail_by_id(trail_id: int) -> None:
     """Update the 3D geometry and elevation profile for a single trail."""
     conn = get_connection()
     hrdem = HRDEMProvider()
-    fallback = OpenMeteoProvider()
+    fallback = CopernicusProvider()
 
     try:
         trail = fetch_trail(conn, trail_id)
@@ -158,7 +158,7 @@ def update_all_trails() -> None:
     """Update 3D geometry and elevation profiles for all active trails."""
     conn = get_connection()
     hrdem = HRDEMProvider()
-    fallback = OpenMeteoProvider()
+    fallback = CopernicusProvider()
 
     try:
         trails = fetch_all_trails(conn)
@@ -174,7 +174,7 @@ def update_outdated_trails() -> None:
     """Update trails whose geometry changed more than 30 s after last elevation compute."""
     conn = get_connection()
     hrdem = HRDEMProvider()
-    fallback = OpenMeteoProvider()
+    fallback = CopernicusProvider()
 
     try:
         trails = fetch_outdated_trails(conn)

@@ -8,9 +8,9 @@ Standalone Python tool that enriches trail data with elevation profiles.
 2. Fetches a high-resolution Digital Elevation Model (DEM) tile from the
    **NRCan HRDEM Mosaic** (≤ 1 m resolution, Canada) via OGC WCS 2.0.1.
 3. For any point outside the HRDEM coverage, falls back to the
-   **Open-Meteo Elevation API** (~90 m Copernicus DEM, global).
+   **Copernicus DEM GLO-30** (~30 m, global) via opentopodata.org.
 4. Uses GDAL to densify each trail to a vertex every **5 m** along the line.
-5. Samples elevation at each vertex (HRDEM first, Open-Meteo fallback).
+5. Samples elevation at each vertex (HRDEM first, Copernicus GLO-30 fallback).
 6. Writes the results back to the `trail_elevations` table as:
    - a 3-D `LineStringZ` geometry (EPSG:4326, Z = metres above sea level), and
    - a JSON elevation profile (`[{distance_m, elevation_m}, …]`).
@@ -91,12 +91,13 @@ python main.py update-outdated
 The tool discovers the DTM coverage identifier automatically from
 `GetCapabilities` on first run and caches it for subsequent trails.
 
-### Open-Meteo Elevation API (low-resolution, global fallback)
+### Copernicus DEM GLO-30 via opentopodata.org (~30 m, global fallback)
 
-- **Resolution**: ~90 m (Copernicus DEM GLO-90)
-- **Coverage**: global
-- **API**: `https://api.open-meteo.com/v1/elevation`
+- **Resolution**: ~30 m (1 arc-second, Copernicus DEM GLO-30)
+- **Coverage**: global (80°S – 90°N)
+- **API**: `https://api.opentopodata.org/v1/copernicus30`
 - **Cost**: free, no API key required
+- **Docs**: https://www.opentopodata.org/#copernicus30-dem
 
 ## Database changes
 
@@ -117,7 +118,7 @@ elevation/
   dem/
     base.py             Abstract DemProvider
     hrdem.py            NRCan HRDEM via WCS (high-res, Canada)
-    open_meteo.py       Open-Meteo API (low-res, global fallback)
+    copernicus.py       Copernicus GLO-30 via opentopodata.org (~30 m, global fallback)
   db/
     client.py           psycopg2 connection helper
     trails.py           Trail fetch queries
