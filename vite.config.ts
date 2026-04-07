@@ -1,15 +1,15 @@
-import { defineConfig } from 'vitest/config'
-import react, { reactCompilerPreset } from '@vitejs/plugin-react'
-import babel from '@rolldown/plugin-babel'
-import tailwindcss from '@tailwindcss/vite'
-import path from 'path'
+import { defineConfig } from 'vitest/config';
+import react, { reactCompilerPreset } from '@vitejs/plugin-react';
+import babel from '@rolldown/plugin-babel';
+import tailwindcss from '@tailwindcss/vite';
+import path from 'path';
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
-    babel({ presets: [reactCompilerPreset()] })
+    babel({ presets: [reactCompilerPreset()] }),
   ],
   resolve: {
     alias: {
@@ -39,8 +39,11 @@ export default defineConfig({
           name: 'integration',
           environment: 'node',
           include: ['src/**/*.integration.test.ts'],
+          globalSetup: [
+            'src/lib/supabase/__tests__/integration.global-setup.ts',
+          ],
         },
       },
     ],
   },
-})
+});

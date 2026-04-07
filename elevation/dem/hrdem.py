@@ -1,187 +1,90 @@
-"""Canada HRDEM DEM provider.
-
-Fetches a Digital Terrain Model (DTM) tile from the Natural Resources Canada
-(NRCan) HRDEM Mosaic via OGC Web Coverage Service (WCS) 2.0.1.
-
-Service details
----------------
-Endpoint   : https://datacube.services.geo.ca/ows/elevation
-WCS version: 2.0.1
-Coverage   : DTM mosaic at up to 1 m resolution (coverage available for most
-             populated / surveyed areas of Canada; returns no data elsewhere).
-             The exact coverage identifier is discovered at runtime from
-             GetCapabilities and cached for the life of the provider object.
-CRS        : Geographic subsets are requested in EPSG:4326 (WGS84 lon/lat).
-             The service returns a GeoTIFF in its native CRS; GDAL handles
-             re-sampling automatically when we query pixel values.
-
-Official access guide (PDF):
-  https://www.download-telecharger.services.geo.ca/pub/elevation/dem_mne/
-  HRDEMmosaic_mosaiqueMNEHR/HRDEM_Mosaic_WCS-WMS_instructions_EN.pdf
-
-STAC API (modern alternative, not used here):
-  https://datacube.services.geo.ca/stac/api/
-
-Local tile cache
-----------------
-When cache_dir is provided (or taken from the DEM_CACHE_DIR environment
-variable), downloaded GeoTIFF tiles are stored on disk under that directory
-and reused on subsequent runs.  The cache file name encodes the buffered
-bounding box so different trails that share the same bbox hit the same file.
-Cached tiles are never deleted by close_tile(); only non-cached temp files are.
-"""
+"""Canada HRDEM DTM provider — 1 m resolution via NRCan STAC + COG tiles."""
 
 import logging
 import os
 import tempfile
 from pathlib import Path
-from typing import Any, Optional
-from xml.etree import ElementTree
+from typing import Optional
 
 import requests
-from osgeo import gdal
+from osgeo import gdal, osr
 
 from dem.base import DemProvider
 
 log = logging.getLogger(__name__)
 
-# Ensure GDAL exceptions are raised instead of silently returning None.
 gdal.UseExceptions()
 
-_WCS_URL = "https://datacube.services.geo.ca/ows/elevation"
-_WCS_VERSION = "2.0.1"
+# GDAL VSI/curl config for reliable COG range-request access.
+gdal.SetConfigOption("GDAL_HTTP_TIMEOUT", "60")
+gdal.SetConfigOption("GDAL_HTTP_MAX_RETRY", "5")
+gdal.SetConfigOption("GDAL_HTTP_RETRY_DELAY", "5")
+gdal.SetConfigOption("CPL_VSIL_CURL_CACHE_SIZE", "256000000")
 
-# Known fallback if GetCapabilities parsing fails.
-_DEFAULT_DTM_COVERAGE = "HRDEMMosaic:HRDEM_DTM"
+_STAC_SEARCH_URL = "https://datacube.services.geo.ca/stac/api/search"
+_STAC_COLLECTION = "hrdem-lidar"
+_STAC_DTM_ASSET  = "dtm"
 
-# WCS namespace used in the capabilities document.
-_WCS_NS = "http://www.opengis.net/wcs/2.0"
-
-# Degrees added around the trail bbox so that edge points sample valid pixels.
+# Degrees added around the trail bbox so edge points sample valid pixels.
 _DEFAULT_BUFFER_DEG = 0.002
 
 
-def _hrdem_cache_filename(
-    min_lon: float, min_lat: float, max_lon: float, max_lat: float
-) -> str:
-    """Return a deterministic, filesystem-safe filename for a buffered bbox tile."""
-
-    def _fmt(v: float) -> str:
-        return f"{v:.4f}".replace("-", "n").replace(".", "d")
-
-    return f"hrdem_{_fmt(min_lon)}_{_fmt(min_lat)}_{_fmt(max_lon)}_{_fmt(max_lat)}.tif"
-
-
 class HRDEMProvider(DemProvider):
-    """NRCan HRDEM Mosaic DTM provider (WCS 2.0.1).
-
-    Tile lifecycle
-    --------------
-    fetch_tile()    checks the local cache first; on a miss it downloads the
-                    GeoTIFF from WCS, saves it to the cache dir, and opens it
-                    with GDAL.  When no cache_dir is configured a temp file is
-                    used instead (old behaviour).
-    sample_points() reads pixel values directly from the open dataset.
-    close_tile()    closes the GDAL dataset.  Cached files are kept on disk;
-                    non-cached temp files are deleted.
-    """
+    """NRCan HRDEM DTM provider (STAC + bbox-clipped local cache, ~1 m resolution, Canada)."""
 
     def __init__(
         self,
         buffer_deg: float = _DEFAULT_BUFFER_DEG,
         cache_dir: Optional[str] = None,
     ) -> None:
-        self._buffer = buffer_deg
-        self._coverage_id: Optional[str] = None
-        self._cache_dir: Optional[Path] = Path(cache_dir) if cache_dir else None
+        self._buffer    = buffer_deg
+        self._cache_dir = Path(cache_dir) if cache_dir else None
 
     # ── tile management ──────────────────────────────────────────────────────
 
     def fetch_tile(self, bbox: tuple[float, float, float, float]) -> Optional[dict]:
+        """Open HRDEM DTM tile(s) covering the given bounding box.
+
+        Queries the NRCan STAC API for intersecting LiDAR DTM tiles, resolves
+        each to a local cached clip or /vsicurl/ path, and merges them into a
+        single GDAL VRT mosaic.  Returns None when no tiles cover the area.
+        """
         min_lon, min_lat, max_lon, max_lat = bbox
         min_lon -= self._buffer
         min_lat -= self._buffer
         max_lon += self._buffer
         max_lat += self._buffer
 
-        # ── cache hit? ────────────────────────────────────────────────────────
-        cache_path: Optional[Path] = None
-        if self._cache_dir:
-            self._cache_dir.mkdir(parents=True, exist_ok=True)
-            cache_path = self._cache_dir / _hrdem_cache_filename(
-                min_lon, min_lat, max_lon, max_lat
+        tile_sources = self._resolve_tiles(min_lon, min_lat, max_lon, max_lat)
+        if not tile_sources:
+            log.debug(
+                "HRDEM: no STAC tiles for bbox (%.3f,%.3f)-(%.3f,%.3f)",
+                min_lon, min_lat, max_lon, max_lat,
             )
-            if cache_path.exists():
-                try:
-                    ds = gdal.Open(str(cache_path))
-                    if ds is not None:
-                        log.debug("HRDEM: cache hit — %s", cache_path.name)
-                        return {"dataset": ds, "path": str(cache_path), "from_cache": True}
-                except RuntimeError as exc:
-                    log.warning("HRDEM: cached tile unreadable (%s) — re-downloading", exc)
-                    cache_path.unlink(missing_ok=True)
+            return None
 
-        # ── download from WCS ─────────────────────────────────────────────────
-        coverage_id = self._get_dtm_coverage_id()
-        log.debug("HRDEM GetCoverage: coverage=%s bbox=(%.4f %.4f %.4f %.4f)",
-                  coverage_id, min_lon, min_lat, max_lon, max_lat)
-
-        # Repeated 'subset' parameters are passed as a list of 2-tuples so that
-        # requests encodes them as ?subset=Long(…)&subset=Lat(…).
-        params = [
-            ("service", "WCS"),
-            ("version", _WCS_VERSION),
-            ("request", "GetCoverage"),
-            ("coverageId", coverage_id),
-            ("subset", f"Long({min_lon},{max_lon})"),
-            ("subset", f"Lat({min_lat},{max_lat})"),
-            ("format", "image/tiff"),
-        ]
-
+        vrt_path: Optional[str] = None
         try:
-            resp = requests.get(_WCS_URL, params=params, timeout=60)
-        except requests.RequestException as exc:
-            log.warning("HRDEM request failed: %s", exc)
-            return None
-
-        content_type = resp.headers.get("content-type", "")
-        if resp.status_code != 200 or not content_type.startswith("image/tiff"):
-            log.debug("HRDEM returned %s (%s) — no coverage for this area",
-                      resp.status_code, content_type)
-            return None
-
-        # ── save to cache or temp file ────────────────────────────────────────
-        out_path: str
-        from_cache: bool
-        if cache_path is not None:
-            out_path = str(cache_path)
-            from_cache = True
-        else:
-            tmp = tempfile.NamedTemporaryFile(suffix=".tif", delete=False)
-            out_path = tmp.name
+            tmp = tempfile.NamedTemporaryFile(suffix=".vrt", delete=False)
+            vrt_path = tmp.name
             tmp.close()
-            from_cache = False
 
-        try:
-            with open(out_path, "wb") as fh:
-                fh.write(resp.content)
-
-            ds = gdal.Open(out_path)
-            if ds is None:
-                log.warning("GDAL could not open HRDEM GeoTIFF")
-                if not from_cache:
-                    os.unlink(out_path)
+            vrt_ds = gdal.BuildVRT(vrt_path, tile_sources)
+            if vrt_ds is None:
+                log.warning("HRDEM: gdal.BuildVRT returned None")
+                os.unlink(vrt_path)
                 return None
 
-            log.debug("HRDEM tile: %dx%d pixels%s",
-                      ds.RasterXSize, ds.RasterYSize,
-                      " (cached)" if from_cache else "")
-            return {"dataset": ds, "path": out_path, "from_cache": from_cache}
+            log.debug(
+                "HRDEM: VRT built from %d tile(s) for bbox (%.3f,%.3f)-(%.3f,%.3f)",
+                len(tile_sources), min_lon, min_lat, max_lon, max_lat,
+            )
+            return {"dataset": vrt_ds, "vrt_path": vrt_path}
 
-        except (OSError, RuntimeError) as exc:  # gdal.GDALError is a subclass of RuntimeError
-            log.warning("HRDEM tile preparation failed: %s", exc)
-            if not from_cache and os.path.exists(out_path):
-                os.unlink(out_path)
+        except (OSError, RuntimeError) as exc:
+            log.warning("HRDEM: VRT build failed: %s", exc)
+            if vrt_path and os.path.exists(vrt_path):
+                os.unlink(vrt_path)
             return None
 
     def sample_points(
@@ -189,6 +92,7 @@ class HRDEMProvider(DemProvider):
         tile: Optional[dict],
         points: list[tuple[float, float]],
     ) -> list[Optional[float]]:
+        """Sample elevation values from the VRT raster dataset."""
         if tile is None:
             return [None] * len(points)
 
@@ -198,11 +102,23 @@ class HRDEMProvider(DemProvider):
         nodata = band.GetNoDataValue()
         width, height = ds.RasterXSize, ds.RasterYSize
 
+        wgs84 = osr.SpatialReference()
+        wgs84.ImportFromEPSG(4326)
+        wgs84.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
+        raster_srs = osr.SpatialReference()
+        raster_srs.ImportFromWkt(ds.GetProjection())
+        transform = osr.CoordinateTransformation(wgs84, raster_srs)
+
         results: list[Optional[float]] = []
         for lon, lat in points:
-            # Affine transform: px = (lon - x_origin) / pixel_width
-            px = int((lon - gt[0]) / gt[1])
-            py = int((lat - gt[3]) / gt[5])
+            try:
+                x, y, _ = transform.TransformPoint(lon, lat)
+            except Exception:
+                results.append(None)
+                continue
+
+            px = int((x - gt[0]) / gt[1])
+            py = int((y - gt[3]) / gt[5])
 
             if px < 0 or py < 0 or px >= width or py >= height:
                 results.append(None)
@@ -218,44 +134,208 @@ class HRDEMProvider(DemProvider):
         return results
 
     def close_tile(self, tile: Optional[dict]) -> None:
+        """Close the GDAL VRT dataset and remove the temp VRT file."""
         if tile is None:
             return
-        tile["dataset"] = None  # close GDAL dataset
-        if not tile.get("from_cache"):
-            path = tile.get("path")
-            if path and os.path.exists(path):
-                os.unlink(path)
+        tile["dataset"] = None
+        vrt_path = tile.get("vrt_path")
+        if vrt_path and os.path.exists(vrt_path):
+            os.unlink(vrt_path)
 
-    # ── internal helpers ─────────────────────────────────────────────────────
+    def warm_cache(self, trails: list[dict]) -> None:
+        """Pre-clip HRDEM tiles for the union bbox of all given trails.
 
-    def _get_dtm_coverage_id(self) -> str:
-        """Discover the DTM coverage identifier from GetCapabilities.
-
-        The result is cached so that subsequent trails in the same run do not
-        issue additional HTTP requests.
+        Call before processing a batch for best performance. Does nothing if
+        cache_dir is None.
         """
-        if self._coverage_id:
-            return self._coverage_id
+        if self._cache_dir is None or not trails:
+            return
 
+        import json as _json
+
+        all_coords: list[tuple[float, float]] = []
+        for trail in trails:
+            geom = trail.get("geometry", {})
+            if isinstance(geom, str):
+                geom = _json.loads(geom)
+            all_coords.extend(geom.get("coordinates", []))
+
+        if not all_coords:
+            return
+
+        lons = [c[0] for c in all_coords]
+        lats = [c[1] for c in all_coords]
+        min_lon = min(lons) - self._buffer
+        min_lat = min(lats) - self._buffer
+        max_lon = max(lons) + self._buffer
+        max_lat = max(lats) + self._buffer
+
+        log.debug(
+            "HRDEM warm_cache: union bbox (%.4f,%.4f)-(%.4f,%.4f)",
+            min_lon, min_lat, max_lon, max_lat,
+        )
+        self._resolve_tiles(min_lon, min_lat, max_lon, max_lat)
+
+    def _resolve_tiles(
+        self,
+        min_lon: float, min_lat: float,
+        max_lon: float, max_lat: float,
+    ) -> list[str]:
+        """Query STAC for DTM tiles covering the bbox and return source paths."""
         try:
             resp = requests.get(
-                _WCS_URL,
-                params={"service": "WCS", "version": _WCS_VERSION, "request": "GetCapabilities"},
+                _STAC_SEARCH_URL,
+                params={
+                    "collections": _STAC_COLLECTION,
+                    "bbox": f"{min_lon},{min_lat},{max_lon},{max_lat}",
+                    "limit": 50,
+                },
                 timeout=30,
             )
             resp.raise_for_status()
-            root = ElementTree.fromstring(resp.content)
+            features = resp.json().get("features", [])
+        except (requests.RequestException, ValueError) as exc:
+            log.warning("HRDEM STAC search failed: %s", exc)
+            return []
 
-            for summary in root.iter(f"{{{_WCS_NS}}}CoverageSummary"):
-                id_elem = summary.find(f"{{{_WCS_NS}}}CoverageId")
-                if id_elem is not None and "DTM" in id_elem.text.upper():
-                    self._coverage_id = id_elem.text
-                    log.info("HRDEM: using coverage '%s'", self._coverage_id)
-                    return self._coverage_id
+        sources: list[str] = []
+        for feature in features:
+            item_id = feature.get("id", "unknown")
+            dtm_asset = feature.get("assets", {}).get(_STAC_DTM_ASSET)
+            if not dtm_asset:
+                continue
+            href = dtm_asset.get("href", "")
+            if not href:
+                continue
+            source = self._resolve_tile(item_id, href, min_lon, min_lat, max_lon, max_lat)
+            if source:
+                sources.append(source)
 
-        except (requests.RequestException, ElementTree.ParseError, ValueError) as exc:
-            log.warning("Could not parse HRDEM GetCapabilities: %s — using default", exc)
+        return sources
 
-        self._coverage_id = _DEFAULT_DTM_COVERAGE
-        log.info("HRDEM: falling back to default coverage '%s'", self._coverage_id)
-        return self._coverage_id
+    def _resolve_tile(
+        self,
+        item_id: str,
+        href: str,
+        min_lon: float, min_lat: float,
+        max_lon: float, max_lat: float,
+    ) -> Optional[str]:
+        """Return the source path for a single STAC tile.
+
+        With cache_dir: returns a local clip GeoTIFF, creating or expanding it
+        if needed. Without cache_dir: returns a /vsicurl/ streaming path.
+        """
+        vsicurl = f"/vsicurl/{href}"
+
+        if self._cache_dir is None:
+            try:
+                ds = gdal.Open(vsicurl)
+                if ds is not None:
+                    ds = None
+                    return vsicurl
+            except RuntimeError as exc:
+                log.warning("HRDEM: tile not accessible %s: %s", item_id, exc)
+            return None
+
+        # ── cache_dir set ────────────────────────────────────────────────────
+        self._cache_dir.mkdir(parents=True, exist_ok=True)
+        clip_path = self._cache_dir / f"{item_id}.tif"
+
+        if clip_path.exists() and self._clip_covers(clip_path, min_lon, min_lat, max_lon, max_lat):
+            log.debug("HRDEM: clip cache hit — %s", clip_path.name)
+            return str(clip_path)
+
+        if clip_path.exists():
+            log.debug("HRDEM: clip too small for new bbox, re-clipping %s", item_id)
+        else:
+            log.debug("HRDEM: clipping %s from remote COG", item_id)
+
+        return self._clip_from_cog(item_id, vsicurl, clip_path, min_lon, min_lat, max_lon, max_lat)
+
+    def _clip_covers(
+        self,
+        clip_path: Path,
+        min_lon: float, min_lat: float,
+        max_lon: float, max_lat: float,
+    ) -> bool:
+        """Return True if the local clip GeoTIFF covers the requested WGS84 bbox."""
+        try:
+            ds = gdal.Open(str(clip_path))
+            if ds is None:
+                return False
+            gt = ds.GetGeoTransform()
+            w, h = ds.RasterXSize, ds.RasterYSize
+
+            raster_srs = osr.SpatialReference()
+            raster_srs.ImportFromWkt(ds.GetProjection())
+            wgs84 = osr.SpatialReference()
+            wgs84.ImportFromEPSG(4326)
+            wgs84.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
+            ct = osr.CoordinateTransformation(raster_srs, wgs84)
+
+            corners_proj = [
+                (gt[0],             gt[3]),
+                (gt[0] + w * gt[1], gt[3]),
+                (gt[0],             gt[3] + h * gt[5]),
+                (gt[0] + w * gt[1], gt[3] + h * gt[5]),
+            ]
+            corners_wgs = [ct.TransformPoint(x, y) for x, y in corners_proj]
+            clip_lons = [c[0] for c in corners_wgs]
+            clip_lats = [c[1] for c in corners_wgs]
+
+            return (
+                min(clip_lons) <= min_lon and max(clip_lons) >= max_lon
+                and min(clip_lats) <= min_lat and max(clip_lats) >= max_lat
+            )
+        except (RuntimeError, OSError):
+            return False
+
+    def _clip_from_cog(
+        self,
+        item_id: str,
+        vsicurl: str,
+        clip_path: Path,
+        min_lon: float, min_lat: float,
+        max_lon: float, max_lat: float,
+    ) -> Optional[str]:
+        """Clip the bbox from the remote COG and save to clip_path."""
+        tmp_path = clip_path.with_name(clip_path.stem + "-part.tif")
+        try:
+            src_ds = gdal.Open(vsicurl)
+            if src_ds is None:
+                log.warning("HRDEM: cannot open remote tile %s", item_id)
+                return None
+
+            wgs84 = osr.SpatialReference()
+            wgs84.ImportFromEPSG(4326)
+            wgs84.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
+            raster_srs = osr.SpatialReference()
+            raster_srs.ImportFromWkt(src_ds.GetProjection())
+            ct = osr.CoordinateTransformation(wgs84, raster_srs)
+
+            ul_x, ul_y, _ = ct.TransformPoint(min_lon, max_lat)
+            lr_x, lr_y, _ = ct.TransformPoint(max_lon, min_lat)
+
+            clip_ds = gdal.Translate(
+                str(tmp_path),
+                src_ds,
+                format="GTiff",
+                projWin=[ul_x, ul_y, lr_x, lr_y],
+                creationOptions=["COMPRESS=DEFLATE", "TILED=YES"],
+            )
+            src_ds = None
+
+            if clip_ds is None:
+                log.warning("HRDEM: gdal.Translate returned None for %s", item_id)
+                tmp_path.unlink(missing_ok=True)
+                return None
+
+            clip_ds = None
+            tmp_path.rename(clip_path)
+            log.debug("HRDEM: clip saved → %s", clip_path.name)
+            return str(clip_path)
+
+        except (RuntimeError, OSError) as exc:
+            log.warning("HRDEM: clip failed for %s: %s", item_id, exc)
+            tmp_path.unlink(missing_ok=True)
+            return vsicurl

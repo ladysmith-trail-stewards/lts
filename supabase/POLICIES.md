@@ -43,6 +43,16 @@
 | Admin       |   ✅   |   —    |   —    |   —    |
 | Super Admin |   ✅   |   ✅   |   ✅   |   ✅   |
 
+### `trail_elevations`
+
+| Role        | SELECT |
+| ----------- | :----: |
+| Anon        |   ✅   |
+| User        |   ✅   |
+| Super User  |   ✅   |
+| Admin       |   ✅   |
+| Super Admin |   ✅   |
+
 ### `trails`
 
 | Role        | SELECT | INSERT | UPDATE | DELETE |

@@ -1,11 +1,3 @@
--- Trail elevation: adds geom_updated_at to trails and creates the trail_elevations table.
--- The Python elevation app (elevation/) reads geom_updated_at to detect stale profiles
--- and writes computed 3D geometry + elevation profiles into trail_elevations.
-
--- ── 1. Add geom_updated_at to trails ─────────────────────────────────────────
--- Records when the geometry column was last changed. Initialised to updated_at
--- for existing rows; subsequently maintained by the trigger below.
-
 alter table public.trails
   add column if not exists geom_updated_at timestamptz not null default now();
 
@@ -13,12 +5,8 @@ comment on column public.trails.geom_updated_at is
   'Timestamp of the last geometry change. Maintained by trails_set_geom_updated_at trigger. '
   'Compared against trail_elevations.updated_at to detect stale elevation profiles.';
 
--- Back-fill existing rows from updated_at (best available proxy for when the
--- geometry was last changed; the DEFAULT above set all rows to now()).
 update public.trails
   set geom_updated_at = updated_at;
-
--- ── 2. Trigger function: keep geom_updated_at in sync ────────────────────────
 
 create or replace function public.set_geom_updated_at()
 returns trigger
@@ -26,7 +14,9 @@ language plpgsql
 set search_path = ''
 as $$
 begin
-  if new.geometry is distinct from old.geometry then
+  -- Cast to bytea for comparison: PostGIS registers multiple = operators for
+  -- the geometry type and IS DISTINCT FROM cannot resolve the ambiguity.
+  if new.geometry::bytea is distinct from old.geometry::bytea then
     new.geom_updated_at = now();
   end if;
   return new;
@@ -40,8 +30,6 @@ create trigger trails_set_geom_updated_at
   before update on public.trails
   for each row execute function public.set_geom_updated_at();
 
--- ── 3. trail_elevations table ─────────────────────────────────────────────────
-
 create table public.trail_elevations (
   trail_id          bigint primary key references public.trails (id) on delete cascade,
   geometry_3d       geometry(LineStringZ, 4326),
@@ -51,7 +39,7 @@ create table public.trail_elevations (
 
 comment on table public.trail_elevations is
   '1-to-1 extension of trails. Stores the 3D LineString and the distance/elevation profile '
-  'computed by the Python elevation app. Updated_at is compared with trails.geom_updated_at '
+  'computed by the Python elevation app. updated_at is compared with trails.geom_updated_at '
   'to detect profiles that are out of date.';
 
 comment on column public.trail_elevations.geometry_3d is
@@ -68,15 +56,57 @@ comment on column public.trail_elevations.updated_at is
 
 create index trail_elevations_geometry_3d_idx on public.trail_elevations using gist (geometry_3d);
 
--- ── 4. RLS ────────────────────────────────────────────────────────────────────
-
 alter table public.trail_elevations enable row level security;
 
 create policy "trail_elevations: select"
   on public.trail_elevations for select
   using (true);
 
--- ── 5. Grants ─────────────────────────────────────────────────────────────────
-
 grant select on public.trail_elevations to anon, authenticated;
 grant all    on public.trail_elevations to service_role;
+
+create or replace function public.get_utm_epsg(geom geometry)
+returns integer
+language sql
+immutable
+security invoker
+set search_path = ''
+as $$
+  select case
+    when public.st_y(public.st_centroid(geom)) >= 0
+      then (32600 + floor((public.st_x(public.st_centroid(geom)) + 180) / 6) + 1)::integer
+    else
+          (32700 + floor((public.st_x(public.st_centroid(geom)) + 180) / 6) + 1)::integer
+  end;
+$$;
+
+comment on function public.get_utm_epsg(geometry) is
+  'Returns the WGS84 UTM EPSG code (326xx N / 327xx S) for the given geometry, '
+  'based on its centroid. Used to reproject trail geometries to a metric CRS '
+  'before Python-side densification.';
+
+create or replace function public.get_trails_utm(trail_ids integer[])
+returns table (
+  id       integer,
+  geometry geometry(LineString)
+)
+language sql
+stable
+security invoker
+set search_path = ''
+as $$
+  select
+    t.id::integer,
+    public.st_transform(
+      t.geometry,
+      public.get_utm_epsg(t.geometry)
+    ) as geometry
+  from public.trails t
+  where t.id = any(trail_ids)
+    and t.deleted_at is null;
+$$;
+
+comment on function public.get_trails_utm(integer[]) is
+  'Returns active trails (by ID array) reprojected to their local UTM zone via '
+  'get_utm_epsg(). Used by the Python elevation pipeline to obtain metric '
+  'coordinates for densification without requiring GDAL reprojection in Python.';

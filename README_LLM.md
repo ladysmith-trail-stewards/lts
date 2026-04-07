@@ -136,13 +136,14 @@ Keep this document in sync with the codebase. Update it when adding new dependen
 
 ### Supabase production project
 
-Production Supabase URL: `https://alflxeqrnbomoxhgqpyd.supabase.co`
+Production Supabase URL: `https://sbssgcvvglpjrkguhsxc.supabase.co`
+OLD: DO NOT USE: Production Supabase URL: `https://alflxeqrnbomoxhgqpyd.supabase.co`
 
 #### Linking your local CLI to production
 
 ```bash
 supabase login
-supabase link --project-ref alflxeqrnbomoxhgqpyd
+supabase link --project-ref sbssgcvvglpjrkguhsxc
 ```
 
 Only needs to be done once per machine. After linking, the CLI knows which remote project to target.
@@ -172,6 +173,49 @@ See `specs/epics/production/setup-supabase-prod-db/spec.md` (F-005) for the full
 - **permissions table is service_role only** — RLS explicitly blocks all INSERT/UPDATE/DELETE for `authenticated` users. To modify permissions from the app, use a Supabase Edge Function or server-side call with the service_role key. Direct client writes will silently fail.
 - **database.types.ts is auto-generated** — Don't hand-edit. Run `pnpm db:types` after any migration change.
 - **Integration tests need local Supabase running** — `pnpm db:start` before `pnpm test:integration`, or they'll fail with connection errors.
+
+## Elevation pipeline — implementation notes
+
+The Python tool in `elevation/` has several non-obvious design decisions:
+
+### HRDEM CRS reprojection
+
+HRDEM tiles are in NAD83(CSRS) / Canada Atlas Lambert (EPSG:3979) — a projected
+CRS, not WGS84. `sample_points` must reproject each (lon, lat) point using
+`osr.CoordinateTransformation(wgs84, raster_srs)` before computing pixel offsets
+from the geotransform. Without this, all points fall outside the raster extent
+and HRDEM coverage is 0%.
+
+### COG range requests — not full-tile downloads
+
+The Vancouver Island HRDEM tile is ~6.8 GB. The tool fetches only the Ladysmith
+area by using `gdal.Translate` with `projWin` against a `/vsicurl/` remote path —
+GDAL issues HTTP range requests for only the needed COG blocks (~26 MB). Never
+download the full tile.
+
+### Atomic clip write
+
+`_clip_from_cog` writes to `{item_id}-part.tif` first, then renames to
+`{item_id}.tif` on success. This prevents a half-written file from being mistaken
+for a valid cache entry if the process is interrupted mid-write.
+
+### warm_cache union bbox
+
+`warm_cache` computes the bounding box of **all** trails before querying STAC,
+so the STAC API is called once and a single clip covers every trail. Without
+this, each trail's `fetch_tile` call would trigger its own network round-trip.
+
+### GDAL retry config
+
+Set at module load in `hrdem.py` to handle transient S3/CDN failures:
+`GDAL_HTTP_MAX_RETRY=5`, `GDAL_HTTP_RETRY_DELAY=5`, `GDAL_HTTP_TIMEOUT=60`,
+`CPL_VSIL_CURL_CACHE_SIZE=256000000` (256 MB in-memory block cache).
+
+### `geom_snapshot_at`
+
+Stored in `trail_elevations` alongside the computed data. Records the value of
+`trails.geom_updated_at` at computation time. `update-outdated` skips any trail
+where these match, avoiding redundant recomputation.
 
 ## LLM Documentation for Dependencies
 

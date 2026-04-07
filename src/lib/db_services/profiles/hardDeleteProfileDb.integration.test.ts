@@ -1,14 +1,11 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import {
   anonClient,
   serviceClient,
   signedInClient,
-  SEED_USER,
-  SEED_ADMIN,
-  SEED_SUPER_USER,
-  SEED_SUPER_ADMIN,
 } from '../supabaseTestClients';
 import { fixtureCreateProfile, fixtureDeleteProfiles } from './testHelpers';
+import { suiteSetup, suiteTeardown, type SuiteFixtures } from './testHelpers';
 
 /**
  * Hard-delete via PostgREST DELETE (table-level RLS policy).
@@ -20,6 +17,16 @@ import { fixtureCreateProfile, fixtureDeleteProfiles } from './testHelpers';
  */
 
 const P = '__hard_delete_profiles_test__';
+
+let suite: SuiteFixtures;
+
+beforeAll(async () => {
+  suite = await suiteSetup(P);
+});
+
+afterAll(async () => {
+  await suiteTeardown(suite);
+});
 
 async function rowExists(id: number): Promise<boolean> {
   const { data } = await serviceClient
@@ -51,7 +58,7 @@ describe('hard delete profiles (RLS) — user (denied)', () => {
   it('row survives after user DELETE attempt', async () => {
     const id = await fixtureCreateProfile({ name: `${P}user-target` });
 
-    const client = await signedInClient(SEED_USER.email, SEED_USER.password);
+    const client = await signedInClient(suite.user.email, suite.user.password);
     await client.from('profiles').delete().eq('id', id);
 
     expect(await rowExists(id)).toBe(true);
@@ -66,10 +73,13 @@ describe('hard delete profiles (RLS) — admin (denied)', () => {
   it('row survives after admin DELETE attempt', async () => {
     const id = await fixtureCreateProfile({
       name: `${P}admin-target`,
-      region_id: 1,
+      region_id: suite.regionId,
     });
 
-    const client = await signedInClient(SEED_ADMIN.email, SEED_ADMIN.password);
+    const client = await signedInClient(
+      suite.admin.email,
+      suite.admin.password
+    );
     await client.from('profiles').delete().eq('id', id);
 
     expect(await rowExists(id)).toBe(true);
@@ -84,12 +94,12 @@ describe('hard delete profiles (RLS) — super_user (denied)', () => {
   it('row survives after super_user DELETE attempt', async () => {
     const id = await fixtureCreateProfile({
       name: `${P}super-user-target`,
-      region_id: 1,
+      region_id: suite.regionId,
     });
 
     const client = await signedInClient(
-      SEED_SUPER_USER.email,
-      SEED_SUPER_USER.password
+      suite.superUser.email,
+      suite.superUser.password
     );
     await client.from('profiles').delete().eq('id', id);
 
@@ -106,8 +116,8 @@ describe('hard delete profiles (RLS) — super_admin (permitted)', () => {
     const id = await fixtureCreateProfile({ name: `${P}super-admin-target` });
 
     const client = await signedInClient(
-      SEED_SUPER_ADMIN.email,
-      SEED_SUPER_ADMIN.password
+      suite.superAdmin.email,
+      suite.superAdmin.password
     );
     const { error } = await client.from('profiles').delete().eq('id', id);
     expect(error).toBeNull();
@@ -121,8 +131,8 @@ describe('hard delete profiles (RLS) — super_admin (permitted)', () => {
     const id2 = await fixtureCreateProfile({ name: `${P}bulk-2` });
 
     const client = await signedInClient(
-      SEED_SUPER_ADMIN.email,
-      SEED_SUPER_ADMIN.password
+      suite.superAdmin.email,
+      suite.superAdmin.password
     );
     const { error } = await client
       .from('profiles')
@@ -137,8 +147,8 @@ describe('hard delete profiles (RLS) — super_admin (permitted)', () => {
 
   it('delete on non-existent id is a silent no-op', async () => {
     const client = await signedInClient(
-      SEED_SUPER_ADMIN.email,
-      SEED_SUPER_ADMIN.password
+      suite.superAdmin.email,
+      suite.superAdmin.password
     );
     const { error } = await client.from('profiles').delete().eq('id', 9999999);
     expect(error).toBeNull();

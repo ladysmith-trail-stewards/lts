@@ -1,14 +1,15 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import {
   anonClient,
   serviceClient,
   signedInClient,
-  SEED_USER,
-  SEED_ADMIN,
-  SEED_SUPER_USER,
-  SEED_SUPER_ADMIN,
 } from '../supabaseTestClients';
 import { fixtureCreateTrail } from './testHelpers';
+import {
+  suiteSetup,
+  suiteTeardown,
+  type SuiteFixtures,
+} from '../profiles/testHelpers';
 
 /**
  * Hard-delete via PostgREST DELETE (table-level RLS policy).
@@ -20,6 +21,15 @@ import { fixtureCreateTrail } from './testHelpers';
  */
 
 const P = '__hard_delete_trails_test__';
+let suite: SuiteFixtures;
+
+beforeAll(async () => {
+  suite = await suiteSetup(P);
+});
+
+afterAll(async () => {
+  await suiteTeardown(suite);
+});
 
 async function rowExists(id: number): Promise<boolean> {
   const { data } = await serviceClient
@@ -35,7 +45,10 @@ async function rowExists(id: number): Promise<boolean> {
 // ---------------------------------------------------------------------------
 describe('hard delete trails (RLS) — anon (denied)', () => {
   it('row survives after anon DELETE attempt', async () => {
-    const id = await fixtureCreateTrail({ name: `${P}anon-target` });
+    const id = await fixtureCreateTrail({
+      name: `${P}anon-target`,
+      region_id: suite.regionId,
+    });
 
     await anonClient.from('trails').delete().eq('id', id);
 
@@ -49,9 +62,12 @@ describe('hard delete trails (RLS) — anon (denied)', () => {
 // ---------------------------------------------------------------------------
 describe('hard delete trails (RLS) — user (denied)', () => {
   it('row survives after user DELETE attempt', async () => {
-    const id = await fixtureCreateTrail({ name: `${P}user-target` });
+    const id = await fixtureCreateTrail({
+      name: `${P}user-target`,
+      region_id: suite.regionId,
+    });
 
-    const client = await signedInClient(SEED_USER.email, SEED_USER.password);
+    const client = await signedInClient(suite.user.email, suite.user.password);
     await client.from('trails').delete().eq('id', id);
 
     expect(await rowExists(id)).toBe(true);
@@ -66,10 +82,13 @@ describe('hard delete trails (RLS) — admin (denied)', () => {
   it('row survives after admin DELETE attempt', async () => {
     const id = await fixtureCreateTrail({
       name: `${P}admin-target`,
-      region_id: 1,
+      region_id: suite.regionId,
     });
 
-    const client = await signedInClient(SEED_ADMIN.email, SEED_ADMIN.password);
+    const client = await signedInClient(
+      suite.admin.email,
+      suite.admin.password
+    );
     await client.from('trails').delete().eq('id', id);
 
     expect(await rowExists(id)).toBe(true);
@@ -84,12 +103,12 @@ describe('hard delete trails (RLS) — super_user (denied)', () => {
   it('row survives after super_user DELETE attempt', async () => {
     const id = await fixtureCreateTrail({
       name: `${P}super-user-target`,
-      region_id: 1,
+      region_id: suite.regionId,
     });
 
     const client = await signedInClient(
-      SEED_SUPER_USER.email,
-      SEED_SUPER_USER.password
+      suite.superUser.email,
+      suite.superUser.password
     );
     await client.from('trails').delete().eq('id', id);
 
@@ -103,11 +122,14 @@ describe('hard delete trails (RLS) — super_user (denied)', () => {
 // ---------------------------------------------------------------------------
 describe('hard delete trails (RLS) — super_admin (permitted)', () => {
   it('permanently deletes the row', async () => {
-    const id = await fixtureCreateTrail({ name: `${P}super-admin-target` });
+    const id = await fixtureCreateTrail({
+      name: `${P}super-admin-target`,
+      region_id: suite.regionId,
+    });
 
     const client = await signedInClient(
-      SEED_SUPER_ADMIN.email,
-      SEED_SUPER_ADMIN.password
+      suite.superAdmin.email,
+      suite.superAdmin.password
     );
     const { error } = await client.from('trails').delete().eq('id', id);
     expect(error).toBeNull();
@@ -117,14 +139,14 @@ describe('hard delete trails (RLS) — super_admin (permitted)', () => {
 
   it('bulk deletes multiple rows', async () => {
     const [id1, id2, id3] = await Promise.all([
-      fixtureCreateTrail({ name: `${P}bulk-1` }),
-      fixtureCreateTrail({ name: `${P}bulk-2` }),
-      fixtureCreateTrail({ name: `${P}bulk-3` }),
+      fixtureCreateTrail({ name: `${P}bulk-1`, region_id: suite.regionId }),
+      fixtureCreateTrail({ name: `${P}bulk-2`, region_id: suite.regionId }),
+      fixtureCreateTrail({ name: `${P}bulk-3`, region_id: suite.regionId }),
     ]);
 
     const client = await signedInClient(
-      SEED_SUPER_ADMIN.email,
-      SEED_SUPER_ADMIN.password
+      suite.superAdmin.email,
+      suite.superAdmin.password
     );
     const { error } = await client
       .from('trails')
@@ -141,8 +163,8 @@ describe('hard delete trails (RLS) — super_admin (permitted)', () => {
 
   it('delete on non-existent id is a silent no-op', async () => {
     const client = await signedInClient(
-      SEED_SUPER_ADMIN.email,
-      SEED_SUPER_ADMIN.password
+      suite.superAdmin.email,
+      suite.superAdmin.password
     );
     const { error } = await client
       .from('trails')

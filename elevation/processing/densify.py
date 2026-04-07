@@ -1,91 +1,74 @@
-"""Trail geometry densification using GDAL/OGR.
+"""Trail geometry densification — pure Python, no GDAL.
 
-Densifies a 2D WGS84 LineString so that there is a vertex at most every
-INTERVAL_M metres along the line.  The steps are:
+Densifies a WGS84 LineString so that there is a vertex at most every
+INTERVAL_M metres along the line.
 
-1. Parse the GeoJSON geometry with OGR.
-2. Reproject to a local UTM zone (WGS84) for accurate metric distances.
-3. Call OGR Segmentize() to insert intermediate vertices at the target spacing.
-4. Reproject back to WGS84.
-5. Extract and return the (lon, lat) coordinates.
+Interpolation is done in geographic (lon, lat) space using linear interpolation
+along each segment.  At the scale of trail segments (< 20 km) this introduces
+negligible error compared to a full UTM reprojection.  The metric distance
+between consecutive vertices is computed via the haversine formula so the
+interval is still expressed in true metres.
 """
 
-import json
 import logging
-
-from osgeo import ogr, osr
+import math
 
 log = logging.getLogger(__name__)
 
-# Keep axes in (lon, lat) / (x, y) order regardless of GDAL version.
-_AXIS_ORDER = osr.OAMS_TRADITIONAL_GIS_ORDER
+_EARTH_RADIUS_M = 6_371_000.0
 
 
-def densify_trail(geojson_str: str, interval_m: float = 5.0) -> list[tuple[float, float]]:
-    """Densify a LineString GeoJSON to at most interval_m metres between vertices.
+def _haversine_m(lon1: float, lat1: float, lon2: float, lat2: float) -> float:
+    """Great-circle distance in metres between two WGS84 points."""
+    lat1_r, lat2_r = math.radians(lat1), math.radians(lat2)
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = math.sin(dlat / 2) ** 2 + math.cos(lat1_r) * math.cos(lat2_r) * math.sin(dlon / 2) ** 2
+    return _EARTH_RADIUS_M * 2.0 * math.asin(math.sqrt(a))
+
+
+def densify_trail(geojson: dict, interval_m: float = 5.0) -> list[tuple[float, float]]:
+    """Densify a WGS84 LineString GeoJSON to at most interval_m metres between
+    consecutive vertices.
 
     Args:
-        geojson_str: GeoJSON string of a LineString in WGS84 (EPSG:4326).
-        interval_m:  Maximum distance between consecutive vertices in metres.
+        geojson:    Parsed GeoJSON dict of a LineString in WGS84 (EPSG:4326),
+                    as returned by ``ST_AsGeoJSON()`` via ``db/trails.py``.
+        interval_m: Maximum distance between consecutive vertices in metres.
 
     Returns:
         List of (lon, lat) tuples in WGS84.
 
     Raises:
-        ValueError: If the GeoJSON is invalid or not a (Multi)LineString.
+        ValueError: If the GeoJSON is not a LineString or has fewer than 2 points.
     """
-    geom = ogr.CreateGeometryFromJson(geojson_str)
-    if geom is None:
-        raise ValueError("Invalid GeoJSON geometry")
+    geom_type = geojson.get("type")
+    if geom_type != "LineString":
+        raise ValueError(f"Expected a LineString geometry, got '{geom_type}'")
 
-    geom_type = geom.GetGeometryType()
-    if geom_type not in (ogr.wkbLineString, ogr.wkbMultiLineString,
-                         ogr.wkbLineString25D, ogr.wkbMultiLineString25D):
-        raise ValueError(f"Expected a LineString geometry, got type {geom_type}")
+    raw = geojson.get("coordinates", [])
+    if len(raw) < 2:
+        raise ValueError(f"LineString must have at least 2 coordinates, got {len(raw)}")
 
-    # Determine the UTM zone and hemisphere from the geometry centroid.
-    env = geom.GetEnvelope()  # (min_lon, max_lon, min_lat, max_lat)
-    lon_centre = (env[0] + env[1]) / 2.0
-    lat_centre = (env[2] + env[3]) / 2.0
-    utm_zone = int((lon_centre + 180.0) / 6.0) + 1
-    # WGS84 UTM North = 326xx, WGS84 UTM South = 327xx
-    utm_epsg = 32600 + utm_zone if lat_centre >= 0.0 else 32700 + utm_zone
+    result: list[tuple[float, float]] = [(raw[0][0], raw[0][1])]
 
-    wgs84 = osr.SpatialReference()
-    wgs84.ImportFromEPSG(4326)
-    wgs84.SetAxisMappingStrategy(_AXIS_ORDER)
+    for i in range(1, len(raw)):
+        lon0, lat0 = raw[i - 1][0], raw[i - 1][1]
+        lon1, lat1 = raw[i][0], raw[i][1]
 
-    utm = osr.SpatialReference()
-    utm.ImportFromEPSG(utm_epsg)
-    utm.SetAxisMappingStrategy(_AXIS_ORDER)
+        seg_len = _haversine_m(lon0, lat0, lon1, lat1)
+        if seg_len == 0.0:
+            continue
 
-    ct_to_utm = osr.CoordinateTransformation(wgs84, utm)
-    ct_to_wgs84 = osr.CoordinateTransformation(utm, wgs84)
+        n = int(seg_len / interval_m)
+        for j in range(1, n + 1):
+            t = (j * interval_m) / seg_len
+            if t >= 1.0:
+                break
+            result.append((lon0 + t * (lon1 - lon0), lat0 + t * (lat1 - lat0)))
 
-    # Work on a clone to avoid mutating the original.
-    geom_utm = geom.Clone()
-    geom_utm.Transform(ct_to_utm)
-    geom_utm.Segmentize(interval_m)
-    geom_utm.Transform(ct_to_wgs84)
+        result.append((lon1, lat1))
 
-    # Extract all (lon, lat) vertices.
-    coords: list[tuple[float, float]] = []
-    _collect_coords(geom_utm, coords)
+    log.debug("Densified to %d points at %.0f m spacing", len(result), interval_m)
+    return result
 
-    log.debug("Densified to %d points at %.0f m spacing", len(coords), interval_m)
-    return coords
-
-
-# ── helpers ───────────────────────────────────────────────────────────────────
-
-
-def _collect_coords(geom: ogr.Geometry, out: list[tuple[float, float]]) -> None:
-    """Recursively collect (lon, lat) vertices from a geometry."""
-    if geom.GetGeometryCount() > 0:
-        # MultiLineString or GeometryCollection: descend into sub-geometries.
-        for i in range(geom.GetGeometryCount()):
-            _collect_coords(geom.GetGeometryRef(i), out)
-    else:
-        for i in range(geom.GetPointCount()):
-            pt = geom.GetPoint(i)
-            out.append((pt[0], pt[1]))  # (lon, lat) — Z ignored here

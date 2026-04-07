@@ -3,29 +3,22 @@
 import os
 
 import psycopg2
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 
-load_dotenv()
+load_dotenv(find_dotenv())
 
 
-def get_connection() -> psycopg2.extensions.connection:
+def get_connection(prod: bool = False) -> psycopg2.extensions.connection:
     """Return a psycopg2 connection using environment variables.
 
-    Reads DATABASE_URL first; falls back to individual PGHOST / PGUSER /
-    PGPASSWORD / PGDATABASE / PGPORT variables.
-
-    The connection bypasses Supabase RLS and runs with the PostgreSQL role
-    specified in the connection string (postgres / service_role for the
-    Supabase direct connection URL).
+    When prod=True reads PROD_DATABASE_URL, otherwise DATABASE_URL.
+    Both point to a direct PostgreSQL connection that bypasses Supabase RLS.
     """
-    db_url = os.environ.get("DATABASE_URL")
-    if db_url:
-        return psycopg2.connect(db_url)
-
-    return psycopg2.connect(
-        host=os.environ["PGHOST"],
-        port=int(os.environ.get("PGPORT", "5432")),
-        dbname=os.environ.get("PGDATABASE", "postgres"),
-        user=os.environ["PGUSER"],
-        password=os.environ["PGPASSWORD"],
-    )
+    key = "PROD_DIRECT_DATABASE_URL" if prod else "DEV_DIRECT_DATABASE_URL"
+    db_url = os.environ.get(key)
+    if not db_url:
+        raise RuntimeError(
+            f"{key} is not set. "
+            "Add it to .env and fill in the connection string."
+        )
+    return psycopg2.connect(db_url)
