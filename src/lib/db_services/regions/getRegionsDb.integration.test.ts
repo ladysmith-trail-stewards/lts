@@ -1,6 +1,10 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { getRegionsDb } from './getRegionsDb';
-import { anonClient, serviceClient, signedInClient } from '../supabaseTestClients';
+import {
+  anonClient,
+  serviceClient,
+  signedInClient,
+} from '../supabaseTestClients';
 import {
   suiteSetup,
   suiteTeardown,
@@ -46,8 +50,13 @@ describe('getRegionsDb — excludes Default region (id=0)', () => {
   it('returns results ordered by name', async () => {
     const { data, error } = await getRegionsDb(serviceClient);
     expect(error).toBeNull();
-    const names = data!.map((r) => r.name);
-    expect(names).toEqual([...names].sort());
+    // Only check ordering among the fixture regions this suite added.
+    // Avoids depending on how seed data (e.g. "Ladysmith") sorts relative
+    // to "i_test_*" names under different DB collations.
+    const fixtureNames = data!
+      .filter((r) => r.name.startsWith('i_test_'))
+      .map((r) => r.name);
+    expect(fixtureNames).toEqual([...fixtureNames].sort());
   });
 });
 
@@ -66,7 +75,10 @@ describe('getRegionsDb — RLS: all authenticated roles can SELECT', () => {
   });
 
   it('admin can read regions', async () => {
-    const client = await signedInClient(suite.admin.email, suite.admin.password);
+    const client = await signedInClient(
+      suite.admin.email,
+      suite.admin.password
+    );
     const { data, error } = await getRegionsDb(client);
     expect(error).toBeNull();
     expect(data!.length).toBeGreaterThan(0);

@@ -154,7 +154,11 @@ export default function AcceptPolicyPage() {
                 disabled={submitting}
               >
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select your region…" />
+                  <SelectValue placeholder="Select your region…">
+                    {regionId !== null
+                      ? (regions.find((r) => r.id === regionId)?.name ?? '')
+                      : null}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {regions.map((r) => (

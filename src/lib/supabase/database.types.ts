@@ -98,18 +98,21 @@ export type Database = {
       trail_elevations: {
         Row: {
           elevation_profile: Json;
+          geom_snapshot_at: string | null;
           geometry_3d: unknown;
           trail_id: number;
           updated_at: string;
         };
         Insert: {
           elevation_profile?: Json;
+          geom_snapshot_at?: string | null;
           geometry_3d?: unknown;
           trail_id: number;
           updated_at?: string;
         };
         Update: {
           elevation_profile?: Json;
+          geom_snapshot_at?: string | null;
           geometry_3d?: unknown;
           trail_id?: number;
           updated_at?: string;
