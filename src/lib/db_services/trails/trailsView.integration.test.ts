@@ -3,34 +3,40 @@ import {
   anonClient,
   serviceClient,
   signedInClient,
-  SEED_USER,
 } from '../../db_services/supabaseTestClients';
 import {
   fixtureCreateTrail,
   fixtureDeleteTrails,
 } from '../../db_services/trails/testHelpers';
+import {
+  suiteSetup,
+  suiteTeardown,
+  type SuiteFixtures,
+} from '../../db_services/profiles/testHelpers';
 
 const P = '__trails_view_test__';
+let suite: SuiteFixtures;
 let publicTrailId: number;
 let privateTrailId: number;
 let softDeletedTrailId: number;
 
 beforeAll(async () => {
+  suite = await suiteSetup(P);
   [publicTrailId, privateTrailId, softDeletedTrailId] = await Promise.all([
     fixtureCreateTrail({
       name: `${P}public`,
       visibility: 'public',
-      region_id: 1,
+      region_id: suite.regionId,
     }),
     fixtureCreateTrail({
       name: `${P}private`,
       visibility: 'private',
-      region_id: 1,
+      region_id: suite.regionId,
     }),
     fixtureCreateTrail({
       name: `${P}soft-deleted`,
       visibility: 'public',
-      region_id: 1,
+      region_id: suite.regionId,
     }),
   ]);
   // Soft-delete the third trail directly via service role
@@ -42,6 +48,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await fixtureDeleteTrails(publicTrailId, privateTrailId, softDeletedTrailId);
+  await suiteTeardown(suite);
 });
 
 function fixtureNames(data: { name: string | null }[] | null) {
@@ -78,7 +85,7 @@ describe('trails_view — anon', () => {
 describe('trails_view — authenticated', () => {
   let client: Awaited<ReturnType<typeof signedInClient>>;
   beforeAll(async () => {
-    client = await signedInClient(SEED_USER.email, SEED_USER.password);
+    client = await signedInClient(suite.user.email, suite.user.password);
   });
 
   it('sees public trails', async () => {

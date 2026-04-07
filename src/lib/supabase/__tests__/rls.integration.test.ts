@@ -2,16 +2,16 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import {
   signedInClient,
   serviceClient,
-  SEED_USER,
-  SEED_ADMIN,
-  SEED_SUPER_USER,
-  SEED_SUPER_ADMIN,
-  SEED_PENDING,
 } from '../../db_services/supabaseTestClients';
 import {
   fixtureCreateTrail,
   fixtureDeleteTrails,
 } from '../../db_services/trails/testHelpers';
+import {
+  suiteSetup,
+  suiteTeardown,
+  type SuiteFixtures,
+} from '../../db_services/profiles/testHelpers';
 
 /**
  * RLS integration tests — requires:
@@ -25,6 +25,13 @@ import {
  * custom access token hook — no RPC round-trips needed.
  */
 
+const P = '__rls_test__';
+const safeTag = P.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+const RLS_USER_NAME = `i_test_${safeTag}_user`;
+const RLS_ADMIN_NAME = `i_test_${safeTag}_admin`;
+
+let suite: SuiteFixtures;
+
 /** Decode the payload of a JWT without verifying the signature. */
 function decodeJwtPayload(token: string): Record<string, unknown> {
   // Base64url → base64: replace - with + and _ with /
@@ -32,53 +39,61 @@ function decodeJwtPayload(token: string): Record<string, unknown> {
   return JSON.parse(atob(b64));
 }
 
+beforeAll(async () => {
+  suite = await suiteSetup(P);
+});
+
+afterAll(async () => {
+  await suiteTeardown(suite);
+});
+
 describe('RLS — profiles table', () => {
-  describe('regular user (user@test.com)', () => {
+  describe('regular user', () => {
     let client: Awaited<ReturnType<typeof signedInClient>>;
 
     beforeAll(async () => {
-      client = await signedInClient('user@test.com', 'password123');
+      client = await signedInClient(suite.user.email, suite.user.password);
     });
 
     it('can read their own profile', async () => {
       const { data, error } = await client.from('profiles').select('name');
       expect(error).toBeNull();
       expect(data).toHaveLength(1);
-      expect(data![0].name).toBe('Test User');
+      expect(data![0].name).toBe(RLS_USER_NAME);
     });
 
     it('cannot see other profiles', async () => {
       const { data, error } = await client.from('profiles').select('name');
       expect(error).toBeNull();
       const names = data!.map((p) => p.name);
-      expect(names).not.toContain('Admin User');
+      expect(names).not.toContain(RLS_ADMIN_NAME);
     });
 
     it('cannot insert a new profile', async () => {
       const { error } = await client.from('profiles').insert({
         auth_user_id: '00000000-0000-0000-0000-000000000099',
         name: 'Intruder',
-        region_id: 1,
+        region_id: suite.regionId,
       });
       expect(error).not.toBeNull();
     });
 
     it('cannot delete profiles', async () => {
-      await client.from('profiles').delete().eq('name', 'Test User');
+      await client.from('profiles').delete().eq('name', RLS_USER_NAME);
 
       const { data } = await serviceClient
         .from('profiles')
         .select('name')
-        .eq('name', 'Test User');
+        .eq('name', RLS_USER_NAME);
       expect(data).toHaveLength(1);
     });
   });
 
-  describe('admin user (admin@test.com)', () => {
+  describe('admin user', () => {
     let client: Awaited<ReturnType<typeof signedInClient>>;
 
     beforeAll(async () => {
-      client = await signedInClient('admin@test.com', 'password123');
+      client = await signedInClient(suite.admin.email, suite.admin.password);
     });
 
     it('can read all local profiles', async () => {
@@ -87,33 +102,32 @@ describe('RLS — profiles table', () => {
         .select('name')
         .order('name');
       expect(error).toBeNull();
-      // Admin sees all profiles in their region (region_id = 1).
-      // At minimum the 4 seed profiles; test fixture users may also be present.
-      expect(data!.length).toBeGreaterThanOrEqual(4);
+      // Admin sees all profiles in their region.
+      expect(data!.length).toBeGreaterThanOrEqual(1);
       const names = data!.map((p) => p.name);
-      expect(names).toContain('Test User');
-      expect(names).toContain('Admin User');
+      expect(names).toContain(RLS_USER_NAME);
+      expect(names).toContain(RLS_ADMIN_NAME);
     });
 
     it("can update another user's profile", async () => {
       const { error } = await client
         .from('profiles')
         .update({ bio: 'Updated by admin' })
-        .eq('name', 'Test User');
+        .eq('id', suite.user.profileId);
       expect(error).toBeNull();
 
       // Restore
       await client
         .from('profiles')
         .update({ bio: null })
-        .eq('name', 'Test User');
+        .eq('id', suite.user.profileId);
     });
   });
 });
 
 describe('RLS — role checks via JWT claims', () => {
   it('regular user JWT has user_role = user', async () => {
-    const client = await signedInClient('user@test.com', 'password123');
+    const client = await signedInClient(suite.user.email, suite.user.password);
     const { data } = await client.auth.getSession();
     const token = data.session?.access_token;
     expect(token).toBeTruthy();
@@ -122,7 +136,10 @@ describe('RLS — role checks via JWT claims', () => {
   });
 
   it('admin user JWT has user_role = admin', async () => {
-    const client = await signedInClient('admin@test.com', 'password123');
+    const client = await signedInClient(
+      suite.admin.email,
+      suite.admin.password
+    );
     const { data } = await client.auth.getSession();
     const token = data.session?.access_token;
     expect(token).toBeTruthy();
@@ -132,13 +149,13 @@ describe('RLS — role checks via JWT claims', () => {
 });
 
 // ---------------------------------------------------------------------------
-// JWT claims — full coverage (tests 73–78)
+// JWT claims — full coverage
 // ---------------------------------------------------------------------------
 describe('JWT claims — custom_access_token_hook', () => {
   it('super_user JWT has user_role = super_user', async () => {
     const client = await signedInClient(
-      SEED_SUPER_USER.email,
-      SEED_SUPER_USER.password
+      suite.superUser.email,
+      suite.superUser.password
     );
     const { data } = await client.auth.getSession();
     const payload = decodeJwtPayload(data.session!.access_token);
@@ -147,8 +164,8 @@ describe('JWT claims — custom_access_token_hook', () => {
 
   it('super_admin JWT has user_role = super_admin', async () => {
     const client = await signedInClient(
-      SEED_SUPER_ADMIN.email,
-      SEED_SUPER_ADMIN.password
+      suite.superAdmin.email,
+      suite.superAdmin.password
     );
     const { data } = await client.auth.getSession();
     const payload = decodeJwtPayload(data.session!.access_token);
@@ -157,8 +174,8 @@ describe('JWT claims — custom_access_token_hook', () => {
 
   it('pending JWT has user_role = pending', async () => {
     const client = await signedInClient(
-      SEED_PENDING.email,
-      SEED_PENDING.password
+      suite.pending.email,
+      suite.pending.password
     );
     const { data } = await client.auth.getSession();
     const payload = decodeJwtPayload(data.session!.access_token);
@@ -166,14 +183,17 @@ describe('JWT claims — custom_access_token_hook', () => {
   });
 
   it('JWT contains region_id for user', async () => {
-    const client = await signedInClient(SEED_USER.email, SEED_USER.password);
+    const client = await signedInClient(suite.user.email, suite.user.password);
     const { data } = await client.auth.getSession();
     const payload = decodeJwtPayload(data.session!.access_token);
-    expect(payload.region_id).toBe(1);
+    expect(payload.region_id).toBe(suite.regionId);
   });
 
   it('is_admin = true for admin', async () => {
-    const client = await signedInClient(SEED_ADMIN.email, SEED_ADMIN.password);
+    const client = await signedInClient(
+      suite.admin.email,
+      suite.admin.password
+    );
     const { data } = await client.auth.getSession();
     const payload = decodeJwtPayload(data.session!.access_token);
     expect(payload.is_admin).toBe(true);
@@ -181,8 +201,8 @@ describe('JWT claims — custom_access_token_hook', () => {
 
   it('is_admin = true for super_admin', async () => {
     const client = await signedInClient(
-      SEED_SUPER_ADMIN.email,
-      SEED_SUPER_ADMIN.password
+      suite.superAdmin.email,
+      suite.superAdmin.password
     );
     const { data } = await client.auth.getSession();
     const payload = decodeJwtPayload(data.session!.access_token);
@@ -190,7 +210,7 @@ describe('JWT claims — custom_access_token_hook', () => {
   });
 
   it('is_admin = false for user', async () => {
-    const client = await signedInClient(SEED_USER.email, SEED_USER.password);
+    const client = await signedInClient(suite.user.email, suite.user.password);
     const { data } = await client.auth.getSession();
     const payload = decodeJwtPayload(data.session!.access_token);
     expect(payload.is_admin).toBe(false);
@@ -198,8 +218,8 @@ describe('JWT claims — custom_access_token_hook', () => {
 
   it('is_admin = false for super_user', async () => {
     const client = await signedInClient(
-      SEED_SUPER_USER.email,
-      SEED_SUPER_USER.password
+      suite.superUser.email,
+      suite.superUser.password
     );
     const { data } = await client.auth.getSession();
     const payload = decodeJwtPayload(data.session!.access_token);
@@ -208,8 +228,8 @@ describe('JWT claims — custom_access_token_hook', () => {
 
   it('is_admin = false for pending', async () => {
     const client = await signedInClient(
-      SEED_PENDING.email,
-      SEED_PENDING.password
+      suite.pending.email,
+      suite.pending.password
     );
     const { data } = await client.auth.getSession();
     const payload = decodeJwtPayload(data.session!.access_token);
@@ -219,8 +239,9 @@ describe('JWT claims — custom_access_token_hook', () => {
   it('token user_role = pending after profile is soft-deleted', async () => {
     // Create a throwaway auth user + profile, soft-delete the profile,
     // then sign in again and verify the hook yields pending.
-    const throwawayEmail = '__hook_test_softdelete__@test-fixture.invalid';
-    const throwawayPassword = 'password123';
+    const throwawayEmail =
+      'i_test___rls_hook_softdelete__@test-fixture.invalid';
+    const throwawayPassword = 'fixture-password-123';
 
     // Create auth user
     const { data: created } = await serviceClient.auth.admin.createUser({
@@ -256,15 +277,15 @@ describe('JWT claims — custom_access_token_hook', () => {
 });
 
 // ---------------------------------------------------------------------------
-// trails — deleted_at column-level protection (tests 35)
+// trails — deleted_at column-level protection
 // ---------------------------------------------------------------------------
 describe('trails RLS — deleted_at cannot be set directly', () => {
   let trailId: number;
 
   beforeAll(async () => {
     trailId = await fixtureCreateTrail({
-      name: '__rls_deleted_at_test__',
-      region_id: 1,
+      name: `${P}rls_deleted_at_test`,
+      region_id: suite.regionId,
     });
   });
 
@@ -273,7 +294,7 @@ describe('trails RLS — deleted_at cannot be set directly', () => {
   });
 
   it('user cannot set deleted_at directly via UPDATE', async () => {
-    const client = await signedInClient(SEED_USER.email, SEED_USER.password);
+    const client = await signedInClient(suite.user.email, suite.user.password);
     // Cast through unknown to sidestep the generated types which correctly exclude deleted_at
     await client
       .from('trails')
@@ -292,8 +313,8 @@ describe('trails RLS — deleted_at cannot be set directly', () => {
 
   it('super_admin cannot set deleted_at directly via UPDATE', async () => {
     const client = await signedInClient(
-      SEED_SUPER_ADMIN.email,
-      SEED_SUPER_ADMIN.password
+      suite.superAdmin.email,
+      suite.superAdmin.password
     );
     await client
       .from('trails')
@@ -312,40 +333,49 @@ describe('trails RLS — deleted_at cannot be set directly', () => {
 });
 
 // ---------------------------------------------------------------------------
-// trails — cross-region INSERT/UPDATE blocking (tests 37, 39, 41, 43)
+// trails — cross-region INSERT/UPDATE blocking
 // ---------------------------------------------------------------------------
 describe('trails RLS — cross-region write blocking', () => {
+  let region2Id: number;
   let region1TrailId: number;
   let region2TrailId: number;
 
   beforeAll(async () => {
-    await serviceClient
+    // Create a second suite-local region for cross-region tests
+    const safeTag = P.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    const { data: r2, error: r2Err } = await serviceClient
       .from('regions')
-      .upsert({ id: 2, name: 'Region 2' }, { onConflict: 'id' });
+      .insert({ name: `i_test_${safeTag}_region2` })
+      .select('id')
+      .single();
+    if (r2Err) throw new Error(`rls: create region2: ${r2Err.message}`);
+    region2Id = r2.id;
+
     region1TrailId = await fixtureCreateTrail({
-      name: '__rls_xregion_r1__',
-      region_id: 1,
+      name: `${P}xregion_r1`,
+      region_id: suite.regionId,
     });
     region2TrailId = await fixtureCreateTrail({
-      name: '__rls_xregion_r2__',
-      region_id: 2,
+      name: `${P}xregion_r2`,
+      region_id: region2Id,
     });
   });
 
   afterAll(async () => {
     await fixtureDeleteTrails(region1TrailId, region2TrailId);
+    await serviceClient.from('regions').delete().eq('id', region2Id);
   });
 
   it('super_user cannot INSERT a trail in a different region', async () => {
     const client = await signedInClient(
-      SEED_SUPER_USER.email,
-      SEED_SUPER_USER.password
+      suite.superUser.email,
+      suite.superUser.password
     );
     const { error } = await client.from('trails').insert({
-      name: '__rls_superuser_wrong_region__',
+      name: `${P}superuser_wrong_region`,
       type: 'trail',
       visibility: 'public',
-      region_id: 2,
+      region_id: region2Id,
       geometry: 'SRID=4326;LINESTRING(-123.82 48.98,-123.81 48.97)',
     });
     expect(error).not.toBeNull();
@@ -353,8 +383,8 @@ describe('trails RLS — cross-region write blocking', () => {
 
   it('super_user cannot UPDATE a trail in a different region', async () => {
     const client = await signedInClient(
-      SEED_SUPER_USER.email,
-      SEED_SUPER_USER.password
+      suite.superUser.email,
+      suite.superUser.password
     );
     const before = await serviceClient
       .from('trails')
@@ -363,7 +393,7 @@ describe('trails RLS — cross-region write blocking', () => {
       .single();
     await client
       .from('trails')
-      .update({ name: '__rls_superuser_overwrite__' })
+      .update({ name: `${P}superuser_overwrite` })
       .eq('id', region2TrailId);
     const after = await serviceClient
       .from('trails')
@@ -374,19 +404,25 @@ describe('trails RLS — cross-region write blocking', () => {
   });
 
   it('admin cannot INSERT a trail in a different region', async () => {
-    const client = await signedInClient(SEED_ADMIN.email, SEED_ADMIN.password);
+    const client = await signedInClient(
+      suite.admin.email,
+      suite.admin.password
+    );
     const { error } = await client.from('trails').insert({
-      name: '__rls_admin_wrong_region__',
+      name: `${P}admin_wrong_region`,
       type: 'trail',
       visibility: 'public',
-      region_id: 2,
+      region_id: region2Id,
       geometry: 'SRID=4326;LINESTRING(-123.82 48.98,-123.81 48.97)',
     });
     expect(error).not.toBeNull();
   });
 
   it('admin cannot UPDATE a trail in a different region', async () => {
-    const client = await signedInClient(SEED_ADMIN.email, SEED_ADMIN.password);
+    const client = await signedInClient(
+      suite.admin.email,
+      suite.admin.password
+    );
     const before = await serviceClient
       .from('trails')
       .select('name')
@@ -394,7 +430,7 @@ describe('trails RLS — cross-region write blocking', () => {
       .single();
     await client
       .from('trails')
-      .update({ name: '__rls_admin_overwrite__' })
+      .update({ name: `${P}admin_overwrite` })
       .eq('id', region2TrailId);
     const after = await serviceClient
       .from('trails')

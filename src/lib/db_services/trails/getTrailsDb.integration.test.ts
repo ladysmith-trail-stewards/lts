@@ -4,12 +4,13 @@ import {
   anonClient,
   serviceClient,
   signedInClient,
-  SEED_USER,
-  SEED_ADMIN,
-  SEED_SUPER_USER,
-  SEED_SUPER_ADMIN,
 } from '../supabaseTestClients';
 import { fixtureCreateTrail, fixtureDeleteTrails } from './testHelpers';
+import {
+  suiteSetup,
+  suiteTeardown,
+  type SuiteFixtures,
+} from '../profiles/testHelpers';
 
 // Requires local Supabase running (`pnpm db:start`). See README.md for RLS rules.
 
@@ -20,30 +21,38 @@ const NAMES = {
   private: `${P}private`,
 };
 
+let suite: SuiteFixtures;
 let fixtureIds: number[] = [];
 
 beforeAll(async () => {
+  suite = await suiteSetup(P);
   const [publicId, hiddenId, privateId] = await Promise.all([
     fixtureCreateTrail({
       name: NAMES.public,
       visibility: 'public',
       hidden: false,
+      region_id: suite.regionId,
     }),
     fixtureCreateTrail({
       name: NAMES.hidden,
       visibility: 'public',
       hidden: true,
+      region_id: suite.regionId,
     }),
     fixtureCreateTrail({
       name: NAMES.private,
       visibility: 'private',
       hidden: false,
+      region_id: suite.regionId,
     }),
   ]);
   fixtureIds = [publicId, hiddenId, privateId];
 });
 
-afterAll(() => fixtureDeleteTrails(...fixtureIds));
+afterAll(async () => {
+  await fixtureDeleteTrails(...fixtureIds);
+  await suiteTeardown(suite);
+});
 
 function names(data: { name: string }[] | null) {
   return (data ?? []).map((t) => t.name);
@@ -53,30 +62,25 @@ describe('getTrailsDb — anon', () => {
   it('returns public trails (anon can read public visibility)', async () => {
     const { data, error } = await getTrailsDb(anonClient);
     expect(error).toBeNull();
-    // Anon RLS: visibility='public' AND deleted_at IS NULL.
-    // Default call also filters hidden=false, so public non-hidden trail is visible.
     expect(names(data)).toContain(NAMES.public);
   });
 
   it('does NOT return hidden trails by default', async () => {
     const { data } = await getTrailsDb(anonClient);
-    // Default hidden=false filter excludes hidden trails regardless of anon RLS
     expect(names(data)).not.toContain(NAMES.hidden);
   });
 
   it('does NOT return private trails', async () => {
     const { data } = await getTrailsDb(anonClient);
-    // Anon RLS blocks visibility!='public' rows entirely
     expect(names(data)).not.toContain(NAMES.private);
   });
 
   it('hidden=true exposes public hidden trails for anon; still no private', async () => {
     const { data } = await getTrailsDb(anonClient, { hidden: true });
     const n = names(data);
-    // Anon can see public trails regardless of hidden flag (when filter is off)
     expect(n).toContain(NAMES.public);
-    expect(n).toContain(NAMES.hidden); // visibility='public', passes anon RLS
-    expect(n).not.toContain(NAMES.private); // visibility='private', blocked by RLS
+    expect(n).toContain(NAMES.hidden);
+    expect(n).not.toContain(NAMES.private);
   });
 });
 
@@ -84,7 +88,7 @@ describe('getTrailsDb — authenticated user (role: user)', () => {
   let client: Awaited<ReturnType<typeof signedInClient>>;
 
   beforeAll(async () => {
-    client = await signedInClient(SEED_USER.email, SEED_USER.password);
+    client = await signedInClient(suite.user.email, suite.user.password);
   });
 
   it('returns public trails', async () => {
@@ -112,7 +116,7 @@ describe('getTrailsDb — admin', () => {
   let client: Awaited<ReturnType<typeof signedInClient>>;
 
   beforeAll(async () => {
-    client = await signedInClient(SEED_ADMIN.email, SEED_ADMIN.password);
+    client = await signedInClient(suite.admin.email, suite.admin.password);
   });
 
   it('returns public trails', async () => {
@@ -141,8 +145,8 @@ describe('getTrailsDb — super_user', () => {
 
   beforeAll(async () => {
     client = await signedInClient(
-      SEED_SUPER_USER.email,
-      SEED_SUPER_USER.password
+      suite.superUser.email,
+      suite.superUser.password
     );
   });
 
@@ -172,8 +176,8 @@ describe('getTrailsDb — super_admin', () => {
 
   beforeAll(async () => {
     client = await signedInClient(
-      SEED_SUPER_ADMIN.email,
-      SEED_SUPER_ADMIN.password
+      suite.superAdmin.email,
+      suite.superAdmin.password
     );
   });
 
@@ -245,7 +249,7 @@ describe('getTrailsDb — response shape', () => {
       visibility: 'public',
       hidden: false,
       type: 'trail',
-      region_id: 1,
+      region_id: suite.regionId,
     });
   });
 });

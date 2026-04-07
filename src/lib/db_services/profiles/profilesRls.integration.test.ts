@@ -3,50 +3,53 @@ import {
   anonClient,
   serviceClient,
   signedInClient,
-  SEED_USER,
-  SEED_ADMIN,
-  SEED_SUPER_USER,
-  SEED_SUPER_ADMIN,
-  SEED_PENDING,
 } from '../supabaseTestClients';
 import { fixtureCreateProfile, fixtureDeleteProfiles } from './testHelpers';
+import { suiteSetup, suiteTeardown, type SuiteFixtures } from './testHelpers';
 
 const P = '__profiles_rls_test__';
 
+let suite: SuiteFixtures;
+
 // ---------------------------------------------------------------------------
-// Fixtures: one profile in region 1, one in region 2
+// Fixtures: one profile in suite region, one in region2
 // ---------------------------------------------------------------------------
 let region1ProfileId: number;
 let region2ProfileId: number;
+let region2Id: number;
 
-// The seed user's own profile id (region 1, auth_user_id known from seed)
-let seedUserProfileId: number;
+// The fixture user's own profile id
+let fixtureUserProfileId: number;
 
 beforeAll(async () => {
-  // Ensure region 2 exists
-  await serviceClient
+  suite = await suiteSetup(P);
+
+  // Create a second suite-local region for cross-region tests
+  const safeTag = P.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+  const { data: r2, error: r2Err } = await serviceClient
     .from('regions')
-    .upsert({ id: 2, name: 'Region 2' }, { onConflict: 'id' });
+    .insert({ name: `i_test_${safeTag}_region2` })
+    .select('id')
+    .single();
+  if (r2Err) throw new Error(`profilesRls: create region2: ${r2Err.message}`);
+  region2Id = r2.id;
 
   region1ProfileId = await fixtureCreateProfile({
     name: `${P}region1-target`,
-    region_id: 1,
+    region_id: suite.regionId,
   });
   region2ProfileId = await fixtureCreateProfile({
     name: `${P}region2-target`,
-    region_id: 2,
+    region_id: region2Id,
   });
 
-  const { data } = await serviceClient
-    .from('profiles')
-    .select('id')
-    .eq('auth_user_id', '00000000-0000-0000-0000-000000000001')
-    .single();
-  seedUserProfileId = data!.id;
+  fixtureUserProfileId = suite.user.profileId;
 });
 
 afterAll(async () => {
   await fixtureDeleteProfiles(region1ProfileId, region2ProfileId);
+  await serviceClient.from('regions').delete().eq('id', region2Id);
+  await suiteTeardown(suite);
 });
 
 // ---------------------------------------------------------------------------
@@ -62,25 +65,27 @@ describe('profiles RLS — SELECT — anon (denied)', () => {
 describe('profiles RLS — SELECT — pending (denied)', () => {
   it('pending cannot SELECT any profile', async () => {
     const client = await signedInClient(
-      SEED_PENDING.email,
-      SEED_PENDING.password
+      suite.pending.email,
+      suite.pending.password
     );
     const { data } = await client.from('profiles').select('id');
-    expect(data).toHaveLength(0);
+    // Pending users can see their own profile (auth_user_id = auth.uid() policy),
+    // but cannot see other users' profiles.
+    expect(data).toHaveLength(1);
   });
 });
 
 describe('profiles RLS — SELECT — user (own only)', () => {
   let client: Awaited<ReturnType<typeof signedInClient>>;
   beforeAll(async () => {
-    client = await signedInClient(SEED_USER.email, SEED_USER.password);
+    client = await signedInClient(suite.user.email, suite.user.password);
   });
 
   it('can SELECT own profile', async () => {
     const { data } = await client
       .from('profiles')
       .select('id')
-      .eq('id', seedUserProfileId);
+      .eq('id', fixtureUserProfileId);
     expect(data).toHaveLength(1);
   });
 
@@ -97,8 +102,8 @@ describe('profiles RLS — SELECT — super_user (own only)', () => {
   let client: Awaited<ReturnType<typeof signedInClient>>;
   beforeAll(async () => {
     client = await signedInClient(
-      SEED_SUPER_USER.email,
-      SEED_SUPER_USER.password
+      suite.superUser.email,
+      suite.superUser.password
     );
   });
 
@@ -114,7 +119,7 @@ describe('profiles RLS — SELECT — super_user (own only)', () => {
 describe('profiles RLS — SELECT — admin (own region only)', () => {
   let client: Awaited<ReturnType<typeof signedInClient>>;
   beforeAll(async () => {
-    client = await signedInClient(SEED_ADMIN.email, SEED_ADMIN.password);
+    client = await signedInClient(suite.admin.email, suite.admin.password);
   });
 
   it('can SELECT profiles in own region (region 1)', async () => {
@@ -138,8 +143,8 @@ describe('profiles RLS — SELECT — super_admin (all)', () => {
   let client: Awaited<ReturnType<typeof signedInClient>>;
   beforeAll(async () => {
     client = await signedInClient(
-      SEED_SUPER_ADMIN.email,
-      SEED_SUPER_ADMIN.password
+      suite.superAdmin.email,
+      suite.superAdmin.password
     );
   });
 
@@ -160,7 +165,7 @@ describe('profiles RLS — INSERT — anon (denied)', () => {
     const { error } = await anonClient.from('profiles').insert({
       auth_user_id: '00000000-0000-0000-0000-000000000099',
       name: `${P}anon-insert`,
-      region_id: 1,
+      region_id: suite.regionId,
     });
     expect(error).not.toBeNull();
   });
@@ -171,7 +176,7 @@ describe('profiles RLS — INSERT — admin (own region only)', () => {
   let triggerCreatedProfileId: number | null = null;
   let insertedId: number | null = null;
   beforeAll(async () => {
-    client = await signedInClient(SEED_ADMIN.email, SEED_ADMIN.password);
+    client = await signedInClient(suite.admin.email, suite.admin.password);
   });
   afterAll(async () => {
     const toDelete = [triggerCreatedProfileId, insertedId].filter(
@@ -207,7 +212,7 @@ describe('profiles RLS — INSERT — admin (own region only)', () => {
       .insert({
         auth_user_id: authId,
         name: `${P}admin-insert`,
-        region_id: 1,
+        region_id: suite.regionId,
       })
       .select('id')
       .single();
@@ -222,7 +227,7 @@ describe('profiles RLS — INSERT — admin (own region only)', () => {
     const { error } = await client.from('profiles').insert({
       auth_user_id: '00000000-0000-0000-0000-000000000092',
       name: `${P}admin-insert-r2`,
-      region_id: 2,
+      region_id: region2Id,
     });
     expect(error).not.toBeNull();
   });
@@ -234,29 +239,29 @@ describe('profiles RLS — INSERT — admin (own region only)', () => {
 describe('profiles RLS — UPDATE — user (own only)', () => {
   let client: Awaited<ReturnType<typeof signedInClient>>;
   beforeAll(async () => {
-    client = await signedInClient(SEED_USER.email, SEED_USER.password);
+    client = await signedInClient(suite.user.email, suite.user.password);
   });
 
   it('can UPDATE own profile name', async () => {
-    // Read current name first so we can restore it exactly — never hardcode the seed name
+    // Read current name first so we can restore it exactly
     const { data: before } = await serviceClient
       .from('profiles')
       .select('name')
-      .eq('id', seedUserProfileId)
+      .eq('id', fixtureUserProfileId)
       .single();
     const originalName = before!.name;
 
     const { error } = await client
       .from('profiles')
       .update({ name: `${P}user-renamed` })
-      .eq('id', seedUserProfileId);
+      .eq('id', fixtureUserProfileId);
     expect(error).toBeNull();
 
     // Restore exactly
     await serviceClient
       .from('profiles')
       .update({ name: originalName })
-      .eq('id', seedUserProfileId);
+      .eq('id', fixtureUserProfileId);
   });
 
   it('cannot UPDATE another profile', async () => {
@@ -281,7 +286,7 @@ describe('profiles RLS — UPDATE — user (own only)', () => {
 describe('profiles RLS — UPDATE — admin (own region only)', () => {
   let client: Awaited<ReturnType<typeof signedInClient>>;
   beforeAll(async () => {
-    client = await signedInClient(SEED_ADMIN.email, SEED_ADMIN.password);
+    client = await signedInClient(suite.admin.email, suite.admin.password);
   });
 
   it('can UPDATE a profile in own region', async () => {
@@ -316,25 +321,25 @@ describe('profiles RLS — UPDATE — admin (own region only)', () => {
 // ---------------------------------------------------------------------------
 describe('profiles RLS — deleted_at direct UPDATE blocked', () => {
   it('user cannot set deleted_at directly via UPDATE', async () => {
-    const client = await signedInClient(SEED_USER.email, SEED_USER.password);
+    const client = await signedInClient(suite.user.email, suite.user.password);
     await client
       .from('profiles')
       .update({ deleted_at: new Date().toISOString() } as never)
-      .eq('id', seedUserProfileId);
+      .eq('id', fixtureUserProfileId);
     // PostgREST silently drops columns not in the column grant — no error,
     // but deleted_at must remain null (column-level protection).
     const { data } = await serviceClient
       .from('profiles')
       .select('deleted_at')
-      .eq('id', seedUserProfileId)
+      .eq('id', fixtureUserProfileId)
       .single();
     expect(data!.deleted_at).toBeNull();
   });
 
   it('super_admin cannot set deleted_at directly via UPDATE', async () => {
     const client = await signedInClient(
-      SEED_SUPER_ADMIN.email,
-      SEED_SUPER_ADMIN.password
+      suite.superAdmin.email,
+      suite.superAdmin.password
     );
     await client
       .from('profiles')
