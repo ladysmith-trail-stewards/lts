@@ -1,21 +1,34 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { deleteTrailsDb } from './deleteTrailsDb';
 import {
   anonClient,
   serviceClient,
   signedInClient,
-  SEED_USER,
-  SEED_ADMIN,
-  SEED_SUPER_USER,
-  SEED_SUPER_ADMIN,
 } from '../supabaseTestClients';
 import { fixtureCreateTrail } from './testHelpers';
+import {
+  suiteSetup,
+  suiteTeardown,
+  type SuiteFixtures,
+} from '../profiles/testHelpers';
 
 const P = '__delete_trails_test__';
+let suite: SuiteFixtures;
+
+beforeAll(async () => {
+  suite = await suiteSetup(P);
+});
+
+afterAll(async () => {
+  await suiteTeardown(suite);
+});
 
 describe('deleteTrailsDb — anon (denied)', () => {
   it('returns an error and trail deleted_at remains unset', async () => {
-    const id = await fixtureCreateTrail({ name: `${P}anon-target` });
+    const id = await fixtureCreateTrail({
+      name: `${P}anon-target`,
+      region_id: suite.regionId,
+    });
     const { error } = await deleteTrailsDb(anonClient, id);
     expect(error).not.toBeNull();
 
@@ -33,8 +46,11 @@ describe('deleteTrailsDb — anon (denied)', () => {
 
 describe('deleteTrailsDb — user role (denied)', () => {
   it('returns an error and trail deleted_at remains unset', async () => {
-    const id = await fixtureCreateTrail({ name: `${P}user-target` });
-    const client = await signedInClient(SEED_USER.email, SEED_USER.password);
+    const id = await fixtureCreateTrail({
+      name: `${P}user-target`,
+      region_id: suite.regionId,
+    });
+    const client = await signedInClient(suite.user.email, suite.user.password);
     const { error } = await deleteTrailsDb(client, id);
     expect(error).not.toBeNull();
 
@@ -55,9 +71,12 @@ describe('deleteTrailsDb — admin (permitted for own region)', () => {
     const id = await fixtureCreateTrail({
       name: `${P}admin-target`,
       visibility: 'public',
-      region_id: 1,
+      region_id: suite.regionId,
     });
-    const client = await signedInClient(SEED_ADMIN.email, SEED_ADMIN.password);
+    const client = await signedInClient(
+      suite.admin.email,
+      suite.admin.password
+    );
     const { error } = await deleteTrailsDb(client, id);
 
     expect(error).toBeNull();
@@ -85,11 +104,11 @@ describe('deleteTrailsDb — super_user (permitted for own region)', () => {
   it('sets deleted_at on the row and excludes it from trails_view', async () => {
     const id = await fixtureCreateTrail({
       name: `${P}super-user-target`,
-      region_id: 1,
+      region_id: suite.regionId,
     });
     const client = await signedInClient(
-      SEED_SUPER_USER.email,
-      SEED_SUPER_USER.password
+      suite.superUser.email,
+      suite.superUser.password
     );
     const { error } = await deleteTrailsDb(client, id);
     expect(error).toBeNull();
@@ -115,10 +134,13 @@ describe('deleteTrailsDb — super_user (permitted for own region)', () => {
 
 describe('deleteTrailsDb — super_admin (permitted for any trail)', () => {
   it('sets deleted_at on the row and excludes it from trails_view', async () => {
-    const id = await fixtureCreateTrail({ name: `${P}super-admin-target` });
+    const id = await fixtureCreateTrail({
+      name: `${P}super-admin-target`,
+      region_id: suite.regionId,
+    });
     const client = await signedInClient(
-      SEED_SUPER_ADMIN.email,
-      SEED_SUPER_ADMIN.password
+      suite.superAdmin.email,
+      suite.superAdmin.password
     );
     const { error } = await deleteTrailsDb(client, id);
     expect(error).toBeNull();
@@ -145,13 +167,13 @@ describe('deleteTrailsDb — super_admin (permitted for any trail)', () => {
 describe('deleteTrailsDb — bulk delete', () => {
   it('soft-deletes multiple trails in one call', async () => {
     const [id1, id2, id3] = await Promise.all([
-      fixtureCreateTrail({ name: `${P}bulk-1` }),
-      fixtureCreateTrail({ name: `${P}bulk-2` }),
-      fixtureCreateTrail({ name: `${P}bulk-3` }),
+      fixtureCreateTrail({ name: `${P}bulk-1`, region_id: suite.regionId }),
+      fixtureCreateTrail({ name: `${P}bulk-2`, region_id: suite.regionId }),
+      fixtureCreateTrail({ name: `${P}bulk-3`, region_id: suite.regionId }),
     ]);
     const client = await signedInClient(
-      SEED_SUPER_ADMIN.email,
-      SEED_SUPER_ADMIN.password
+      suite.superAdmin.email,
+      suite.superAdmin.password
     );
     const { error } = await deleteTrailsDb(client, [id1, id2, id3]);
     expect(error).toBeNull();
@@ -176,8 +198,8 @@ describe('deleteTrailsDb — bulk delete', () => {
 describe('deleteTrailsDb — non-existent id', () => {
   it('is a no-op (no error)', async () => {
     const client = await signedInClient(
-      SEED_SUPER_ADMIN.email,
-      SEED_SUPER_ADMIN.password
+      suite.superAdmin.email,
+      suite.superAdmin.password
     );
     const { error } = await deleteTrailsDb(client, 999_999_999);
     expect(error).toBeNull();

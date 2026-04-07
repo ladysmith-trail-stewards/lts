@@ -1,20 +1,30 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { upsertTrailsDb } from './upsertTrailsDb';
 import type { TrailFeature } from './upsertTrailsDb';
 import {
   anonClient,
   serviceClient,
   signedInClient,
-  SEED_USER,
-  SEED_ADMIN,
-  SEED_SUPER_USER,
-  SEED_SUPER_ADMIN,
 } from '../supabaseTestClients';
 import { fixtureDeleteTrails, SAMPLE_GEOMETRY } from './testHelpers';
+import {
+  suiteSetup,
+  suiteTeardown,
+  type SuiteFixtures,
+} from '../profiles/testHelpers';
 
 const P = '__upsert_test__';
 
+let suite: SuiteFixtures;
 const created: number[] = [];
+
+beforeAll(async () => {
+  suite = await suiteSetup(P);
+});
+
+afterAll(async () => {
+  await suiteTeardown(suite);
+});
 
 afterEach(async () => {
   await fixtureDeleteTrails(...created.splice(0));
@@ -29,7 +39,7 @@ function trailFeature(nameSuffix: string, id?: number): TrailFeature {
       name: `${P}${nameSuffix}`,
       type: 'trail',
       visibility: 'public',
-      region_id: 1,
+      region_id: suite.regionId,
     },
   };
 }
@@ -48,7 +58,7 @@ describe('upsertTrailsDb — anon (denied)', () => {
 
 describe('upsertTrailsDb — user role (denied)', () => {
   it('returns a top-level error', async () => {
-    const client = await signedInClient(SEED_USER.email, SEED_USER.password);
+    const client = await signedInClient(suite.user.email, suite.user.password);
     const { results, allOk, error } = await upsertTrailsDb(
       client,
       trailFeature('user')
@@ -61,7 +71,10 @@ describe('upsertTrailsDb — user role (denied)', () => {
 
 describe('upsertTrailsDb — admin insert (permitted for own region)', () => {
   it('inserts a trail and returns ok=true with an id', async () => {
-    const client = await signedInClient(SEED_ADMIN.email, SEED_ADMIN.password);
+    const client = await signedInClient(
+      suite.admin.email,
+      suite.admin.password
+    );
     const { results, allOk, error } = await upsertTrailsDb(
       client,
       trailFeature('admin-insert')
@@ -80,8 +93,8 @@ describe('upsertTrailsDb — admin insert (permitted for own region)', () => {
 describe('upsertTrailsDb — super_user insert', () => {
   it('inserts and returns ok=true', async () => {
     const client = await signedInClient(
-      SEED_SUPER_USER.email,
-      SEED_SUPER_USER.password
+      suite.superUser.email,
+      suite.superUser.password
     );
     const { results, allOk, error } = await upsertTrailsDb(
       client,
@@ -97,8 +110,8 @@ describe('upsertTrailsDb — super_user insert', () => {
 describe('upsertTrailsDb — super_admin insert', () => {
   it('inserts and returns ok=true', async () => {
     const client = await signedInClient(
-      SEED_SUPER_ADMIN.email,
-      SEED_SUPER_ADMIN.password
+      suite.superAdmin.email,
+      suite.superAdmin.password
     );
     const { results, allOk, error } = await upsertTrailsDb(
       client,
@@ -113,7 +126,10 @@ describe('upsertTrailsDb — super_admin insert', () => {
 
 describe('upsertTrailsDb — update existing trail', () => {
   it('updates by id and persists the new name', async () => {
-    const client = await signedInClient(SEED_ADMIN.email, SEED_ADMIN.password);
+    const client = await signedInClient(
+      suite.admin.email,
+      suite.admin.password
+    );
 
     const { results: insertResults } = await upsertTrailsDb(
       serviceClient,
@@ -130,7 +146,7 @@ describe('upsertTrailsDb — update existing trail', () => {
         name: newName,
         type: 'trail',
         visibility: 'public',
-        region_id: 1,
+        region_id: suite.regionId,
       },
     });
 
@@ -172,7 +188,7 @@ describe('upsertTrailsDb — update persists new geometry', () => {
         name: `${P}geom-update`,
         type: 'trail',
         visibility: 'public',
-        region_id: 1,
+        region_id: suite.regionId,
       },
     });
 
@@ -228,7 +244,7 @@ describe('upsertTrailsDb — invalid geometry', () => {
         name: `${P}bad-geom`,
         type: 'trail',
         visibility: 'public',
-        region_id: 1,
+        region_id: suite.regionId,
       },
     });
 

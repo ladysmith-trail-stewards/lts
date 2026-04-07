@@ -95,6 +95,42 @@ export type Database = {
         };
         Relationships: [];
       };
+      trail_elevations: {
+        Row: {
+          elevation_profile: Json;
+          geometry_3d: unknown;
+          trail_id: number;
+          updated_at: string;
+        };
+        Insert: {
+          elevation_profile?: Json;
+          geometry_3d?: unknown;
+          trail_id: number;
+          updated_at?: string;
+        };
+        Update: {
+          elevation_profile?: Json;
+          geometry_3d?: unknown;
+          trail_id?: number;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'trail_elevations_trail_id_fkey';
+            columns: ['trail_id'];
+            isOneToOne: true;
+            referencedRelation: 'trails';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'trail_elevations_trail_id_fkey';
+            columns: ['trail_id'];
+            isOneToOne: true;
+            referencedRelation: 'trails_view';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
       trails: {
         Row: {
           activity_types: string[] | null;
@@ -104,6 +140,7 @@ export type Database = {
           deleted_at: string | null;
           description: string | null;
           direction: string | null;
+          geom_updated_at: string;
           geometry: unknown;
           hidden: boolean;
           id: number;
@@ -124,6 +161,7 @@ export type Database = {
           deleted_at?: string | null;
           description?: string | null;
           direction?: string | null;
+          geom_updated_at?: string;
           geometry: unknown;
           hidden?: boolean;
           id?: number;
@@ -144,6 +182,7 @@ export type Database = {
           deleted_at?: string | null;
           description?: string | null;
           direction?: string | null;
+          geom_updated_at?: string;
           geometry?: unknown;
           hidden?: boolean;
           id?: number;
@@ -581,6 +620,14 @@ export type Database = {
           using_expr: string;
         }[];
       };
+      get_trails_utm: {
+        Args: { trail_ids: number[] };
+        Returns: {
+          geometry: unknown;
+          id: number;
+        }[];
+      };
+      get_utm_epsg: { Args: { geom: unknown }; Returns: number };
       gettransactionid: { Args: never; Returns: unknown };
       longtransactionsenabled: { Args: never; Returns: boolean };
       populate_geometry_columns:
