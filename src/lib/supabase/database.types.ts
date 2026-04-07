@@ -98,18 +98,21 @@ export type Database = {
       trail_elevations: {
         Row: {
           elevation_profile: Json;
+          geom_snapshot_at: string | null;
           geometry_3d: unknown;
           trail_id: number;
           updated_at: string;
         };
         Insert: {
           elevation_profile?: Json;
+          geom_snapshot_at?: string | null;
           geometry_3d?: unknown;
           trail_id: number;
           updated_at?: string;
         };
         Update: {
           elevation_profile?: Json;
+          geom_snapshot_at?: string | null;
           geometry_3d?: unknown;
           trail_id?: number;
           updated_at?: string;
@@ -420,7 +423,7 @@ export type Database = {
         Args: { geom1: unknown; geom2: unknown };
         Returns: boolean;
       };
-      accept_policy: { Args: never; Returns: undefined };
+      accept_policy: { Args: { p_region_id: number }; Returns: undefined };
       addauth: { Args: { '': string }; Returns: boolean };
       addgeometrycolumn:
         | {
