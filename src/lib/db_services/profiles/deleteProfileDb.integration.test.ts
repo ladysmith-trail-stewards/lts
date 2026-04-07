@@ -4,19 +4,27 @@ import {
   anonClient,
   serviceClient,
   signedInClient,
-  SEED_ADMIN,
-  SEED_SUPER_USER,
-  SEED_SUPER_ADMIN,
 } from '../supabaseTestClients';
 import { fixtureCreateProfile, fixtureDeleteProfiles } from './testHelpers';
+import { suiteSetup, suiteTeardown, type SuiteFixtures } from './testHelpers';
 
 const P = '__soft_delete_profiles_test__';
 
+let suite: SuiteFixtures;
+
+beforeAll(async () => {
+  suite = await suiteSetup(P);
+});
+
+afterAll(async () => {
+  await suiteTeardown(suite);
+});
+
 // ---------------------------------------------------------------------------
-// Fixture user — used for the "own profile" tests so we never touch seed data
+// Fixture user — used for the "own profile" tests so we never touch role-fixture users
 // ---------------------------------------------------------------------------
 const FIXTURE_OWN_NAME = `${P}own-user`;
-const FIXTURE_OWN_EMAIL = `fixture-${FIXTURE_OWN_NAME.replace(/[^a-z0-9]/gi, '-').toLowerCase()}@test-fixture.invalid`;
+const FIXTURE_OWN_EMAIL = `i_test_${FIXTURE_OWN_NAME.replace(/[^a-z0-9]/gi, '-').toLowerCase()}@test-fixture.invalid`;
 const FIXTURE_OWN_PASSWORD = 'fixture-password-123';
 let fixtureOwnId: number;
 
@@ -49,7 +57,7 @@ describe('deleteProfileDb — user (own profile only)', () => {
   beforeAll(async () => {
     fixtureOwnId = await fixtureCreateProfile({
       name: FIXTURE_OWN_NAME,
-      region_id: 1,
+      region_id: suite.regionId,
     });
   });
   afterAll(async () => {
@@ -101,12 +109,12 @@ describe('deleteProfileDb — super_user (own profile only)', () => {
   it("cannot soft-delete another user's profile", async () => {
     const id = await fixtureCreateProfile({
       name: `${P}super-user-other-target`,
-      region_id: 1,
+      region_id: suite.regionId,
     });
 
     const client = await signedInClient(
-      SEED_SUPER_USER.email,
-      SEED_SUPER_USER.password
+      suite.superUser.email,
+      suite.superUser.password
     );
     const { error } = await deleteProfileDb(client, id);
     expect(error).not.toBeNull();
@@ -129,10 +137,13 @@ describe('deleteProfileDb — admin (own region)', () => {
   it('can soft-delete a profile in their region', async () => {
     const id = await fixtureCreateProfile({
       name: `${P}admin-target`,
-      region_id: 1,
+      region_id: suite.regionId,
     });
 
-    const client = await signedInClient(SEED_ADMIN.email, SEED_ADMIN.password);
+    const client = await signedInClient(
+      suite.admin.email,
+      suite.admin.password
+    );
     const { error } = await deleteProfileDb(client, id);
     expect(error).toBeNull();
 
@@ -155,8 +166,8 @@ describe('deleteProfileDb — super_admin (any profile)', () => {
     const id = await fixtureCreateProfile({ name: `${P}super-admin-target` });
 
     const client = await signedInClient(
-      SEED_SUPER_ADMIN.email,
-      SEED_SUPER_ADMIN.password
+      suite.superAdmin.email,
+      suite.superAdmin.password
     );
     const { error } = await deleteProfileDb(client, id);
     expect(error).toBeNull();
@@ -176,8 +187,8 @@ describe('deleteProfileDb — super_admin (any profile)', () => {
     const id2 = await fixtureCreateProfile({ name: `${P}bulk-2` });
 
     const client = await signedInClient(
-      SEED_SUPER_ADMIN.email,
-      SEED_SUPER_ADMIN.password
+      suite.superAdmin.email,
+      suite.superAdmin.password
     );
     const { error } = await deleteProfileDb(client, [id1, id2]);
     expect(error).toBeNull();
@@ -196,8 +207,8 @@ describe('deleteProfileDb — super_admin (any profile)', () => {
 
   it('non-existent id is a silent no-op', async () => {
     const client = await signedInClient(
-      SEED_SUPER_ADMIN.email,
-      SEED_SUPER_ADMIN.password
+      suite.superAdmin.email,
+      suite.superAdmin.password
     );
     const { error } = await deleteProfileDb(client, 9999999);
     expect(error).toBeNull();

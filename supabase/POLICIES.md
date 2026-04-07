@@ -43,6 +43,16 @@
 | Admin       |   ✅   |   —    |   —    |   —    |
 | Super Admin |   ✅   |   ✅   |   ✅   |   ✅   |
 
+### `trail_elevations`
+
+| Role        | SELECT |
+| ----------- | :----: |
+| Anon        |   ✅   |
+| User        |   ✅   |
+| Super User  |   ✅   |
+| Admin       |   ✅   |
+| Super Admin |   ✅   |
+
 ### `trails`
 
 | Role        | SELECT | INSERT | UPDATE | DELETE |
@@ -59,7 +69,7 @@
 
 | RPC                    | Callable by     |  Security  | Notes                                                                                   |
 | ---------------------- | --------------- | :--------: | --------------------------------------------------------------------------------------- |
-| `accept_policy`        | `authenticated` | 🔒 DEFINER | Sets policy_accepted_at = now() for the calling pending user.                           |
+| `accept_policy`        | `authenticated` | 🔒 DEFINER | Sets policy_accepted_at = now() and region_id = p_region_id for the calling             |
 | `soft_delete_profiles` | `authenticated` | 🔒 DEFINER | Sets deleted_at = now() on profiles. SECURITY DEFINER to bypass column-level privilege. |
 | `soft_delete_trails`   | `authenticated` | 🔒 DEFINER | Sets deleted_at = now() on trails. SECURITY DEFINER to bypass column-level privilege.   |
 | `upsert_trails`        | `authenticated` |  INVOKER   | —                                                                                       |

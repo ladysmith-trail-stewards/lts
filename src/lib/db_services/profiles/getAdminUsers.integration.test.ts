@@ -3,20 +3,19 @@ import {
   anonClient,
   serviceClient,
   signedInClient,
-  SEED_USER,
-  SEED_ADMIN,
-  SEED_SUPER_USER,
-  SEED_SUPER_ADMIN,
 } from '../../db_services/supabaseTestClients';
 import { fixtureCreateProfile, fixtureDeleteProfiles } from './testHelpers';
+import { suiteSetup, suiteTeardown, type SuiteFixtures } from './testHelpers';
 
 const P = '__get_admin_users_test__';
+let suite: SuiteFixtures;
 let softDeletedProfileId: number;
 
 beforeAll(async () => {
+  suite = await suiteSetup(P);
   softDeletedProfileId = await fixtureCreateProfile({
     name: `${P}soft-deleted`,
-    region_id: 1,
+    region_id: suite.regionId,
   });
   // Soft-delete via service role
   await serviceClient
@@ -27,6 +26,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await fixtureDeleteProfiles(softDeletedProfileId);
+  await suiteTeardown(suite);
 });
 
 describe('get_admin_users RPC — denied roles', () => {
@@ -36,7 +36,7 @@ describe('get_admin_users RPC — denied roles', () => {
   });
 
   it('user cannot call get_admin_users', async () => {
-    const client = await signedInClient(SEED_USER.email, SEED_USER.password);
+    const client = await signedInClient(suite.user.email, suite.user.password);
     const { data, error } = await client.rpc('get_admin_users');
     // RLS WHERE clause returns empty, not an error
     expect(error).toBeNull();
@@ -45,8 +45,8 @@ describe('get_admin_users RPC — denied roles', () => {
 
   it('super_user cannot call get_admin_users', async () => {
     const client = await signedInClient(
-      SEED_SUPER_USER.email,
-      SEED_SUPER_USER.password
+      suite.superUser.email,
+      suite.superUser.password
     );
     const { data, error } = await client.rpc('get_admin_users');
     expect(error).toBeNull();
@@ -57,7 +57,7 @@ describe('get_admin_users RPC — denied roles', () => {
 describe('get_admin_users RPC — admin', () => {
   let client: Awaited<ReturnType<typeof signedInClient>>;
   beforeAll(async () => {
-    client = await signedInClient(SEED_ADMIN.email, SEED_ADMIN.password);
+    client = await signedInClient(suite.admin.email, suite.admin.password);
   });
 
   it('admin can call get_admin_users and receives results', async () => {
@@ -77,8 +77,8 @@ describe('get_admin_users RPC — super_admin', () => {
   let client: Awaited<ReturnType<typeof signedInClient>>;
   beforeAll(async () => {
     client = await signedInClient(
-      SEED_SUPER_ADMIN.email,
-      SEED_SUPER_ADMIN.password
+      suite.superAdmin.email,
+      suite.superAdmin.password
     );
   });
 

@@ -3,21 +3,23 @@ import {
   anonClient,
   serviceClient,
   signedInClient,
-  SEED_USER,
-  SEED_ADMIN,
-  SEED_SUPER_USER,
-  SEED_SUPER_ADMIN,
 } from '../supabaseTestClients';
+import {
+  suiteSetup,
+  suiteTeardown,
+  type SuiteFixtures,
+} from '../profiles/testHelpers';
 
 const P = '__regions_rls_test__';
-const TEST_REGION_ID = 999;
+
+let suite: SuiteFixtures;
 
 beforeAll(async () => {
-  await serviceClient.from('regions').delete().eq('id', TEST_REGION_ID);
+  suite = await suiteSetup(P);
 });
 
 afterAll(async () => {
-  await serviceClient.from('regions').delete().eq('id', TEST_REGION_ID);
+  await suiteTeardown(suite);
 });
 
 describe('regions RLS — SELECT', () => {
@@ -28,7 +30,7 @@ describe('regions RLS — SELECT', () => {
   });
 
   it('user can SELECT regions', async () => {
-    const client = await signedInClient(SEED_USER.email, SEED_USER.password);
+    const client = await signedInClient(suite.user.email, suite.user.password);
     const { data, error } = await client.from('regions').select('id');
     expect(error).toBeNull();
     expect(data!.length).toBeGreaterThan(0);
@@ -39,59 +41,73 @@ describe('regions RLS — INSERT/UPDATE/DELETE — non-super_admin (denied)', ()
   it('anon cannot INSERT a region', async () => {
     const { error } = await anonClient
       .from('regions')
-      .insert({ id: TEST_REGION_ID, name: `${P}anon` });
+      .insert({ name: `i_test_${P}anon` });
     expect(error).not.toBeNull();
   });
 
   it('user cannot INSERT a region', async () => {
-    const client = await signedInClient(SEED_USER.email, SEED_USER.password);
+    const client = await signedInClient(suite.user.email, suite.user.password);
     const { error } = await client
       .from('regions')
-      .insert({ id: TEST_REGION_ID, name: `${P}user` });
+      .insert({ name: `i_test_${P}user` });
     expect(error).not.toBeNull();
   });
 
   it('super_user cannot INSERT a region', async () => {
     const client = await signedInClient(
-      SEED_SUPER_USER.email,
-      SEED_SUPER_USER.password
+      suite.superUser.email,
+      suite.superUser.password
     );
     const { error } = await client
       .from('regions')
-      .insert({ id: TEST_REGION_ID, name: `${P}super-user` });
+      .insert({ name: `i_test_${P}super-user` });
     expect(error).not.toBeNull();
   });
 
   it('admin cannot INSERT a region', async () => {
-    const client = await signedInClient(SEED_ADMIN.email, SEED_ADMIN.password);
+    const client = await signedInClient(
+      suite.admin.email,
+      suite.admin.password
+    );
     const { error } = await client
       .from('regions')
-      .insert({ id: TEST_REGION_ID, name: `${P}admin` });
+      .insert({ name: `i_test_${P}admin` });
     expect(error).not.toBeNull();
   });
 });
 
 describe('regions RLS — INSERT/UPDATE/DELETE — super_admin (permitted)', () => {
   let client: Awaited<ReturnType<typeof signedInClient>>;
+  let insertedRegionId: number;
+
   beforeAll(async () => {
     client = await signedInClient(
-      SEED_SUPER_ADMIN.email,
-      SEED_SUPER_ADMIN.password
+      suite.superAdmin.email,
+      suite.superAdmin.password
     );
   });
 
+  afterAll(async () => {
+    if (insertedRegionId) {
+      await serviceClient.from('regions').delete().eq('id', insertedRegionId);
+    }
+  });
+
   it('can INSERT a region', async () => {
-    const { error } = await client
+    const { data, error } = await client
       .from('regions')
-      .insert({ id: TEST_REGION_ID, name: `${P}super-admin` });
+      .insert({ name: `i_test_${P}super-admin` })
+      .select('id')
+      .single();
     expect(error).toBeNull();
+    insertedRegionId = data!.id;
   });
 
   it('can UPDATE a region', async () => {
     const { error } = await client
       .from('regions')
-      .update({ name: `${P}super-admin-updated` })
-      .eq('id', TEST_REGION_ID);
+      .update({ name: `i_test_${P}super-admin-updated` })
+      .eq('id', insertedRegionId);
     expect(error).toBeNull();
   });
 
@@ -99,13 +115,14 @@ describe('regions RLS — INSERT/UPDATE/DELETE — super_admin (permitted)', () 
     const { error } = await client
       .from('regions')
       .delete()
-      .eq('id', TEST_REGION_ID);
+      .eq('id', insertedRegionId);
     expect(error).toBeNull();
     const { data } = await serviceClient
       .from('regions')
       .select('id')
-      .eq('id', TEST_REGION_ID)
+      .eq('id', insertedRegionId)
       .maybeSingle();
     expect(data).toBeNull();
+    insertedRegionId = 0; // mark as already deleted so afterAll skip
   });
 });
