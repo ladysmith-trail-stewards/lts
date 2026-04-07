@@ -2,6 +2,7 @@
 
 import logging
 import os
+import re
 import tempfile
 from pathlib import Path
 from typing import Optional
@@ -239,7 +240,10 @@ class HRDEMProvider(DemProvider):
 
         # ── cache_dir set ────────────────────────────────────────────────────
         self._cache_dir.mkdir(parents=True, exist_ok=True)
-        clip_path = self._cache_dir / f"{item_id}.tif"
+        # Sanitize item_id: keep only alphanumeric characters, hyphens, and
+        # underscores to prevent path traversal when building the cache path.
+        safe_id = re.sub(r"[^A-Za-z0-9_\-]", "_", item_id)
+        clip_path = self._cache_dir / f"{safe_id}.tif"
 
         if clip_path.exists() and self._clip_covers(clip_path, min_lon, min_lat, max_lon, max_lat):
             log.debug("HRDEM: clip cache hit — %s", clip_path.name)
