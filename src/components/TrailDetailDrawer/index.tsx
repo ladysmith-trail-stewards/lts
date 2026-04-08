@@ -437,6 +437,16 @@ function TrailPanel({
             </div>
           </div>
         )}
+        {/* ── Elevation Profile ─────────────────────────────────────────── */}
+        {/* TODO: unhide once DB tie-in and vertex highlighting are ready */}
+        {/* {!isNew && !editing && (
+          <ElevationProfileChart
+            data={STUB_ELEVATION_DATA}
+            onPointClick={() => {
+              // TODO: highlight corresponding vertex on the map
+            }}
+          />
+        )} */}
         {/* ── Description ──────────────────────────────────────────────── */}
         <div className="space-y-1.5">
           <Label className="text-xs text-slate-500 uppercase tracking-wide">
