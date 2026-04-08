@@ -30,7 +30,6 @@ import {
   TrailClassDot,
   StatusPill,
 } from './TrailDetailSubcomponents';
-import { ElevationProfileChart } from './ElevationProfileChart';
 
 import {
   Select,
@@ -62,23 +61,6 @@ const NEW_TRAIL_DEFAULTS: TrailEditValues = {
   connector: false,
   visibility: 'public',
 };
-
-// Stub elevation data — replace with real per-trail geometry-derived data.
-const STUB_ELEVATION_DATA = [
-  { distanceM: 0, elevationM: 120 },
-  { distanceM: 250, elevationM: 135 },
-  { distanceM: 500, elevationM: 158 },
-  { distanceM: 750, elevationM: 172 },
-  { distanceM: 1000, elevationM: 165 },
-  { distanceM: 1250, elevationM: 180 },
-  { distanceM: 1500, elevationM: 195 },
-  { distanceM: 1750, elevationM: 188 },
-  { distanceM: 2000, elevationM: 175 },
-  { distanceM: 2250, elevationM: 162 },
-  { distanceM: 2500, elevationM: 148 },
-  { distanceM: 2750, elevationM: 130 },
-  { distanceM: 3000, elevationM: 120 },
-];
 
 // ── TrailPanel ────────────────────────────────────────────────────────────────
 // Handles both existing trails (trail != null) and new trail creation (trail == null).
@@ -456,14 +438,15 @@ function TrailPanel({
           </div>
         )}
         {/* ── Elevation Profile ─────────────────────────────────────────── */}
-        {!isNew && !editing && (
+        {/* TODO: unhide once DB tie-in and vertex highlighting are ready */}
+        {/* {!isNew && !editing && (
           <ElevationProfileChart
             data={STUB_ELEVATION_DATA}
             onPointClick={() => {
               // TODO: highlight corresponding vertex on the map
             }}
           />
-        )}
+        )} */}
         {/* ── Description ──────────────────────────────────────────────── */}
         <div className="space-y-1.5">
           <Label className="text-xs text-slate-500 uppercase tracking-wide">
