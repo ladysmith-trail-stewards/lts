@@ -5,36 +5,31 @@ import {
   useState,
   useCallback,
 } from 'react';
-import mapboxgl, { type ExpressionSpecification } from 'mapbox-gl';
-import { useTrails, type Trail } from '@/hooks/useTrails';
+import mapboxgl from 'mapbox-gl';
+import { useSearchParams } from 'react-router-dom';
 import { useDrawTrail, type DrawTrailApi } from '@/hooks/useDrawTrail';
+import { type Trail } from '@/hooks/useTrails';
 import {
   MAP_STYLES,
   type StyleKey,
   TRAILS_SOURCE,
-  TRAILS_LAYER,
-  TRAILS_SELECTED,
-  TRAILS_LABELS,
   TRAILS_ENDPOINTS,
-  TRAILS_START,
-  TRAILS_END,
-  CONTOUR_SOURCE,
-  CONTOUR_LAYER,
-  CONTOUR_LABEL,
-  DEM_SOURCE,
-  HILLSHADE_LAYER,
   INITIAL_CENTER,
   INITIAL_ZOOM,
   INITIAL_PITCH,
   INITIAL_BEARING,
-  TERRAIN_EXAGGERATION,
-  BASEMAP_CONFIG,
-  TRAIL_COLOR_EXPR,
-  TRAIL_WIDTH_EXPR,
-  CONTOUR_COLORS,
-  type ContourScheme,
   CONTOUR_STRENGTH_DEFAULT,
 } from '@/lib/map/config';
+import {
+  SELECTED_LAYER_CONFIG,
+  TRAILS_LAYER_CONFIG,
+  TRAILS_LABELS_CONFIG,
+  TRAILS_START_CONFIG,
+  TRAILS_END_CONFIG,
+} from '@/lib/map/layers';
+
+// Layer ID shorthand for hover/click handlers
+const TRAILS_LAYER = TRAILS_LAYER_CONFIG.id;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -58,35 +53,33 @@ function trailToFeature(t: Trail): GeoJSON.Feature {
 }
 
 export interface UseMapboxOptions {
+  trails: Trail[];
   onTrailClick?: (trailId: number) => void;
-  /** Trail id from the URL param — drives the selection highlight */
   selectedTrailId?: number | null;
+  searchParams?: URLSearchParams;
+  setSearchParams?: ReturnType<typeof useSearchParams>[1];
 }
 
 export interface UseMapboxReturn {
   mapContainerRef: React.RefObject<HTMLDivElement | null>;
   currentStyle: StyleKey;
   contourStrength: number;
-  contourScheme: ContourScheme;
   mapReady: boolean;
-  trails: ReturnType<typeof useTrails>['trails'];
-  loading: boolean;
-  trailsError: string | null;
   drawApi: DrawTrailApi;
   handleStyleChange: (style: StyleKey) => void;
   handleContourStrength: (value: number) => void;
-  handleContourScheme: (scheme: ContourScheme) => void;
-  handleTrailUpdated: (updated: Trail) => void;
-  /** Remove the given trail from local state and the map source layer. */
-  handleTrailDeleted: (id: number) => void;
-  /** Hide the given trail from the source layer while it is being edited in Draw. */
+  pushTrailUpdate: (updated: Trail) => void;
+  pushTrailDelete: (id: number) => void;
   setEditingTrailId: (id: number | null) => void;
 }
 
 export function useMapbox({
+  trails,
   onTrailClick,
   selectedTrailId = null,
-}: UseMapboxOptions = {}): UseMapboxReturn {
+  searchParams,
+  setSearchParams,
+}: UseMapboxOptions): UseMapboxReturn {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
 
@@ -95,9 +88,30 @@ export function useMapbox({
     CONTOUR_STRENGTH_DEFAULT
   );
   const contourStrengthRef = useRef(CONTOUR_STRENGTH_DEFAULT);
-  const [contourScheme, setContourScheme] = useState<ContourScheme>('dark');
-  const contourSchemeRef = useRef<ContourScheme>('dark');
   const [mapReady, setMapReady] = useState(false);
+
+  // ── Initial camera from search params (read once on mount) ───────────────────
+  // Capture values into a ref so the map-creation effect never re-runs when
+  // search params change after mount. Format: ?lat=&lon=&z=&p=&b=
+  const initialCameraRef = useRef(
+    (() => {
+      const g = (k: string) =>
+        searchParams ? Number(searchParams.get(k) ?? NaN) : NaN;
+      return {
+        lat: g('lat'),
+        lng: g('lon'),
+        zoom: g('z'),
+        pitch: g('p'),
+        bearing: g('b'),
+      };
+    })()
+  );
+  // Keep a stable ref to setSearchParams so the moveend handler can always
+  // call the latest version without re-registering the listener.
+  const setSearchParamsRef = useRef(setSearchParams);
+  useEffect(() => {
+    setSearchParamsRef.current = setSearchParams;
+  }, [setSearchParams]);
 
   const drawApi = useDrawTrail(mapRef);
 
@@ -137,23 +151,12 @@ export function useMapbox({
     }
   }
 
-  // Local copy of trails so we can patch individual rows after an edit/create.
-  // useTrails fetches once; handleTrailUpdated patches locally to avoid refetch.
-  const { trails: fetchedTrails, loading, error: trailsError } = useTrails();
-  const [trails, setTrails] = useState(fetchedTrails);
-  // Mirror trails state in a ref so handleTrailUpdated can read the current
-  // list synchronously (outside of a setState updater) to avoid the flicker
-  // caused by a deferred setData call.
-  const trailsRef = useRef(trails);
+  // Mirror trails prop in a ref so map callbacks can read the current list
+  // synchronously without closing over a stale value.
+  const trailsRef = useRef<Trail[]>(trails);
   useLayoutEffect(() => {
     trailsRef.current = trails;
   });
-  // Sync only when fetchedTrails reference changes (i.e. the async fetch
-  // completes or re-runs). A plain render-time comparison would overwrite
-  // local patches made by handleTrailUpdated on every re-render.
-  useEffect(() => {
-    setTrails(fetchedTrails);
-  }, [fetchedTrails]);
 
   // ── GeoJSON ──────────────────────────────────────────────────────────────────
 
@@ -193,86 +196,50 @@ export function useMapbox({
     [trails]
   );
 
-  function handleTrailUpdated(updated: Trail) {
-    // Compute next trails list eagerly so we can push to Mapbox synchronously
-    // before the draw control is removed (avoids a stale-geometry flash).
-    const trailsSnapshot = trailsRef.current;
-    const exists = trailsSnapshot.some((t) => t.id === updated.id);
+  function pushTrailUpdate(updated: Trail) {
+    // Build the next list from the ref so this is always synchronous,
+    // avoiding a stale-geometry flash when draw control is removed.
+    const snapshot = trailsRef.current;
+    const exists = snapshot.some((t) => t.id === updated.id);
     const next = exists
-      ? trailsSnapshot.map((t) => (t.id === updated.id ? updated : t))
-      : [...trailsSnapshot, updated];
+      ? snapshot.map((t) => (t.id === updated.id ? updated : t))
+      : [...snapshot, updated];
 
     const map = mapRef.current;
-    if (map) {
-      const geojson: GeoJSON.FeatureCollection = {
+    if (!map) return;
+
+    if (map.getSource(TRAILS_SOURCE)) {
+      (map.getSource(TRAILS_SOURCE) as mapboxgl.GeoJSONSource).setData({
         type: 'FeatureCollection',
         features: next.map(trailToFeature),
-      };
-      if (map.getSource(TRAILS_SOURCE)) {
-        (map.getSource(TRAILS_SOURCE) as mapboxgl.GeoJSONSource).setData(
-          geojson
-        );
-      }
-      if (map.getSource(TRAILS_ENDPOINTS)) {
-        const forId = selectedTrailIdRef.current;
-        const endpointsGeoJSON: GeoJSON.FeatureCollection = {
-          type: 'FeatureCollection',
-          features: next.flatMap((t) => {
-            if (t.id !== forId) return [];
-            const coords = t.geometry_geojson?.coordinates;
-            if (!coords || coords.length < 2) return [];
-            return [
-              {
-                type: 'Feature' as const,
-                id: t.id * 2,
-                geometry: { type: 'Point' as const, coordinates: coords[0] },
-                properties: { trail_id: t.id, role: 'start' },
-              },
-              {
-                type: 'Feature' as const,
-                id: t.id * 2 + 1,
-                geometry: {
-                  type: 'Point' as const,
-                  coordinates: coords[coords.length - 1],
-                },
-                properties: { trail_id: t.id, role: 'end' },
-              },
-            ];
-          }),
-        };
-        (map.getSource(TRAILS_ENDPOINTS) as mapboxgl.GeoJSONSource).setData(
-          endpointsGeoJSON
-        );
-      }
+      });
     }
-
-    setTrails(next);
+    if (map.getSource(TRAILS_ENDPOINTS)) {
+      const forId = selectedTrailIdRef.current;
+      (map.getSource(TRAILS_ENDPOINTS) as mapboxgl.GeoJSONSource).setData(
+        buildEndpointsGeoJSON(forId)
+      );
+    }
   }
 
-  function handleTrailDeleted(id: number) {
-    const trailsSnapshot = trailsRef.current;
-    const next = trailsSnapshot.filter((t) => t.id !== id);
+  function pushTrailDelete(id: number) {
+    const next = trailsRef.current.filter((t) => t.id !== id);
 
     const map = mapRef.current;
-    if (map) {
-      const geojson: GeoJSON.FeatureCollection = {
+    if (!map) return;
+
+    if (map.getSource(TRAILS_SOURCE)) {
+      (map.getSource(TRAILS_SOURCE) as mapboxgl.GeoJSONSource).setData({
         type: 'FeatureCollection',
         features: next.map(trailToFeature),
-      };
-      if (map.getSource(TRAILS_SOURCE)) {
-        (map.getSource(TRAILS_SOURCE) as mapboxgl.GeoJSONSource).setData(
-          geojson
-        );
-      }
-      if (map.getSource(TRAILS_ENDPOINTS)) {
-        (map.getSource(TRAILS_ENDPOINTS) as mapboxgl.GeoJSONSource).setData({
-          type: 'FeatureCollection',
-          features: [],
-        });
-      }
+      });
     }
-
-    setTrails(next);
+    if (map.getSource(TRAILS_ENDPOINTS)) {
+      (map.getSource(TRAILS_ENDPOINTS) as mapboxgl.GeoJSONSource).setData({
+        type: 'FeatureCollection',
+        features: [],
+      });
+    }
   }
 
   const addTrailsLayer = useCallback(
@@ -287,417 +254,138 @@ export function useMapbox({
         );
         return;
       }
+      // Add sources for trails and endpoints On first Load
       map.addSource(TRAILS_SOURCE, { type: 'geojson', data: geojson });
       map.addSource(TRAILS_ENDPOINTS, {
         type: 'geojson',
         data: buildEndpointsGeoJSON(selectedTrailIdRef.current),
       });
-      // Selection highlight — rendered below the trail line
-      map.addLayer({
-        id: TRAILS_SELECTED,
-        type: 'line',
-        source: TRAILS_SOURCE,
-        slot: 'middle',
-        layout: { 'line-join': 'round', 'line-cap': 'round' },
-        paint: {
-          'line-color': '#facc15', // yellow-400
-          'line-width': [
-            'case',
-            ['boolean', ['feature-state', 'selected'], false],
-            8,
-            0,
-          ],
-          'line-opacity': 0.8,
-          'line-blur': 2,
-        },
-      });
-      map.addLayer({
-        id: TRAILS_LAYER,
-        type: 'line',
-        source: TRAILS_SOURCE,
-        slot: 'middle',
-        layout: { 'line-join': 'round', 'line-cap': 'round' },
-        paint: {
-          'line-color': TRAIL_COLOR_EXPR,
-          'line-width': TRAIL_WIDTH_EXPR,
-          'line-opacity': [
-            'case',
-            ['boolean', ['feature-state', 'editing'], false],
-            0,
-            1,
-          ],
-        },
-      });
-      // Trail name labels — only on named, non-hidden, non-connector trails
-      map.addLayer({
-        id: TRAILS_LABELS,
-        type: 'symbol',
-        source: TRAILS_SOURCE,
-        slot: 'top',
-        filter: [
-          'all',
-          ['!=', ['get', 'hidden'], true],
-          ['!=', ['get', 'connector'], true],
-          ['has', 'name'],
-          ['!=', ['get', 'name'], ''],
-        ],
-        minzoom: 12,
-        layout: {
-          'symbol-placement': 'line',
-          'text-field': ['get', 'name'],
-          'text-size': ['interpolate', ['linear'], ['zoom'], 12, 10, 16, 13],
-          'text-font': ['DIN Pro Medium', 'Arial Unicode MS Regular'],
-          'text-offset': [0, -0.8],
-          'symbol-spacing': 300,
-          'text-max-angle': 35,
-          'text-allow-overlap': true,
-          'text-ignore-placement': true,
-        },
-        paint: {
-          'text-color': '#1e293b',
-          'text-halo-color': 'rgba(255,255,255,0.9)',
-          'text-halo-width': 1.5,
-          'text-opacity': ['interpolate', ['linear'], ['zoom'], 12, 0, 12.5, 1],
-        },
-      });
-      // Start dots (green) — only shown for the selected trail
-      map.addLayer({
-        id: TRAILS_START,
-        type: 'circle',
-        source: TRAILS_ENDPOINTS,
-        slot: 'top',
-        filter: ['==', ['get', 'role'], 'start'],
-        paint: {
-          'circle-radius': ['interpolate', ['linear'], ['zoom'], 13, 4, 16, 7],
-          'circle-color': '#22c55e',
-          'circle-stroke-color': '#fff',
-          'circle-stroke-width': 1.5,
-          'circle-opacity': 0.9,
-        },
-      });
-      // End dots (red)
-      map.addLayer({
-        id: TRAILS_END,
-        type: 'circle',
-        source: TRAILS_ENDPOINTS,
-        slot: 'top',
-        filter: ['==', ['get', 'role'], 'end'],
-        paint: {
-          'circle-radius': ['interpolate', ['linear'], ['zoom'], 13, 4, 16, 7],
-          'circle-color': '#ef4444',
-          'circle-stroke-color': '#fff',
-          'circle-stroke-width': 1.5,
-          'circle-opacity': 0.9,
-        },
-      });
+      map.addLayer(SELECTED_LAYER_CONFIG);
+      map.addLayer(TRAILS_LAYER_CONFIG);
+      map.addLayer(TRAILS_LABELS_CONFIG);
+      map.addLayer(TRAILS_START_CONFIG);
+      map.addLayer(TRAILS_END_CONFIG);
     },
     [buildGeoJSON, buildEndpointsGeoJSON]
   );
 
-  // ── Contour paint helpers ─────────────────────────────────────────────────────
+  // ── Contour layer IDs (discovered from the loaded style) ─────────────────────
 
-  const applyContourColors = useCallback(
-    (map: mapboxgl.Map, scheme: ContourScheme) => {
-      const c = CONTOUR_COLORS[scheme];
-      if (map.getLayer(CONTOUR_LAYER)) {
-        map.setPaintProperty(CONTOUR_LAYER, 'line-color', [
-          'case',
-          [
-            'all',
-            ['in', ['get', 'index'], ['literal', [1, 2]]],
-            ['==', ['%', ['get', 'ele'], 50], 0],
-          ],
-          c.major,
-          ['in', ['get', 'index'], ['literal', [1, 2]]],
-          c.semi,
-          c.minor,
-        ]);
-      }
-      if (map.getLayer(CONTOUR_LABEL)) {
-        map.setPaintProperty(CONTOUR_LABEL, 'text-color', c.label);
-      }
-    },
-    []
-  );
+  const contourLineIdsRef = useRef<string[]>([]);
+  const contourLabelIdsRef = useRef<string[]>([]);
+
+  // ── Contour paint helper ──────────────────────────────────────────────────────
 
   const applyContourStrength = useCallback(
     (map: mapboxgl.Map, strength: number) => {
-      if (!map.getLayer(CONTOUR_LAYER)) return;
       const t = strength / 100;
-      const isMajor50: ExpressionSpecification = [
-        'all',
-        ['in', ['get', 'index'], ['literal', [1, 2]]],
-        ['==', ['%', ['get', 'ele'], 50], 0],
-      ];
-      const isSemi: ExpressionSpecification = [
-        'in',
-        ['get', 'index'],
-        ['literal', [1, 2]],
-      ];
-      map.setPaintProperty(CONTOUR_LAYER, 'line-width', [
-        'interpolate',
-        ['linear'],
-        ['zoom'],
-        11,
-        ['case', isMajor50, 0.5 * t, isSemi, 0.3 * t, 0.15 * t],
-        15,
-        ['case', isMajor50, 1.2 * t, isSemi, 0.8 * t, 0.4 * t],
-      ]);
-      map.setPaintProperty(CONTOUR_LAYER, 'line-opacity', [
-        'interpolate',
-        ['linear'],
-        ['zoom'],
-        11,
-        ['case', isMajor50, 0.4 * t, isSemi, 0.25 * t, 0.12 * t],
-        15,
-        ['case', isMajor50, 0.85 * t, isSemi, 0.65 * t, 0.35 * t],
-      ]);
-      if (map.getLayer(CONTOUR_LABEL)) {
-        map.setPaintProperty(CONTOUR_LABEL, 'text-opacity', t);
+      for (const id of contourLineIdsRef.current) {
+        if (map.getLayer(id)) map.setPaintProperty(id, 'line-opacity', t);
+      }
+      for (const id of contourLabelIdsRef.current) {
+        if (map.getLayer(id)) map.setPaintProperty(id, 'text-opacity', t);
       }
     },
     []
   );
-
-  // ── Map initialisation ────────────────────────────────────────────────────────
 
   useEffect(() => {
     if (!mapContainerRef.current) return;
 
-    mapRef.current = new mapboxgl.Map({
+    // Use URL search params for the initial camera if present, else fall back
+    // to the config defaults.
+    const cam = initialCameraRef.current;
+    const initLng = Number.isFinite(cam.lng) ? cam.lng : INITIAL_CENTER[0];
+    const initLat = Number.isFinite(cam.lat) ? cam.lat : INITIAL_CENTER[1];
+    const initZoom = Number.isFinite(cam.zoom) ? cam.zoom : INITIAL_ZOOM;
+    const initPitch = Number.isFinite(cam.pitch) ? cam.pitch : INITIAL_PITCH;
+    const initBearing = Number.isFinite(cam.bearing)
+      ? cam.bearing
+      : INITIAL_BEARING;
+
+    const map = new mapboxgl.Map({
       container: mapContainerRef.current,
       style: MAP_STYLES.standard,
-      center: INITIAL_CENTER,
-      zoom: INITIAL_ZOOM,
-      pitch: INITIAL_PITCH,
-      bearing: INITIAL_BEARING,
+      center: [initLng, initLat],
+      zoom: initZoom,
+      pitch: initPitch,
+      bearing: initBearing,
       maxPitch: 85,
     });
+    mapRef.current = map;
 
-    mapRef.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
-    mapRef.current.on('load', () => setMapReady(true));
+    map.addControl(new mapboxgl.NavigationControl(), 'top-right');
+    map.on('load', () => setMapReady(true));
 
-    mapRef.current.on('style.load', () => {
-      const map = mapRef.current;
-      if (!map) return;
-
-      // Basemap theme
-      map.setConfig('basemap', {
-        lightPreset: BASEMAP_CONFIG.lightPreset,
-        theme: 'monochrome',
-      });
-      map.setConfigProperty('basemap', 'theme', BASEMAP_CONFIG.theme);
-      map.setConfigProperty('basemap', 'colorLand', BASEMAP_CONFIG.colorLand);
-      map.setConfigProperty(
-        'basemap',
-        'colorGreenspace',
-        BASEMAP_CONFIG.colorGreenspace
-      );
-      map.setConfigProperty('basemap', 'colorWater', BASEMAP_CONFIG.colorWater);
-      map.setConfigProperty('basemap', 'colorRoads', BASEMAP_CONFIG.colorRoads);
-
-      // DEM + terrain
-      if (!map.getSource(DEM_SOURCE)) {
-        map.addSource(DEM_SOURCE, {
-          type: 'raster-dem',
-          url: 'mapbox://mapbox.mapbox-terrain-dem-v1',
-          tileSize: 512,
-          maxzoom: 16,
-        });
-      }
-      map.setTerrain({
-        source: DEM_SOURCE,
-        exaggeration: TERRAIN_EXAGGERATION,
-      });
-
-      // Hillshade
-      if (!map.getLayer(HILLSHADE_LAYER)) {
-        map.addLayer({
-          id: HILLSHADE_LAYER,
-          type: 'hillshade',
-          source: DEM_SOURCE,
-          slot: 'bottom',
-          paint: {
-            'hillshade-exaggeration': 0.7,
-            'hillshade-illumination-anchor': 'map',
-            'hillshade-illumination-direction': 315,
-            'hillshade-highlight-color': 'rgba(255,252,245,0.4)',
-            'hillshade-shadow-color': 'rgba(45,30,15,0.55)',
-            'hillshade-accent-color': 'rgba(80,55,30,0.2)',
-          },
-        });
-      }
-
-      // Contour source
-      if (!map.getSource(CONTOUR_SOURCE)) {
-        map.addSource(CONTOUR_SOURCE, {
-          type: 'vector',
-          url: 'mapbox://mapbox.mapbox-terrain-v2',
-        });
-      }
-
-      // Contour lines
-      if (!map.getLayer(CONTOUR_LAYER)) {
-        const c = CONTOUR_COLORS[contourSchemeRef.current];
-        map.addLayer({
-          id: CONTOUR_LAYER,
-          type: 'line',
-          source: CONTOUR_SOURCE,
-          'source-layer': 'contour',
-          slot: 'bottom',
-          minzoom: 11,
-          layout: { 'line-join': 'round', 'line-cap': 'round' },
-          paint: {
-            'line-color': [
-              'case',
-              [
-                'all',
-                ['in', ['get', 'index'], ['literal', [1, 2]]],
-                ['==', ['%', ['get', 'ele'], 50], 0],
-              ],
-              c.major,
-              ['in', ['get', 'index'], ['literal', [1, 2]]],
-              c.semi,
-              c.minor,
-            ],
-            'line-width': [
-              'interpolate',
-              ['linear'],
-              ['zoom'],
-              11,
-              [
-                'case',
-                [
-                  'all',
-                  ['in', ['get', 'index'], ['literal', [1, 2]]],
-                  ['==', ['%', ['get', 'ele'], 50], 0],
-                ],
-                0.5,
-                ['in', ['get', 'index'], ['literal', [1, 2]]],
-                0.3,
-                0.15,
-              ],
-              15,
-              [
-                'case',
-                [
-                  'all',
-                  ['in', ['get', 'index'], ['literal', [1, 2]]],
-                  ['==', ['%', ['get', 'ele'], 50], 0],
-                ],
-                1.2,
-                ['in', ['get', 'index'], ['literal', [1, 2]]],
-                0.8,
-                0.4,
-              ],
-            ],
-            'line-opacity': [
-              'interpolate',
-              ['linear'],
-              ['zoom'],
-              11,
-              [
-                'case',
-                [
-                  'all',
-                  ['in', ['get', 'index'], ['literal', [1, 2]]],
-                  ['==', ['%', ['get', 'ele'], 50], 0],
-                ],
-                0.4,
-                ['in', ['get', 'index'], ['literal', [1, 2]]],
-                0.25,
-                0.12,
-              ],
-              15,
-              [
-                'case',
-                [
-                  'all',
-                  ['in', ['get', 'index'], ['literal', [1, 2]]],
-                  ['==', ['%', ['get', 'ele'], 50], 0],
-                ],
-                0.85,
-                ['in', ['get', 'index'], ['literal', [1, 2]]],
-                0.65,
-                0.35,
-              ],
-            ],
-          },
-        });
-      }
-
-      // Contour elevation labels (50m multiples only)
-      if (!map.getLayer(CONTOUR_LABEL)) {
-        map.addLayer({
-          id: CONTOUR_LABEL,
-          type: 'symbol',
-          source: CONTOUR_SOURCE,
-          'source-layer': 'contour',
-          slot: 'top',
-          filter: ['==', ['%', ['to-number', ['get', 'ele']], 50], 0],
-          minzoom: 12,
-          layout: {
-            'symbol-placement': 'line',
-            'text-field': ['concat', ['to-string', ['get', 'ele']], 'm'],
-            'text-size': ['interpolate', ['linear'], ['zoom'], 12, 11, 16, 14],
-            'text-font': ['DIN Pro Medium', 'Arial Unicode MS Regular'],
-            'text-offset': [0, 0.2],
-            'symbol-spacing': [
-              'interpolate',
-              ['linear'],
-              ['zoom'],
-              12,
-              300,
-              16,
-              150,
-            ],
-            'text-allow-overlap': true,
-            'text-ignore-placement': true,
-          },
-          paint: {
-            'text-color': CONTOUR_COLORS[contourSchemeRef.current].label,
-            'text-halo-color': 'rgba(255,255,255,0.95)',
-            'text-halo-width': 2,
-            'text-opacity': 1,
-          },
-        });
-      }
+    map.on('style.load', () => {
+      // Discover contour layer IDs from the Studio style
+      const layers = map.getStyle().layers ?? [];
+      contourLineIdsRef.current = layers
+        .filter(
+          (l) => l.type === 'line' && l.id.toLowerCase().includes('contour')
+        )
+        .map((l) => l.id);
+      contourLabelIdsRef.current = layers
+        .filter(
+          (l) => l.type === 'symbol' && l.id.toLowerCase().includes('contour')
+        )
+        .map((l) => l.id);
 
       applyContourStrength(map, contourStrengthRef.current);
-      applyContourColors(map, contourSchemeRef.current);
       setMapReady(true);
     });
 
+    // ── Sync camera position → search params (debounced 2 s) ─────────────────
+    let moveDebounce: ReturnType<typeof setTimeout> | null = null;
+    const onMoveEnd = () => {
+      if (moveDebounce) clearTimeout(moveDebounce);
+      moveDebounce = setTimeout(() => {
+        const { lat, lng } = map.getCenter();
+        const zoom = map.getZoom();
+        const pitch = map.getPitch();
+        const bearing = map.getBearing();
+        setSearchParamsRef.current?.((prev) => {
+          const next = new URLSearchParams(prev);
+          next.set('lat', lat.toFixed(4));
+          next.set('lon', lng.toFixed(4));
+          next.set('z', zoom.toFixed(1));
+          next.set('p', pitch.toFixed(1));
+          next.set('b', bearing.toFixed(1));
+          return next;
+        });
+      }, 500);
+    };
+    map.on('moveend', onMoveEnd);
+
     return () => {
-      mapRef.current?.remove();
+      if (moveDebounce) clearTimeout(moveDebounce);
+      map.off('moveend', onMoveEnd);
+      map.remove();
       mapRef.current = null;
       setMapReady(false);
     };
-  }, [applyContourStrength, applyContourColors]);
-
-  // ── Sync trails layer when data / style changes ───────────────────────────────
+  }, [applyContourStrength]);
 
   useEffect(() => {
-    if (!mapReady || !mapRef.current || loading) return;
-    addTrailsLayer(mapRef.current);
-  }, [mapReady, loading, addTrailsLayer]);
-
-  // ── Trail hover cursor + click / dblclick → URL param / edit ────────────────
+    const map = mapRef.current;
+    if (!mapReady || !map) return;
+    addTrailsLayer(map);
+  }, [mapReady, addTrailsLayer]);
 
   const isEditingRef = useRef(false);
   useEffect(() => {
     isEditingRef.current = drawApi.isEditing;
-    // When edit starts, clear any pointer cursor and selection highlight
-    if (drawApi.isEditing && mapRef.current) {
-      mapRef.current.getCanvas().style.cursor = '';
-      setSelectedTrail(null);
-      if (mapRef.current.getSource(TRAILS_ENDPOINTS)) {
-        (
-          mapRef.current.getSource(TRAILS_ENDPOINTS) as mapboxgl.GeoJSONSource
-        ).setData(buildEndpointsGeoJSON(null));
-      }
+    if (!drawApi.isEditing) return;
+    const map = mapRef.current;
+    if (!map) return;
+    map.getCanvas().style.cursor = '';
+    setSelectedTrail(null);
+    if (map.getSource(TRAILS_ENDPOINTS)) {
+      (map.getSource(TRAILS_ENDPOINTS) as mapboxgl.GeoJSONSource).setData(
+        buildEndpointsGeoJSON(null)
+      );
     }
-  }, [drawApi.isEditing, mapRef]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [drawApi.isEditing, buildEndpointsGeoJSON]);
 
   // Keep stable refs so the map event handlers don't need to re-register
   const onTrailClickRef = useRef(onTrailClick);
@@ -713,20 +401,16 @@ export function useMapbox({
   // Depends on addTrailsLayer (stable after trails load) to ensure the source
   // exists before calling setFeatureState / setData.
   useEffect(() => {
-    if (!mapReady || loading) return;
+    if (!mapReady) return;
+    const map = mapRef.current;
+    if (!map) return;
     setSelectedTrail(selectedTrailId);
-    if (mapRef.current?.getSource(TRAILS_ENDPOINTS)) {
-      (
-        mapRef.current.getSource(TRAILS_ENDPOINTS) as mapboxgl.GeoJSONSource
-      ).setData(buildEndpointsGeoJSON(selectedTrailId));
+    if (map.getSource(TRAILS_ENDPOINTS)) {
+      (map.getSource(TRAILS_ENDPOINTS) as mapboxgl.GeoJSONSource).setData(
+        buildEndpointsGeoJSON(selectedTrailId)
+      );
     }
-  }, [
-    selectedTrailId,
-    mapReady,
-    loading,
-    addTrailsLayer,
-    buildEndpointsGeoJSON,
-  ]);
+  }, [selectedTrailId, mapReady, addTrailsLayer, buildEndpointsGeoJSON]);
 
   useEffect(() => {
     if (!mapReady || !mapRef.current) return;
@@ -746,15 +430,12 @@ export function useMapbox({
         layers: [TRAILS_LAYER],
       });
       if (features.length > 0 && !isEditingRef.current) {
-        // Only show pointer over trails when not editing
         map.getCanvas().style.cursor = 'pointer';
       } else {
-        // Off a trail, or editing: clear so the map/draw mode sets its own cursor
         map.getCanvas().style.cursor = '';
       }
     };
 
-    // Single click: select trail (view mode) or notify draw hook when editing
     const onClick = (e: mapboxgl.MapMouseEvent) => {
       if (!map.getLayer(TRAILS_LAYER)) return;
       const features = map.queryRenderedFeatures(hitBox(e), {
@@ -764,7 +445,6 @@ export function useMapbox({
         const id = features[0]?.properties?.id;
         if (id != null) {
           if (isEditingRef.current) {
-            // While editing, let the draw hook decide what to do (confirm dialog etc.)
             drawApiRef.current.notifyOtherTrailClick(Number(id));
           } else {
             onTrailClickRef.current?.(Number(id));
@@ -790,39 +470,30 @@ export function useMapbox({
   // ── Handlers ─────────────────────────────────────────────────────────────────
 
   const handleStyleChange = (style: StyleKey) => {
-    if (!mapRef.current) return;
+    const map = mapRef.current;
+    if (!map) return;
     setMapReady(false);
-    mapRef.current.setStyle(MAP_STYLES[style]);
+    map.setStyle(MAP_STYLES[style]);
     setCurrentStyle(style);
   };
 
   const handleContourStrength = (value: number) => {
     contourStrengthRef.current = value;
     setContourStrength(value);
-    if (mapRef.current && mapReady) applyContourStrength(mapRef.current, value);
-  };
-
-  const handleContourScheme = (scheme: ContourScheme) => {
-    contourSchemeRef.current = scheme;
-    setContourScheme(scheme);
-    if (mapRef.current && mapReady) applyContourColors(mapRef.current, scheme);
+    const map = mapRef.current;
+    if (map && mapReady) applyContourStrength(map, value);
   };
 
   return {
     mapContainerRef,
     currentStyle,
     contourStrength,
-    contourScheme,
     mapReady,
-    trails,
-    loading,
-    trailsError,
     drawApi,
     handleStyleChange,
     handleContourStrength,
-    handleContourScheme,
-    handleTrailUpdated,
-    handleTrailDeleted,
+    pushTrailUpdate,
+    pushTrailDelete,
     setEditingTrailId,
   };
 }

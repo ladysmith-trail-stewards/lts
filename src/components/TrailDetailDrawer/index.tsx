@@ -6,10 +6,7 @@ import { X, Check, Loader2, Magnet, Pencil, Trash2 } from 'lucide-react';
 
 import type { Trail } from '@/hooks/useTrails';
 import type { DrawTrailApi } from '@/hooks/useDrawTrail';
-import { supabase } from '@/lib/supabase/client';
-import { upsertTrailsDb } from '@/lib/db_services/trails/upsertTrailsDb';
-import { deleteTrailsDb } from '@/lib/db_services/trails/deleteTrailsDb';
-import { getTrailsDb } from '@/lib/db_services/trails/getTrailsDb';
+import type { TrailFeature } from '@/lib/db_services/trails/upsertTrailsDb';
 import { useAuth } from '@/contexts/AuthContext';
 import type { Database } from '@/lib/supabase/database.types';
 
@@ -72,8 +69,10 @@ interface TrailPanelProps {
   drawApi: DrawTrailApi;
   regionId: number | null;
   onClose: () => void;
-  onTrailSaved: (saved: Trail, isNew: boolean) => void;
-  onTrailDeleted: (id: number) => void;
+  onSave: (feature: TrailFeature) => Promise<Trail>;
+  onDelete: (id: number) => Promise<void>;
+  /** Called when the save succeeds and the trail is new, so the shell can navigate. */
+  onCreated: (saved: Trail) => void;
   onNavigateToTrail: (id: number) => void;
   /** Called with the trail id when editing starts, null when editing ends. */
   onEditingTrailChange?: (id: number | null) => void;
@@ -86,8 +85,9 @@ function TrailPanel({
   drawApi,
   regionId,
   onClose,
-  onTrailSaved,
-  onTrailDeleted,
+  onSave,
+  onDelete,
+  onCreated,
   onNavigateToTrail,
   onEditingTrailChange,
 }: TrailPanelProps) {
@@ -129,24 +129,13 @@ function TrailPanel({
     return () => window.removeEventListener('beforeunload', handler);
   }, [editing]);
 
-  // Refetch from DB when navigating to a different trail (id changes).
-  // We intentionally do NOT re-run this when the trail object reference changes
-  // after a local save — currentTrail is already up-to-date from handleSave.
+  // Sync local form state when navigating to a different trail (id changes).
+  // The trail prop itself comes from the parent's list, which useTrails keeps
+  // up-to-date after saves, so we don't need to re-fetch here.
   useEffect(() => {
     if (!trail) return;
-    const id = trail.id;
-    let cancelled = false;
-    getTrailsDb(supabase, { ids: [id] }).then(({ data }) => {
-      const row = data?.[0];
-      if (!cancelled && row) {
-        const fresh = { ...trail, ...row } as unknown as Trail;
-        setCurrentTrail(fresh);
-        setForm(trailToForm(fresh));
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
+    setCurrentTrail(trail);
+    setForm(trailToForm(trail));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trail?.id]);
 
@@ -204,77 +193,41 @@ function TrailPanel({
     setSaving(true);
     setSaveError(null);
 
-    const { results, allOk, error } = await upsertTrailsDb(supabase, {
-      type: 'Feature',
-      geometry,
-      properties: {
-        ...(isNew ? {} : { id: currentTrail!.id }),
-        name: result.output.name,
-        description: result.output.description ?? null,
-        trail_class: result.output.trail_class,
-        direction: result.output.direction,
-        activity_types: result.output.activity_types,
-        planned: result.output.planned,
-        connector: result.output.connector,
-        visibility: result.output.visibility,
-        region_id: isNew ? regionId! : currentTrail!.region_id,
-        type: isNew ? 'trail' : currentTrail!.type,
-      },
-    });
+    try {
+      const saved = await onSave({
+        type: 'Feature',
+        geometry,
+        properties: {
+          ...(isNew ? {} : { id: currentTrail!.id }),
+          name: result.output.name,
+          description: result.output.description ?? null,
+          trail_class: result.output.trail_class,
+          direction: result.output.direction,
+          activity_types: result.output.activity_types,
+          planned: result.output.planned,
+          connector: result.output.connector,
+          visibility: result.output.visibility,
+          region_id: isNew ? regionId! : currentTrail!.region_id,
+          type: isNew ? 'trail' : currentTrail!.type,
+        },
+      });
 
-    setSaving(false);
-
-    if (error || !allOk) {
-      setSaveError(error?.message ?? 'Save failed. Check your permissions.');
-      return;
-    }
-
-    if (isNew) {
-      const created: Trail = {
-        id: results[0].id,
-        name: result.output.name,
-        description: result.output.description ?? null,
-        trail_class: result.output.trail_class,
-        direction: result.output.direction,
-        activity_types: result.output.activity_types,
-        planned: result.output.planned,
-        connector: result.output.connector,
-        visibility: result.output.visibility,
-        geometry_geojson: geometry as GeoJSON.LineString,
-        distance_m: null,
-        tf_popularity: null,
-        region_id: regionId!,
-        type: 'trail',
-        hidden: false,
-        bike: false,
-        deleted_at: null,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      };
-      onTrailSaved(created, true);
       onEditingTrailChange?.(null);
       drawApi.deactivateEdit();
-      toast.success(`"${created.name}" created successfully.`);
-    } else {
-      const updated: Trail = {
-        ...currentTrail!,
-        name: result.output.name,
-        description: result.output.description ?? null,
-        trail_class: result.output.trail_class,
-        direction: result.output.direction,
-        activity_types: result.output.activity_types,
-        planned: result.output.planned,
-        connector: result.output.connector,
-        visibility: result.output.visibility,
-        geometry_geojson: geometry as GeoJSON.LineString,
-      };
-      setCurrentTrail(updated);
-      setForm(trailToForm(updated));
-      setEditing(false);
-      onTrailSaved(updated, false);
-      onEditingTrailChange?.(null);
-      drawApi.deactivateEdit();
-      toast.success(`"${updated.name}" saved successfully.`);
+
+      if (isNew) {
+        onCreated(saved);
+        toast.success(`"${saved.name}" created successfully.`);
+      } else {
+        setCurrentTrail(saved);
+        setForm(trailToForm(saved));
+        setEditing(false);
+        toast.success(`"${saved.name}" saved successfully.`);
+      }
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Save failed.');
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -312,17 +265,17 @@ function TrailPanel({
     }
     setDeleting(true);
     setSaveError(null);
-    const { error } = await deleteTrailsDb(supabase, currentTrail.id);
-    setDeleting(false);
-    if (error) {
-      setSaveError(error.message ?? 'Delete failed. Check your permissions.');
-      return;
+    try {
+      await onDelete(currentTrail.id);
+      drawApi.deactivateEdit();
+      onEditingTrailChange?.(null);
+      toast.success(`"${currentTrail.name}" deleted successfully.`);
+      onClose();
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Delete failed.');
+    } finally {
+      setDeleting(false);
     }
-    drawApi.deactivateEdit();
-    onEditingTrailChange?.(null);
-    onTrailDeleted(currentTrail.id);
-    toast.success(`"${currentTrail.name}" deleted successfully.`);
-    onClose();
   }
 
   return (
@@ -895,8 +848,8 @@ function DrawHintBar({
 
 interface TrailDetailDrawerProps {
   trails: Trail[];
-  onTrailSaved: (saved: Trail, isNew: boolean) => void;
-  onTrailDeleted: (id: number) => void;
+  onSave: (feature: TrailFeature) => Promise<Trail>;
+  onDelete: (id: number) => Promise<void>;
   drawApi: DrawTrailApi;
   regionId: number | null;
   onClose?: () => void;
@@ -905,8 +858,8 @@ interface TrailDetailDrawerProps {
 
 export default function TrailDetailDrawer({
   trails,
-  onTrailSaved,
-  onTrailDeleted,
+  onSave,
+  onDelete,
   drawApi,
   regionId,
   onClose: onCloseExternal,
@@ -946,11 +899,6 @@ export default function TrailDetailDrawer({
     onCloseExternal?.();
   }
 
-  function handleTrailSaved(saved: Trail, isNew: boolean) {
-    if (isNew) navigateToTrail(saved.id);
-    onTrailSaved(saved, isNew);
-  }
-
   return (
     <aside
       className={`absolute top-0 right-0 h-full w-96 bg-white border-l border-slate-200 shadow-xl
@@ -968,8 +916,9 @@ export default function TrailDetailDrawer({
             drawApi={drawApi}
             regionId={regionId}
             onClose={closeDrawer}
-            onTrailSaved={handleTrailSaved}
-            onTrailDeleted={onTrailDeleted}
+            onSave={onSave}
+            onDelete={onDelete}
+            onCreated={(saved) => navigateToTrail(saved.id)}
             onNavigateToTrail={navigateToTrail}
             onEditingTrailChange={onEditingTrailChange}
           />
