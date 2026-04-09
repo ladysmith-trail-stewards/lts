@@ -1,6 +1,5 @@
 """Elevation upsert queries."""
 
-import json
 from datetime import datetime
 from typing import Optional
 
@@ -11,16 +10,20 @@ import psycopg2.extras
 def upsert_trail_elevation(
     conn: psycopg2.extensions.connection,
     trail_id: int,
-    geometry_3d_geojson: str,
-    elevation_profile: list[dict],
+    geom4d_wkt: str,
+    geom4d_ld_wkt: Optional[str],
+    sample_interval_m: float,
+    sample_interval_ld_m: float,
     geom_snapshot_at: Optional[datetime],
 ) -> None:
     """Insert or replace the elevation data for a single trail."""
     batch_upsert_trail_elevations(
         conn,
         [{"trail_id": trail_id,
-          "geometry_3d_geojson": geometry_3d_geojson,
-          "elevation_profile": elevation_profile,
+          "geom4d_wkt": geom4d_wkt,
+          "geom4d_ld_wkt": geom4d_ld_wkt,
+          "sample_interval_m": sample_interval_m,
+          "sample_interval_ld_m": sample_interval_ld_m,
           "geom_snapshot_at": geom_snapshot_at}],
     )
 
@@ -33,8 +36,10 @@ def batch_upsert_trail_elevations(
 
     Each element of ``rows`` must have keys:
         trail_id              int
-        geometry_3d_geojson   str   (GeoJSON LineStringZ)
-        elevation_profile     list  ([{distance_m, elevation_m}, …])
+        geom4d_wkt            str        (WKT LINESTRINGZM; HRDEM + Copernicus fallback, full resolution)
+        geom4d_ld_wkt         str | None (WKT LINESTRINGZM; Copernicus only, downsampled)
+        sample_interval_m     float      (densification spacing used for geom4d)
+        sample_interval_ld_m  float      (downsampling spacing used for geom4d_ld)
         geom_snapshot_at      datetime | None
     """
     if not rows:
@@ -43,8 +48,11 @@ def batch_upsert_trail_elevations(
     values = [
         (
             r["trail_id"],
-            r["geometry_3d_geojson"],
-            json.dumps(r["elevation_profile"]),
+            r["geom4d_wkt"],
+            r["geom4d_ld_wkt"],   # may be None
+            r["geom4d_ld_wkt"],   # repeated for the CASE WHEN guard
+            r["sample_interval_m"],
+            r["sample_interval_ld_m"],
             r["geom_snapshot_at"],
         )
         for r in rows
@@ -56,21 +64,28 @@ def batch_upsert_trail_elevations(
             """
             INSERT INTO public.trail_elevations (
                 trail_id,
-                geometry_3d,
-                elevation_profile,
+                geom4d,
+                geom4d_ld,
+                sample_interval_m,
+                sample_interval_ld_m,
                 geom_snapshot_at,
                 updated_at
             )
             VALUES %s
             ON CONFLICT (trail_id) DO UPDATE SET
-                geometry_3d       = EXCLUDED.geometry_3d,
-                elevation_profile = EXCLUDED.elevation_profile,
-                geom_snapshot_at  = EXCLUDED.geom_snapshot_at,
-                updated_at        = now()
+                geom4d               = EXCLUDED.geom4d,
+                geom4d_ld            = EXCLUDED.geom4d_ld,
+                sample_interval_m    = EXCLUDED.sample_interval_m,
+                sample_interval_ld_m = EXCLUDED.sample_interval_ld_m,
+                geom_snapshot_at     = EXCLUDED.geom_snapshot_at,
+                updated_at           = now()
             """,
             values,
             template=(
-                "(%s, ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326), %s::jsonb, %s, now())"
+                "(%s,"
+                " ST_SetSRID(ST_GeomFromText(%s), 4326),"
+                " CASE WHEN %s IS NOT NULL THEN ST_SetSRID(ST_GeomFromText(%s), 4326) END,"
+                " %s, %s, %s, now())"
             ),
         )
     conn.commit()

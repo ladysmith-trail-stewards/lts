@@ -136,10 +136,13 @@ rm -rf ~/.cache/lts_dem   # or the path set in DEM_CACHE_DIR
 
 - `trails.geom_updated_at` — timestamp updated by trigger whenever `geometry`
   changes; used to detect stale elevation profiles.
-- `trail_elevations` table — 1-to-1 with `trails`; stores `geometry_3d`,
-  `elevation_profile` (JSONB), `geom_snapshot_at`, and `updated_at`.
-  `geom_snapshot_at` records the `geom_updated_at` value at the time of the
-  last elevation computation, so `update-outdated` can skip unchanged trails.
+- `trail_elevations` table — 1-to-1 with `trails`; stores two 4-D geometries
+  (X=lon, Y=lat, Z=elevation m, M=cumulative distance m), `geom_snapshot_at`,
+  and `updated_at`:
+  - `geom4d` — HRDEM LiDAR + Copernicus GLO-30 fallback; full sampling resolution.
+  - `geom4d_ld` — Copernicus GLO-30 only, downsampled. Lightweight overview geometry.
+    `geom_snapshot_at` records the `geom_updated_at` value at the time of the
+    last elevation computation, so `update-outdated` can skip unchanged trails.
 
 ## Project structure
 

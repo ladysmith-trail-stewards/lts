@@ -40,6 +40,9 @@ class HRDEMProvider(DemProvider):
     ) -> None:
         self._buffer    = buffer_deg
         self._cache_dir = Path(cache_dir) if cache_dir else None
+        # In-memory cache of STAC search results: bbox-tuple → list of source paths.
+        # Avoids a live HTTP request for every trail when tiles overlap.
+        self._stac_cache: dict[tuple[float, float, float, float], list[str]] = {}
 
     # ── tile management ──────────────────────────────────────────────────────
 
@@ -93,22 +96,42 @@ class HRDEMProvider(DemProvider):
         tile: Optional[dict],
         points: list[tuple[float, float]],
     ) -> list[Optional[float]]:
-        """Sample elevation values from the VRT raster dataset."""
+        """Sample elevation values from the VRT raster dataset.
+
+        Reads the entire clipped raster into a numpy array once, then resolves
+        all point lookups via array indexing — far faster than one
+        ``ReadAsArray(px, py, 1, 1)`` call per point.  The CRS transform is
+        built once per tile and cached on the tile dict.
+        """
         if tile is None:
             return [None] * len(points)
 
+        import numpy as np
+
         ds: gdal.Dataset = tile["dataset"]
         gt = ds.GetGeoTransform()
-        band = ds.GetRasterBand(1)
-        nodata = band.GetNoDataValue()
         width, height = ds.RasterXSize, ds.RasterYSize
 
-        wgs84 = osr.SpatialReference()
-        wgs84.ImportFromEPSG(4326)
-        wgs84.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
-        raster_srs = osr.SpatialReference()
-        raster_srs.ImportFromWkt(ds.GetProjection())
-        transform = osr.CoordinateTransformation(wgs84, raster_srs)
+        # Build (and cache) the WGS84 → raster-CRS transform once per tile.
+        if "transform" not in tile:
+            wgs84 = osr.SpatialReference()
+            wgs84.ImportFromEPSG(4326)
+            wgs84.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
+            raster_srs = osr.SpatialReference()
+            raster_srs.ImportFromWkt(ds.GetProjection())
+            tile["transform"] = osr.CoordinateTransformation(wgs84, raster_srs)
+        transform = tile["transform"]
+
+        # Read the full clipped raster into memory once.
+        if "data" not in tile:
+            band = ds.GetRasterBand(1)
+            nodata = band.GetNoDataValue()
+            arr = band.ReadAsArray().astype(float)
+            if nodata is not None:
+                arr[np.abs(arr - float(nodata)) < 1e-3] = float("nan")
+            tile["data"] = arr
+            tile["nodata"] = nodata
+        data: np.ndarray = tile["data"]
 
         results: list[Optional[float]] = []
         for lon, lat in points:
@@ -125,12 +148,8 @@ class HRDEMProvider(DemProvider):
                 results.append(None)
                 continue
 
-            value = float(band.ReadAsArray(px, py, 1, 1)[0][0])
-
-            if nodata is not None and abs(value - float(nodata)) < 1e-3:
-                results.append(None)
-            else:
-                results.append(value)
+            value = data[py, px]
+            results.append(None if np.isnan(value) else float(value))
 
         return results
 
@@ -182,7 +201,20 @@ class HRDEMProvider(DemProvider):
         min_lon: float, min_lat: float,
         max_lon: float, max_lat: float,
     ) -> list[str]:
-        """Query STAC for DTM tiles covering the bbox and return source paths."""
+        """Query STAC for DTM tiles covering the bbox and return source paths.
+
+        Results are cached in memory keyed by the bbox rounded to 0.01° so
+        that nearby trails sharing the same LiDAR tiles avoid redundant HTTP
+        requests within a single run.
+        """
+        cache_key = (
+            round(min_lon, 2), round(min_lat, 2),
+            round(max_lon, 2), round(max_lat, 2),
+        )
+        if cache_key in self._stac_cache:
+            log.debug("HRDEM: STAC cache hit for bbox %s", cache_key)
+            return self._stac_cache[cache_key]
+
         try:
             resp = requests.get(
                 _STAC_SEARCH_URL,
@@ -212,6 +244,7 @@ class HRDEMProvider(DemProvider):
             if source:
                 sources.append(source)
 
+        self._stac_cache[cache_key] = sources
         return sources
 
     def _resolve_tile(
