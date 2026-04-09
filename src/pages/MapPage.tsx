@@ -1,11 +1,11 @@
 import 'mapbox-gl/dist/mapbox-gl.css';
 import mapboxgl from 'mapbox-gl';
 import { useSearchParams } from 'react-router-dom';
-import { Plus } from 'lucide-react';
 import { useMapbox } from '@/hooks/useMapbox';
-import { MAP_STYLES, type StyleKey } from '@/lib/map/config';
-import TrailDetailDrawer from '@/components/TrailDetailDrawer';
+import { useTrails } from '@/hooks/useTrails';
 import { useAuth } from '@/contexts/AuthContext';
+import MapControlPanel from '@/components/MapControlPanel';
+import TrailDetailDrawer from '@/components/TrailDetailDrawer';
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN as
   | string
@@ -36,30 +36,41 @@ export default function MapPage() {
 
 function MapPageInner() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const trailIdParam = searchParams.get('trailId');
-  const selectedTrailId = trailIdParam ? Number(trailIdParam) : null;
+  const selectedTrailId = searchParams.get('trailId')
+    ? Number(searchParams.get('trailId'))
+    : null;
 
   const { role, regionId } = useAuth();
   const canEdit =
     role !== null && ['admin', 'super_user', 'super_admin'].includes(role);
 
+  // ── Trails data (owned by useTrails, map source kept in sync via push*) ────
+
+  const {
+    trails,
+    loading,
+    error: trailsError,
+    saveTrail,
+    deleteTrail,
+  } = useTrails();
+
+  // ── Map ───────────────────────────────────────────────────────────────────────
+
   const {
     mapContainerRef,
     currentStyle,
     contourStrength,
-    contourScheme,
-    trails,
-    loading,
-    trailsError,
+    pushTrailUpdate,
+    pushTrailDelete,
     handleStyleChange,
     handleContourStrength,
-    handleContourScheme,
-    handleTrailUpdated,
-    handleTrailDeleted,
     drawApi,
     setEditingTrailId,
   } = useMapbox({
+    trails,
     selectedTrailId,
+    searchParams,
+    setSearchParams,
     onTrailClick: (id) =>
       setSearchParams((prev) => {
         const next = new URLSearchParams(prev);
@@ -67,6 +78,18 @@ function MapPageInner() {
         return next;
       }),
   });
+
+  // Wrap mutations so the map source is updated alongside useTrails state.
+  async function handleSave(feature: Parameters<typeof saveTrail>[0]) {
+    const saved = await saveTrail(feature);
+    pushTrailUpdate(saved);
+    return saved;
+  }
+
+  async function handleDelete(id: number) {
+    await deleteTrail(id);
+    pushTrailDelete(id);
+  }
 
   return (
     <div className="relative overflow-hidden">
@@ -88,127 +111,47 @@ function MapPageInner() {
         </div>
       )}
 
-      {/* Control panel */}
       <div className="absolute top-4 left-4 z-10">
-        <div className="bg-white rounded-lg shadow-lg border border-gray-200 p-3 min-w-[150px] space-y-3">
-          {/* Style */}
-          <div>
-            <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
-              Style
-            </h3>
-            <div className="space-y-1.5">
-              {(Object.keys(MAP_STYLES) as StyleKey[]).map((key) => (
-                <label
-                  key={key}
-                  className="flex items-center gap-2 cursor-pointer"
-                >
-                  <input
-                    type="radio"
-                    name="mapStyle"
-                    value={key}
-                    checked={currentStyle === key}
-                    onChange={() => handleStyleChange(key)}
-                    className="w-3.5 h-3.5 text-green-600 focus:ring-green-500"
-                  />
-                  <span className="text-sm text-slate-700 capitalize">
-                    {key}
-                  </span>
-                </label>
-              ))}
-            </div>
-          </div>
-
-          {/* Trail count + Add Trail button */}
-          {!loading && !trailsError && (
-            <div className="border-t pt-2 space-y-2">
-              <p className="text-xs text-slate-500">
-                {trails.length} trail{trails.length !== 1 ? 's' : ''} loaded
-              </p>
-              {canEdit && !drawApi.isEditing && (
-                <button
-                  onClick={() =>
-                    setSearchParams((prev) => {
-                      const next = new URLSearchParams(prev);
-                      next.set('trailId', '-1');
-                      return next;
-                    })
-                  }
-                  className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md
-                    bg-slate-800 hover:bg-slate-700 text-white text-xs font-medium
-                    transition-colors cursor-pointer"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  Add Trail
-                </button>
-              )}
-            </div>
-          )}
-
-          {/* Contour controls */}
-          <div className="border-t pt-3">
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                Contours
-              </span>
-              <span className="text-xs text-slate-400">
-                {contourStrength === 0 ? 'off' : `${contourStrength}%`}
-              </span>
-            </div>
-            <input
-              type="range"
-              min={0}
-              max={100}
-              step={5}
-              value={contourStrength}
-              onChange={(e) => handleContourStrength(Number(e.target.value))}
-              className="w-full h-1.5 rounded-full accent-amber-600 cursor-pointer"
-            />
-            {/* Light / Dark colour scheme toggle */}
-            <div className="flex items-center justify-between mt-2">
-              <span className="text-xs text-slate-400">Light</span>
-              <button
-                onClick={() =>
-                  handleContourScheme(
-                    contourScheme === 'dark' ? 'light' : 'dark'
-                  )
-                }
-                className={`relative inline-flex h-4 w-8 items-center rounded-full transition-colors focus:outline-none
-                  ${contourScheme === 'dark' ? 'bg-amber-700' : 'bg-slate-300'}`}
-              >
-                <span
-                  className={`inline-block h-3 w-3 rounded-full bg-white shadow transition-transform
-                  ${contourScheme === 'dark' ? 'translate-x-4' : 'translate-x-0.5'}`}
-                />
-              </button>
-              <span className="text-xs text-slate-400">Dark</span>
-            </div>
-          </div>
-        </div>
+        <MapControlPanel
+          currentStyle={currentStyle}
+          contourStrength={contourStrength}
+          trailCount={trails.length}
+          loading={loading}
+          trailsError={trailsError}
+          canEdit={canEdit}
+          isEditing={drawApi.isEditing}
+          onStyleChange={handleStyleChange}
+          onContourStrength={handleContourStrength}
+          onAddTrail={() =>
+            setSearchParams((prev) => {
+              const next = new URLSearchParams(prev);
+              next.set('trailId', '-1');
+              return next;
+            })
+          }
+        />
       </div>
 
       <TrailDetailDrawer
         trails={trails}
-        onTrailSaved={(saved) => handleTrailUpdated(saved)}
-        onTrailDeleted={(id) => handleTrailDeleted(id)}
+        onSave={handleSave}
+        onDelete={handleDelete}
         drawApi={drawApi}
         regionId={regionId}
         onEditingTrailChange={setEditingTrailId}
       />
 
-      {/* Data attribution */}
-      <div className="absolute bottom-2 left-2 z-10">
-        <p className="text-xs text-white/90 bg-black/50 backdrop-blur-sm rounded px-2 py-1 leading-5">
-          Trail geometry from{' '}
-          <a
-            href="https://www.trailforks.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline underline-offset-2 hover:text-white transition-colors"
-          >
-            Trailforks
-          </a>{' '}
-          — for personal use only.
-        </p>
+      <div className="absolute bottom-2 left-2 z-10 text-xs text-white/70">
+        Trail geometry from{' '}
+        <a
+          href="https://www.trailforks.com"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline"
+        >
+          Trailforks
+        </a>{' '}
+        — personal use only.
       </div>
     </div>
   );

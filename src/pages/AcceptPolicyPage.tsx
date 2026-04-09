@@ -41,7 +41,6 @@ export default function AcceptPolicyPage() {
         setError('Failed to load regions. Please refresh and try again.');
     });
     // supabase is a stable module-level singleton; no re-run needed
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Navigate home only after AuthContext confirms policyAccepted = true.
