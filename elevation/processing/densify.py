@@ -1,4 +1,4 @@
-"""Trail geometry densification — pure Python, no GDAL.
+"""Trail geometry densification — uses numpy for fast segment interpolation.
 
 Densifies a WGS84 LineString so that there is a vertex at most every
 INTERVAL_M metres along the line.
@@ -12,6 +12,8 @@ interval is still expressed in true metres.
 
 import logging
 import math
+
+import numpy as np
 
 log = logging.getLogger(__name__)
 
@@ -61,11 +63,14 @@ def densify_trail(geojson: dict, interval_m: float = 5.0) -> list[tuple[float, f
             continue
 
         n = int(seg_len / interval_m)
-        for j in range(1, n + 1):
-            t = (j * interval_m) / seg_len
-            if t >= 1.0:
-                break
-            result.append((lon0 + t * (lon1 - lon0), lat0 + t * (lat1 - lat0)))
+        if n > 0:
+            # Vectorised interpolation: t values for inserted points only
+            # (excludes t=0 which is already in result, excludes t>=1).
+            ts = np.arange(1, n + 1) * (interval_m / seg_len)
+            ts = ts[ts < 1.0]
+            lons = lon0 + ts * (lon1 - lon0)
+            lats = lat0 + ts * (lat1 - lat0)
+            result.extend(zip(lons.tolist(), lats.tolist()))
 
         result.append((lon1, lat1))
 

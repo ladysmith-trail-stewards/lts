@@ -99,15 +99,31 @@ class CopernicusProvider(DemProvider):
         tile: Optional[dict],
         points: list[tuple[float, float]],
     ) -> list[Optional[float]]:
-        """Sample elevation values from the VRT raster dataset."""
+        """Sample elevation values from the VRT raster dataset.
+
+        Reads the entire clipped raster into a numpy array once, then resolves
+        all point lookups via array indexing — far faster than one
+        ``ReadAsArray(px, py, 1, 1)`` call per point.  Copernicus tiles are
+        already in WGS84 so no CRS transform is needed.
+        """
         if tile is None:
             return [None] * len(points)
 
+        import numpy as np
+
         ds: gdal.Dataset = tile["dataset"]
         gt = ds.GetGeoTransform()
-        band = ds.GetRasterBand(1)
-        nodata = band.GetNoDataValue()
         width, height = ds.RasterXSize, ds.RasterYSize
+
+        # Read the full clipped raster into memory once.
+        if "data" not in tile:
+            band = ds.GetRasterBand(1)
+            nodata = band.GetNoDataValue()
+            arr = band.ReadAsArray().astype(float)
+            if nodata is not None:
+                arr[np.abs(arr - float(nodata)) < 1e-3] = float("nan")
+            tile["data"] = arr
+        data: np.ndarray = tile["data"]
 
         results: list[Optional[float]] = []
         for lon, lat in points:
@@ -118,12 +134,8 @@ class CopernicusProvider(DemProvider):
                 results.append(None)
                 continue
 
-            value = float(band.ReadAsArray(px, py, 1, 1)[0][0])
-
-            if nodata is not None and abs(value - float(nodata)) < 1e-3:
-                results.append(None)
-            else:
-                results.append(value)
+            value = data[py, px]
+            results.append(None if np.isnan(value) else float(value))
 
         return results
 

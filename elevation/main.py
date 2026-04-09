@@ -15,7 +15,7 @@ from db.trails import fetch_all_trails, fetch_outdated_trails, fetch_trail
 from dem.copernicus import CopernicusProvider
 from dem.hrdem import HRDEMProvider
 from processing.densify import densify_trail
-from processing.profile import build_3d_linestring_geojson, build_elevation_profile
+from processing.profile import build_4d_linestring_wkt, downsample_coords
 
 logging.basicConfig(
     level=logging.WARNING,
@@ -27,6 +27,9 @@ log = logging.getLogger(__name__)
 
 # Desired spacing between consecutive elevation samples in metres.
 DENSIFY_INTERVAL_M = 5.0
+
+# Downsampled vertex spacing for the LD (Copernicus-only) geometry.
+STORE_INTERVAL_LD_M = 10.0
 
 # Local directory where DEM tiles are cached between runs.
 # Override via the DEM_CACHE_DIR environment variable.
@@ -83,15 +86,25 @@ def _compute_trail(trail: dict, hrdem: HRDEMProvider, fallback: CopernicusProvid
 
     hrdem_count = len(points) - len(fallback_indices)
 
+    # Full (lon, lat, elev) triples with best available elevation at every point.
     coords_3d = [
         (lon, lat, elev if elev is not None else 0.0)
         for (lon, lat), elev in zip(points, elevations)
     ]
 
+    # geom4d: all points at full density — HRDEM where available, Copernicus fallback elsewhere.
+    wkt_hd = build_4d_linestring_wkt(coords_3d)
+
+    # geom4d_ld: Copernicus-only points, downsampled.
+    coords_copernicus = [coords_3d[i] for i in fallback_indices]
+    wkt_ld = build_4d_linestring_wkt(downsample_coords(coords_copernicus, STORE_INTERVAL_LD_M)) if len(coords_copernicus) >= 2 else None
+
     return {
         "trail_id": trail_id,
-        "geometry_3d_geojson": build_3d_linestring_geojson(coords_3d),
-        "elevation_profile": build_elevation_profile(coords_3d),
+        "geom4d_wkt": wkt_hd,
+        "geom4d_ld_wkt": wkt_ld,
+        "sample_interval_m": DENSIFY_INTERVAL_M,
+        "sample_interval_ld_m": STORE_INTERVAL_LD_M,
         "geom_snapshot_at": trail["geom_updated_at"],
         "total_points": len(points),
         "hrdem_points": hrdem_count,

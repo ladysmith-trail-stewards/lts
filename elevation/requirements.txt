@@ -3,4 +3,5 @@ numpy>=1.24
 psycopg2-binary>=2.9
 python-dotenv>=1.0
 requests>=2.31
+shapely>=2.0
 tqdm>=4.0
