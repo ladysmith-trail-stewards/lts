@@ -58,14 +58,17 @@ export type Database = {
       };
       regions: {
         Row: {
+          bbox: unknown;
           id: number;
           name: string;
         };
         Insert: {
+          bbox?: unknown;
           id?: number;
           name: string;
         };
         Update: {
+          bbox?: unknown;
           id?: number;
           name?: string;
         };

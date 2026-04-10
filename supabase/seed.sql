@@ -1,5 +1,7 @@
-insert into public.regions (id, name) values (1, 'Ladysmith')
-on conflict (id) do nothing;
+insert into public.regions (id, name, bbox)
+values (1, 'Ladysmith', ST_MakeEnvelope(-124.2, 48.8, -123.4, 49.2, 4326))
+on conflict (id) do update set name = excluded.name, bbox = excluded.bbox;
+
 select setval('public.regions_id_seq', greatest(1, (select max(id) from public.regions)));
 
 INSERT INTO public.trails (name, description, type, trail_class, activity_types, direction, hidden, planned, connector, bike, tf_popularity, visibility, region_id, geometry) VALUES (

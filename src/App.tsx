@@ -15,7 +15,9 @@ import AuthErrorPage from './pages/AuthErrorPage';
 import LogoutPage from './pages/LogoutPage';
 import UsersPage from './pages/UsersPage';
 import AcceptPolicyPage from './pages/AcceptPolicyPage';
+import DataUploaderPage from './pages/DataUploaderPage';
 import RequireAdmin from './components/RequireAdmin';
+import RequireSuperAdmin from './components/RequireSuperAdmin';
 import { useAuth } from './contexts/AuthContext';
 
 /**
@@ -72,6 +74,14 @@ function App() {
                     <RequireAdmin>
                       <UsersPage />
                     </RequireAdmin>
+                  }
+                />
+                <Route
+                  path="/upload"
+                  element={
+                    <RequireSuperAdmin>
+                      <DataUploaderPage />
+                    </RequireSuperAdmin>
                   }
                 />
               </Routes>

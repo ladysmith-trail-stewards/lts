@@ -4,12 +4,13 @@ import {
   Map,
   Users,
   UserCog,
+  Upload,
   type LucideIcon,
 } from 'lucide-react';
 import { type VariantProps } from 'class-variance-authority';
 import { buttonVariants } from '@/components/ui/button-variants';
 
-export type RouteAccess = 'PUBLIC' | 'USER' | 'ADMIN';
+export type RouteAccess = 'PUBLIC' | 'USER' | 'ADMIN' | 'SUPER_ADMIN';
 
 export interface RouteConfig {
   to: string;
@@ -79,6 +80,14 @@ export const routes: RouteConfig[] = [
     icon: UserCog,
     includeInMenu: true,
     access: 'ADMIN',
+  },
+  {
+    to: '/upload',
+    title: 'Upload Data',
+    description: null,
+    icon: Upload,
+    includeInMenu: true,
+    access: 'SUPER_ADMIN',
   },
 ];
 
