@@ -7,7 +7,7 @@ export interface RegionRecordMeta {
 }
 
 export interface RegionRecord extends RegionRecordMeta {
-  bbox_arr: [number, number, number, number] | null; // [minLng, minLat, maxLng, maxLat]
+  bbox: [number, number, number, number] | null; // [minLng, minLat, maxLng, maxLat]
 }
 
 export interface GetRegionsDbOptions {
@@ -45,18 +45,46 @@ export async function getRegionsDb(
   }
 
   const { data, error } = await client
-    .from('regions_with_bbox')
-    .select(`id, name, bbox_arr`)
+    .from('regions')
+    .select(`id, name, bbox`)
     .gt('id', 0)
     .order('name');
 
   if (error) return { data: null, error: new Error(error.message) };
 
   const records: RegionRecord[] = (data ?? []).map((row) => ({
-    id: row.id!,
-    name: row.name!,
-    bbox_arr: row.bbox_arr as [number, number, number, number] | null,
+    id: row.id,
+    name: row.name,
+    bbox: parseBbox(row.bbox),
   }));
 
   return { data: records as never, error: null };
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * PostgREST returns PostGIS geometry columns as a GeoJSON string.
+ * For a Polygon bbox we extract [minLng, minLat, maxLng, maxLat] from the
+ * first ring's coordinate envelope. Returns null for null/unparseable input.
+ */
+function parseBbox(raw: unknown): [number, number, number, number] | null {
+  if (raw == null) return null;
+  try {
+    const geojson = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    const coords: [number, number][] = geojson?.coordinates?.[0];
+    if (!Array.isArray(coords) || coords.length < 4) return null;
+    const lngs = coords.map(([lng]) => lng);
+    const lats = coords.map(([, lat]) => lat);
+    return [
+      Math.min(...lngs),
+      Math.min(...lats),
+      Math.max(...lngs),
+      Math.max(...lats),
+    ];
+  } catch {
+    return null;
+  }
 }

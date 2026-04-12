@@ -110,7 +110,7 @@ describe('getRegionsDb({ metaOnly: true }) — RLS: all authenticated roles can 
 });
 
 describe('getRegionsDb({ metaOnly: true }) — response shape', () => {
-  it('each region has id and name, no bbox_arr', async () => {
+  it('each region has id and name, no bbox', async () => {
     const { data, error } = await getRegionsDb(serviceClient, {
       metaOnly: true,
     });
@@ -119,26 +119,24 @@ describe('getRegionsDb({ metaOnly: true }) — response shape', () => {
       expect(typeof r.id).toBe('number');
       expect(typeof r.name).toBe('string');
       expect(r.name.length).toBeGreaterThan(0);
-      expect(
-        (r as unknown as Record<string, unknown>)['bbox_arr']
-      ).toBeUndefined();
+      expect((r as unknown as Record<string, unknown>)['bbox']).toBeUndefined();
     }
   });
 });
 
-describe('getRegionsDb() — full record with bbox_arr', () => {
-  it('returns id, name and bbox_arr', async () => {
+describe('getRegionsDb() — full record with bbox', () => {
+  it('returns id, name and bbox', async () => {
     const { data, error } = await getRegionsDb(serviceClient);
     expect(error).toBeNull();
     expect(data!.length).toBeGreaterThan(0);
     for (const r of data!) {
       expect(typeof r.id).toBe('number');
       expect(typeof r.name).toBe('string');
-      // bbox_arr is null or a 4-element numeric tuple
-      if (r.bbox_arr !== null) {
-        expect(Array.isArray(r.bbox_arr)).toBe(true);
-        expect(r.bbox_arr).toHaveLength(4);
-        for (const coord of r.bbox_arr) {
+      // bbox is null or a 4-element numeric tuple
+      if (r.bbox !== null) {
+        expect(Array.isArray(r.bbox)).toBe(true);
+        expect(r.bbox).toHaveLength(4);
+        for (const coord of r.bbox) {
           expect(typeof coord).toBe('number');
         }
       }
@@ -148,5 +146,5 @@ describe('getRegionsDb() — full record with bbox_arr', () => {
 
 describe('getRegionsDb — pending user', () => {
   it.todo('pending (google SSO) user can read regions (metaOnly)');
-  it.todo('pending (google SSO) user can read regions with bbox_arr');
+  it.todo('pending (google SSO) user can read regions with bbox');
 });
