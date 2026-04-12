@@ -117,15 +117,29 @@ const ALL_ROLES: RoleConfig[] = [
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-/** Casts a client to `any` to allow dynamic table/view names. */
+/**
+ * Casts a typed Supabase client to `any` so that runtime-generated table/view
+ * names (not present in the auto-generated Database schema) can be used with
+ * `.from()`. Only used inside test utilities — never in production code.
+ */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function dyn(client: RlsClient): any {
+function dynClient(client: RlsClient): any {
   return client;
 }
 
+/**
+ * Casts the service-role client to `any` for the same reason as `dynClient`.
+ * The service_role client bypasses RLS and is used only for fixture
+ * setup/teardown and post-operation verification.
+ */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function dynSvc(): any {
+function dynServiceClient(): any {
   return serviceClient;
+}
+
+/** Returns the number of rows in a Supabase `.select()` result. */
+function rowCount(data: unknown): number {
+  return Array.isArray(data) ? data.length : 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -209,7 +223,7 @@ export function tableRlsSuite(opts: TableRlsOptions): void {
           ownsFixture = false;
         } else {
           // Create a dedicated fixture row via service_role.
-          const { data: row, error } = await dynSvc()
+          const { data: row, error } = await dynServiceClient()
             .from(opts.table)
             .insert(opts.insertData())
             .select('id')
@@ -226,17 +240,20 @@ export function tableRlsSuite(opts: TableRlsOptions): void {
 
       afterAll(async () => {
         for (const id of extraCreatedIds) {
-          await dynSvc().from(opts.table).delete().eq('id', id);
+          await dynServiceClient().from(opts.table).delete().eq('id', id);
         }
         if (ownsFixture) {
-          await dynSvc().from(opts.table).delete().eq('id', fixtureId);
+          await dynServiceClient()
+            .from(opts.table)
+            .delete()
+            .eq('id', fixtureId);
         }
       });
 
       // ── C — Create ────────────────────────────────────────────────────────
       if (!bypass.C) {
         it('C — create', async () => {
-          const { data, error } = await dyn(client)
+          const { data, error } = await dynClient(client)
             .from(opts.table)
             .insert(opts.insertData())
             .select('id')
@@ -255,12 +272,12 @@ export function tableRlsSuite(opts: TableRlsOptions): void {
       // ── R — Read ──────────────────────────────────────────────────────────
       if (!bypass.R) {
         it('R — read', async () => {
-          const { data } = await dyn(client)
+          const { data } = await dynClient(client)
             .from(opts.table)
             .select('id')
             .eq('id', fixtureId);
 
-          const count = ((data as unknown[]) ?? []).length;
+          const count = rowCount(data);
           if (rExp) {
             expect(count, 'R: expected row to be visible').toBeGreaterThan(0);
           } else {
@@ -271,17 +288,21 @@ export function tableRlsSuite(opts: TableRlsOptions): void {
 
       // ── U — Update ────────────────────────────────────────────────────────
       if (!bypass.U) {
+        const firstKey = Object.keys(opts.updateData)[0];
+        if (!firstKey) {
+          throw new Error(
+            `tableRlsSuite: updateData must contain at least one field for U tests (table: ${opts.table})`
+          );
+        }
+
         it('U — update', async () => {
-          await dyn(client)
+          await dynClient(client)
             .from(opts.table)
             .update(opts.updateData)
             .eq('id', fixtureId);
 
           // Confirm via service_role whether the update took effect.
-          const firstKey = Object.keys(opts.updateData)[0];
-          if (!firstKey) return;
-
-          const { data: row } = await dynSvc()
+          const { data: row } = await dynServiceClient()
             .from(opts.table)
             .select(firstKey)
             .eq('id', fixtureId)
@@ -306,7 +327,7 @@ export function tableRlsSuite(opts: TableRlsOptions): void {
         it('S — soft delete + re-read', async () => {
           const { error } = await opts.softDeleteFn(client, fixtureId);
 
-          const { data: row } = await dynSvc()
+          const { data: row } = await dynServiceClient()
             .from(opts.table)
             .select('deleted_at')
             .eq('id', fixtureId)
@@ -337,9 +358,9 @@ export function tableRlsSuite(opts: TableRlsOptions): void {
       // ── H — Hard Delete ───────────────────────────────────────────────────
       if (!bypass.H) {
         it('H — hard delete', async () => {
-          await dyn(client).from(opts.table).delete().eq('id', fixtureId);
+          await dynClient(client).from(opts.table).delete().eq('id', fixtureId);
 
-          const { data: row } = await dynSvc()
+          const { data: row } = await dynServiceClient()
             .from(opts.table)
             .select('id')
             .eq('id', fixtureId)
@@ -401,12 +422,12 @@ export function viewRlsSuite(opts: ViewRlsOptions): void {
 
       it(`R — read (expect: ${expected ? 'visible' : 'hidden'})`, async () => {
         const id = opts.rowId();
-        const { data } = await dyn(client)
+        const { data } = await dynClient(client)
           .from(opts.view)
           .select('id')
           .eq('id', id);
 
-        const count = ((data as unknown[]) ?? []).length;
+        const count = rowCount(data);
         if (expected) {
           expect(count, 'R: expected row to be visible').toBeGreaterThan(0);
         } else {
