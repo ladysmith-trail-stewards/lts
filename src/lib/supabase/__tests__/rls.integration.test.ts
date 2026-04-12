@@ -7,11 +7,7 @@ import {
   fixtureCreateTrail,
   fixtureDeleteTrails,
 } from '../../db_services/trails/testHelpers';
-import {
-  suiteSetup,
-  suiteTeardown,
-  type SuiteFixtures,
-} from '../../db_services/profiles/testHelpers';
+import { TestSuite, type BuiltTestSuite } from '../../db_services/testSuite';
 
 /**
  * RLS integration tests — requires:
@@ -30,7 +26,7 @@ const safeTag = P.replace(/[^a-z0-9]/gi, '_').toLowerCase();
 const RLS_USER_NAME = `i_test_${safeTag}_user`;
 const RLS_ADMIN_NAME = `i_test_${safeTag}_admin`;
 
-let suite: SuiteFixtures;
+let suite: BuiltTestSuite;
 
 /** Decode the payload of a JWT without verifying the signature. */
 function decodeJwtPayload(token: string): Record<string, unknown> {
@@ -40,11 +36,11 @@ function decodeJwtPayload(token: string): Record<string, unknown> {
 }
 
 beforeAll(async () => {
-  suite = await suiteSetup(P);
+  suite = await new TestSuite(P).createRegion('main').createAllUsers().build();
 });
 
 afterAll(async () => {
-  await suiteTeardown(suite);
+  await suite.teardown();
 });
 
 describe('RLS — profiles table', () => {

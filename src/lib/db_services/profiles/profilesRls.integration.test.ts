@@ -5,11 +5,11 @@ import {
   signedInClient,
 } from '../supabaseTestClients';
 import { fixtureCreateProfile, fixtureDeleteProfiles } from './testHelpers';
-import { suiteSetup, suiteTeardown, type SuiteFixtures } from './testHelpers';
+import { TestSuite, type BuiltTestSuite } from '../testSuite';
 
 const P = '__profiles_rls_test__';
 
-let suite: SuiteFixtures;
+let suite: BuiltTestSuite;
 
 // ---------------------------------------------------------------------------
 // Fixtures: one profile in suite region, one in region2
@@ -22,7 +22,7 @@ let region2Id: number;
 let fixtureUserProfileId: number;
 
 beforeAll(async () => {
-  suite = await suiteSetup(P);
+  suite = await new TestSuite(P).createRegion('main').createAllUsers().build();
 
   // Create a second suite-local region for cross-region tests
   const safeTag = P.replace(/[^a-z0-9]/gi, '_').toLowerCase();
@@ -49,7 +49,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await fixtureDeleteProfiles(region1ProfileId, region2ProfileId);
   await serviceClient.from('regions').delete().eq('id', region2Id);
-  await suiteTeardown(suite);
+  await suite.teardown();
 });
 
 // ---------------------------------------------------------------------------

@@ -40,7 +40,7 @@
 | Anon        |   ✅   |   —    |   —    |   —    |
 | User        |   ✅   |   —    |   —    |   —    |
 | Super User  |   ✅   |   —    |   —    |   —    |
-| Admin       |   ✅   |   —    |   —    |   —    |
+| Admin       |   ✅   |   —    |   ✅   |   —    |
 | Super Admin |   ✅   |   ✅   |   ✅   |   ✅   |
 
 ### `trail_elevations`
@@ -70,6 +70,7 @@
 | RPC                    | Callable by     |  Security  | Notes                                                                                   |
 | ---------------------- | --------------- | :--------: | --------------------------------------------------------------------------------------- |
 | `accept_policy`        | `authenticated` | 🔒 DEFINER | Sets policy_accepted_at = now() and region_id = p_region_id for the calling             |
+| `set_region_bbox`      | `authenticated` |  INVOKER   | Sets the bbox Polygon on a region from four required WGS84 scalar coordinates.          |
 | `soft_delete_profiles` | `authenticated` | 🔒 DEFINER | Sets deleted_at = now() on profiles. SECURITY DEFINER to bypass column-level privilege. |
 | `soft_delete_trails`   | `authenticated` | 🔒 DEFINER | Sets deleted_at = now() on trails. SECURITY DEFINER to bypass column-level privilege.   |
 | `upsert_trails`        | `authenticated` |  INVOKER   | —                                                                                       |

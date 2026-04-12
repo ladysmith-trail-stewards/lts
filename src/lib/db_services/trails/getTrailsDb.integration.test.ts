@@ -6,11 +6,7 @@ import {
   signedInClient,
 } from '../supabaseTestClients';
 import { fixtureCreateTrail, fixtureDeleteTrails } from './testHelpers';
-import {
-  suiteSetup,
-  suiteTeardown,
-  type SuiteFixtures,
-} from '../profiles/testHelpers';
+import { TestSuite, type BuiltTestSuite } from '../testSuite';
 
 // Requires local Supabase running (`pnpm db:start`). See README.md for RLS rules.
 
@@ -21,11 +17,11 @@ const NAMES = {
   private: `${P}private`,
 };
 
-let suite: SuiteFixtures;
+let suite: BuiltTestSuite;
 let fixtureIds: number[] = [];
 
 beforeAll(async () => {
-  suite = await suiteSetup(P);
+  suite = await new TestSuite(P).createRegion('main').createAllUsers().build();
   const [publicId, hiddenId, privateId] = await Promise.all([
     fixtureCreateTrail({
       name: NAMES.public,
@@ -51,7 +47,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await fixtureDeleteTrails(...fixtureIds);
-  await suiteTeardown(suite);
+  await suite.teardown();
 });
 
 function names(data: { name: string }[] | null) {
@@ -252,4 +248,8 @@ describe('getTrailsDb — response shape', () => {
       region_id: suite.regionId,
     });
   });
+});
+
+describe('getTrailsDb — pending user', () => {
+  it.todo('pending (google SSO) user sees only public trails');
 });

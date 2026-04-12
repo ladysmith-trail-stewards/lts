@@ -6,21 +6,17 @@ import {
   signedInClient,
 } from '../supabaseTestClients';
 import { fixtureCreateTrail } from './testHelpers';
-import {
-  suiteSetup,
-  suiteTeardown,
-  type SuiteFixtures,
-} from '../profiles/testHelpers';
+import { TestSuite, type BuiltTestSuite } from '../testSuite';
 
 const P = '__delete_trails_test__';
-let suite: SuiteFixtures;
+let suite: BuiltTestSuite;
 
 beforeAll(async () => {
-  suite = await suiteSetup(P);
+  suite = await new TestSuite(P).createRegion('main').createAllUsers().build();
 });
 
 afterAll(async () => {
-  await suiteTeardown(suite);
+  await suite.teardown();
 });
 
 describe('deleteTrailsDb — anon (denied)', () => {
@@ -204,4 +200,8 @@ describe('deleteTrailsDb — non-existent id', () => {
     const { error } = await deleteTrailsDb(client, 999_999_999);
     expect(error).toBeNull();
   });
+});
+
+describe('deleteTrailsDb — pending user', () => {
+  it.todo('pending (google SSO) user cannot soft-delete a trail');
 });

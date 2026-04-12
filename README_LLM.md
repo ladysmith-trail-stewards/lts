@@ -118,7 +118,7 @@ Copy `.env.example` to `.env`. Required:
 - **Fonts**: Variable fonts — Cabin, Figtree, Josefin Sans, Outfit
 - **Formatting**: Prettier (2 spaces, semicolons, single quotes, trailing commas ES5)
 - **Colors**: CSS custom properties in oklch color space
-- **Naming over comments**: Favour strong, descriptive naming conventions over inline documentation. Use comments only to explain workarounds, novel approaches, or non-obvious "why" decisions.
+- **Naming over comments**: Favour strong, descriptive naming over inline documentation. Write no inline comments unless explaining a workaround, non-obvious "why", or a gotcha. Section-banner comments (`// ── Label ──`) are also unnecessary — omit them.
 
 ## Testing Strategy
 

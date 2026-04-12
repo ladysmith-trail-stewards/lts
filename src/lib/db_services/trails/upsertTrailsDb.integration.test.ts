@@ -7,23 +7,19 @@ import {
   signedInClient,
 } from '../supabaseTestClients';
 import { fixtureDeleteTrails, SAMPLE_GEOMETRY } from './testHelpers';
-import {
-  suiteSetup,
-  suiteTeardown,
-  type SuiteFixtures,
-} from '../profiles/testHelpers';
+import { TestSuite, type BuiltTestSuite } from '../testSuite';
 
 const P = '__upsert_test__';
 
-let suite: SuiteFixtures;
+let suite: BuiltTestSuite;
 const created: number[] = [];
 
 beforeAll(async () => {
-  suite = await suiteSetup(P);
+  suite = await new TestSuite(P).createRegion('main').createAllUsers().build();
 });
 
 afterAll(async () => {
-  await suiteTeardown(suite);
+  await suite.teardown();
 });
 
 afterEach(async () => {
@@ -269,4 +265,8 @@ describe('upsertTrailsDb — sentinel id = -1 treated as insert', () => {
 
     created.push(results[0].id!);
   });
+});
+
+describe('upsertTrailsDb — pending user', () => {
+  it.todo('pending (google SSO) user cannot upsert a trail');
 });

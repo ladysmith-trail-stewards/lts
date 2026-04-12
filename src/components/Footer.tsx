@@ -3,11 +3,12 @@ import { menuRoutes } from '@/routes';
 import { useAuth } from '@/contexts/AuthContext';
 
 function Footer() {
-  const { role } = useAuth();
-  const isAdmin = role !== null && ['admin', 'super_admin'].includes(role);
+  const { isAdmin, isSuperAdmin } = useAuth();
 
   const visibleRoutes = menuRoutes.filter(
-    (r) => r.access !== 'ADMIN' || isAdmin
+    (r) =>
+      (r.access !== 'ADMIN' || isAdmin) &&
+      (r.access !== 'SUPER_ADMIN' || isSuperAdmin)
   );
 
   return (

@@ -14,6 +14,8 @@ export interface AuthState {
   regionId: number | null;
   /** Convenience helper — true when role is 'admin' or 'super_admin'. */
   isAdmin: boolean;
+  /** Convenience helper — true only when role is 'super_admin'. */
+  isSuperAdmin: boolean;
   /** True when the user has accepted the membership policy. Sourced from the
    *  `policy_accepted` JWT claim stamped by custom_access_token_hook. */
   policyAccepted: boolean;
@@ -25,6 +27,7 @@ const AuthContext = createContext<AuthState>({
   role: null,
   regionId: null,
   isAdmin: false,
+  isSuperAdmin: false,
   policyAccepted: false,
   loading: true,
 });
@@ -40,6 +43,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   /** isAdmin is derived from role — no separate state needed. */
   const isAdmin = role === 'admin' || role === 'super_admin';
+  const isSuperAdmin = role === 'super_admin';
 
   /**
    * Apply claims from a JWT payload to context state.
@@ -109,7 +113,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, role, regionId, isAdmin, policyAccepted, loading }}
+      value={{
+        user,
+        role,
+        regionId,
+        isAdmin,
+        isSuperAdmin,
+        policyAccepted,
+        loading,
+      }}
     >
       {children}
     </AuthContext.Provider>

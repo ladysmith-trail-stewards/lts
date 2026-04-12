@@ -8,20 +8,19 @@ import {
   fixtureCreateTrail,
   fixtureDeleteTrails,
 } from '../../db_services/trails/testHelpers';
-import {
-  suiteSetup,
-  suiteTeardown,
-  type SuiteFixtures,
-} from '../../db_services/profiles/testHelpers';
+import { TestSuite, type BuiltTestSuite } from '../../db_services/testSuite';
 
 const P = '__trails_view_test__';
-let suite: SuiteFixtures;
+let suite: BuiltTestSuite;
 let publicTrailId: number;
 let privateTrailId: number;
 let softDeletedTrailId: number;
 
 beforeAll(async () => {
-  suite = await suiteSetup(P);
+  suite = await new TestSuite(P)
+    .createRegion('main')
+    .createUser([{ name: 'user', role: 'user' }])
+    .build();
   [publicTrailId, privateTrailId, softDeletedTrailId] = await Promise.all([
     fixtureCreateTrail({
       name: `${P}public`,
@@ -48,7 +47,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await fixtureDeleteTrails(publicTrailId, privateTrailId, softDeletedTrailId);
-  await suiteTeardown(suite);
+  await suite.teardown();
 });
 
 function fixtureNames(data: { name: string | null }[] | null) {

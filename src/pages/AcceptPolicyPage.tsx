@@ -22,7 +22,7 @@ import {
 import { ScrollText } from 'lucide-react';
 import {
   getRegionsDb,
-  type RegionRow,
+  type RegionRecordMeta,
 } from '@/lib/db_services/regions/getRegionsDb';
 
 export default function AcceptPolicyPage() {
@@ -31,15 +31,17 @@ export default function AcceptPolicyPage() {
   const [checked, setChecked] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [regions, setRegions] = useState<RegionRow[]>([]);
+  const [regions, setRegions] = useState<RegionRecordMeta[]>([]);
   const [regionId, setRegionId] = useState<number | null>(null);
 
   useEffect(() => {
-    getRegionsDb(supabase).then(({ data, error: fetchError }) => {
-      if (data) setRegions(data);
-      if (fetchError)
-        setError('Failed to load regions. Please refresh and try again.');
-    });
+    getRegionsDb(supabase, { metaOnly: true }).then(
+      ({ data, error: fetchError }) => {
+        if (data) setRegions(data);
+        if (fetchError)
+          setError('Failed to load regions. Please refresh and try again.');
+      }
+    );
     // supabase is a stable module-level singleton; no re-run needed
   }, []);
 

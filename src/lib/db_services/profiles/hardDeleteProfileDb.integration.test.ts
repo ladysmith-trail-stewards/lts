@@ -5,7 +5,7 @@ import {
   signedInClient,
 } from '../supabaseTestClients';
 import { fixtureCreateProfile, fixtureDeleteProfiles } from './testHelpers';
-import { suiteSetup, suiteTeardown, type SuiteFixtures } from './testHelpers';
+import { TestSuite, type BuiltTestSuite } from '../testSuite';
 
 /**
  * Hard-delete via PostgREST DELETE (table-level RLS policy).
@@ -18,14 +18,14 @@ import { suiteSetup, suiteTeardown, type SuiteFixtures } from './testHelpers';
 
 const P = '__hard_delete_profiles_test__';
 
-let suite: SuiteFixtures;
+let suite: BuiltTestSuite;
 
 beforeAll(async () => {
-  suite = await suiteSetup(P);
+  suite = await new TestSuite(P).createRegion('main').createAllUsers().build();
 });
 
 afterAll(async () => {
-  await suiteTeardown(suite);
+  await suite.teardown();
 });
 
 async function rowExists(id: number): Promise<boolean> {
@@ -153,4 +153,8 @@ describe('hard delete profiles (RLS) — super_admin (permitted)', () => {
     const { error } = await client.from('profiles').delete().eq('id', 9999999);
     expect(error).toBeNull();
   });
+});
+
+describe('hard delete profiles (RLS) — pending user', () => {
+  it.todo('row survives after pending (google SSO) user DELETE attempt');
 });

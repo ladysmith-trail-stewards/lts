@@ -30,7 +30,7 @@ function RouterLink(props: NavigationMenu.Link.Props & { to: string }) {
 
 function HeaderMenu() {
   const [user, setUser] = useState<SupabaseUser | null>(null);
-  const { isAdmin } = useAuth();
+  const { isAdmin, isSuperAdmin } = useAuth();
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUser(data.user ?? null));
@@ -45,7 +45,9 @@ function HeaderMenu() {
   }, []);
 
   const visibleRoutes = menuRoutes.filter(
-    (r) => r.access !== 'ADMIN' || isAdmin
+    (r) =>
+      (r.access !== 'ADMIN' || isAdmin) &&
+      (r.access !== 'SUPER_ADMIN' || isSuperAdmin)
   );
 
   return (
