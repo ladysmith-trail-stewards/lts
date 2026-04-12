@@ -6,18 +6,18 @@ import {
   signedInClient,
 } from '../supabaseTestClients';
 import { fixtureCreateProfile, fixtureDeleteProfiles } from './testHelpers';
-import { suiteSetup, suiteTeardown, type SuiteFixtures } from './testHelpers';
+import { TestSuite, type BuiltTestSuite } from '../testSuite';
 
 const P = '__soft_delete_profiles_test__';
 
-let suite: SuiteFixtures;
+let suite: BuiltTestSuite;
 
 beforeAll(async () => {
-  suite = await suiteSetup(P);
+  suite = await new TestSuite(P).createRegion('main').createAllUsers().build();
 });
 
 afterAll(async () => {
-  await suiteTeardown(suite);
+  await suite.teardown();
 });
 
 // ---------------------------------------------------------------------------
@@ -213,4 +213,8 @@ describe('deleteProfileDb — super_admin (any profile)', () => {
     const { error } = await deleteProfileDb(client, 9999999);
     expect(error).toBeNull();
   });
+});
+
+describe('deleteProfileDb — pending user', () => {
+  it.todo('pending (google SSO) user cannot soft-delete a profile');
 });

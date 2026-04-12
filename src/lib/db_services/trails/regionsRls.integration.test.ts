@@ -4,22 +4,18 @@ import {
   serviceClient,
   signedInClient,
 } from '../supabaseTestClients';
-import {
-  suiteSetup,
-  suiteTeardown,
-  type SuiteFixtures,
-} from '../profiles/testHelpers';
+import { TestSuite, type BuiltTestSuite } from '../testSuite';
 
 const P = '__regions_rls_test__';
 
-let suite: SuiteFixtures;
+let suite: BuiltTestSuite;
 
 beforeAll(async () => {
-  suite = await suiteSetup(P);
+  suite = await new TestSuite(P).createRegion('main').createAllUsers().build();
 });
 
 afterAll(async () => {
-  await suiteTeardown(suite);
+  await suite.teardown();
 });
 
 describe('regions RLS — SELECT', () => {
@@ -125,4 +121,11 @@ describe('regions RLS — INSERT/UPDATE/DELETE — super_admin (permitted)', () 
     expect(data).toBeNull();
     insertedRegionId = 0; // mark as already deleted so afterAll skip
   });
+});
+
+describe('regions RLS — pending user', () => {
+  it.todo('pending (google SSO) user can SELECT regions');
+  it.todo('pending (google SSO) user cannot INSERT a region');
+  it.todo('pending (google SSO) user cannot UPDATE a region');
+  it.todo('pending (google SSO) user cannot DELETE a region');
 });

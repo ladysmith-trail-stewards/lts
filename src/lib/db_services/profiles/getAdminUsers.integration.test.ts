@@ -5,14 +5,14 @@ import {
   signedInClient,
 } from '../../db_services/supabaseTestClients';
 import { fixtureCreateProfile, fixtureDeleteProfiles } from './testHelpers';
-import { suiteSetup, suiteTeardown, type SuiteFixtures } from './testHelpers';
+import { TestSuite, type BuiltTestSuite } from '../testSuite';
 
 const P = '__get_admin_users_test__';
-let suite: SuiteFixtures;
+let suite: BuiltTestSuite;
 let softDeletedProfileId: number;
 
 beforeAll(async () => {
-  suite = await suiteSetup(P);
+  suite = await new TestSuite(P).createRegion('main').createAllUsers().build();
   softDeletedProfileId = await fixtureCreateProfile({
     name: `${P}soft-deleted`,
     region_id: suite.regionId,
@@ -26,7 +26,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await fixtureDeleteProfiles(softDeletedProfileId);
-  await suiteTeardown(suite);
+  await suite.teardown();
 });
 
 describe('get_admin_users RPC — denied roles', () => {
@@ -73,6 +73,9 @@ describe('get_admin_users RPC — admin', () => {
   });
 });
 
+describe('get_admin_users RPC — pending user', () => {
+  it.todo('pending (google SSO) user cannot call get_admin_users');
+});
 describe('get_admin_users RPC — super_admin', () => {
   let client: Awaited<ReturnType<typeof signedInClient>>;
   beforeAll(async () => {

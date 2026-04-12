@@ -5,35 +5,33 @@ import {
   serviceClient,
   signedInClient,
 } from '../supabaseTestClients';
-import {
-  suiteSetup,
-  suiteTeardown,
-  type SuiteFixtures,
-} from '../profiles/testHelpers';
+import { TestSuite, type BuiltTestSuite } from '../testSuite';
 
 // Requires local Supabase running (`pnpm db:start`). See README.md for RLS rules.
 
 const P = '__get_regions_test__';
 
-let suite: SuiteFixtures;
+let suite: BuiltTestSuite;
 
 beforeAll(async () => {
-  suite = await suiteSetup(P);
+  suite = await new TestSuite(P).createRegion('main').createAllUsers().build();
 });
 
 afterAll(async () => {
-  await suiteTeardown(suite);
+  await suite.teardown();
 });
 
-describe('getRegionsDb — excludes Default region (id=0)', () => {
+describe('getRegionsDb({ metaOnly: true }) — excludes Default region (id=0)', () => {
   it('anon does not see region id=0', async () => {
-    const { data, error } = await getRegionsDb(anonClient);
+    const { data, error } = await getRegionsDb(anonClient, { metaOnly: true });
     expect(error).toBeNull();
     expect(data!.map((r) => r.id)).not.toContain(0);
   });
 
   it('returns only regions with id > 0', async () => {
-    const { data, error } = await getRegionsDb(serviceClient);
+    const { data, error } = await getRegionsDb(serviceClient, {
+      metaOnly: true,
+    });
     expect(error).toBeNull();
     expect(data!.length).toBeGreaterThan(0);
     for (const r of data!) {
@@ -42,13 +40,17 @@ describe('getRegionsDb — excludes Default region (id=0)', () => {
   });
 
   it('includes the suite-local region', async () => {
-    const { data, error } = await getRegionsDb(serviceClient);
+    const { data, error } = await getRegionsDb(serviceClient, {
+      metaOnly: true,
+    });
     expect(error).toBeNull();
     expect(data!.map((r) => r.id)).toContain(suite.regionId);
   });
 
   it('returns results ordered by name', async () => {
-    const { data, error } = await getRegionsDb(serviceClient);
+    const { data, error } = await getRegionsDb(serviceClient, {
+      metaOnly: true,
+    });
     expect(error).toBeNull();
     // Only check ordering among the fixture regions this suite added.
     // Avoids depending on how seed data (e.g. "Ladysmith") sorts relative
@@ -60,16 +62,16 @@ describe('getRegionsDb — excludes Default region (id=0)', () => {
   });
 });
 
-describe('getRegionsDb — RLS: all authenticated roles can SELECT', () => {
+describe('getRegionsDb({ metaOnly: true }) — RLS: all authenticated roles can SELECT', () => {
   it('anon can read regions', async () => {
-    const { data, error } = await getRegionsDb(anonClient);
+    const { data, error } = await getRegionsDb(anonClient, { metaOnly: true });
     expect(error).toBeNull();
     expect(data!.length).toBeGreaterThan(0);
   });
 
   it('user can read regions', async () => {
     const client = await signedInClient(suite.user.email, suite.user.password);
-    const { data, error } = await getRegionsDb(client);
+    const { data, error } = await getRegionsDb(client, { metaOnly: true });
     expect(error).toBeNull();
     expect(data!.length).toBeGreaterThan(0);
   });
@@ -79,7 +81,7 @@ describe('getRegionsDb — RLS: all authenticated roles can SELECT', () => {
       suite.admin.email,
       suite.admin.password
     );
-    const { data, error } = await getRegionsDb(client);
+    const { data, error } = await getRegionsDb(client, { metaOnly: true });
     expect(error).toBeNull();
     expect(data!.length).toBeGreaterThan(0);
   });
@@ -89,7 +91,7 @@ describe('getRegionsDb — RLS: all authenticated roles can SELECT', () => {
       suite.superUser.email,
       suite.superUser.password
     );
-    const { data, error } = await getRegionsDb(client);
+    const { data, error } = await getRegionsDb(client, { metaOnly: true });
     expect(error).toBeNull();
     expect(data!.length).toBeGreaterThan(0);
   });
@@ -99,20 +101,52 @@ describe('getRegionsDb — RLS: all authenticated roles can SELECT', () => {
       suite.superAdmin.email,
       suite.superAdmin.password
     );
-    const { data, error } = await getRegionsDb(client);
+    const { data, error } = await getRegionsDb(client, { metaOnly: true });
     expect(error).toBeNull();
     expect(data!.length).toBeGreaterThan(0);
   });
+
+  it.todo('pending (google SSO) user can read regions');
 });
 
-describe('getRegionsDb — response shape', () => {
-  it('each region has id and name', async () => {
-    const { data, error } = await getRegionsDb(serviceClient);
+describe('getRegionsDb({ metaOnly: true }) — response shape', () => {
+  it('each region has id and name, no bbox_arr', async () => {
+    const { data, error } = await getRegionsDb(serviceClient, {
+      metaOnly: true,
+    });
     expect(error).toBeNull();
     for (const r of data!) {
       expect(typeof r.id).toBe('number');
       expect(typeof r.name).toBe('string');
       expect(r.name.length).toBeGreaterThan(0);
+      expect(
+        (r as unknown as Record<string, unknown>)['bbox_arr']
+      ).toBeUndefined();
     }
   });
+});
+
+describe('getRegionsDb() — full record with bbox_arr', () => {
+  it('returns id, name and bbox_arr', async () => {
+    const { data, error } = await getRegionsDb(serviceClient);
+    expect(error).toBeNull();
+    expect(data!.length).toBeGreaterThan(0);
+    for (const r of data!) {
+      expect(typeof r.id).toBe('number');
+      expect(typeof r.name).toBe('string');
+      // bbox_arr is null or a 4-element numeric tuple
+      if (r.bbox_arr !== null) {
+        expect(Array.isArray(r.bbox_arr)).toBe(true);
+        expect(r.bbox_arr).toHaveLength(4);
+        for (const coord of r.bbox_arr) {
+          expect(typeof coord).toBe('number');
+        }
+      }
+    }
+  });
+});
+
+describe('getRegionsDb — pending user', () => {
+  it.todo('pending (google SSO) user can read regions (metaOnly)');
+  it.todo('pending (google SSO) user can read regions with bbox_arr');
 });

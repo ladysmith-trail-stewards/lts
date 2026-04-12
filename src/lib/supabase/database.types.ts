@@ -54,6 +54,13 @@ export type Database = {
             referencedRelation: 'regions';
             referencedColumns: ['id'];
           },
+          {
+            foreignKeyName: 'profiles_region_id_fkey';
+            columns: ['region_id'];
+            isOneToOne: false;
+            referencedRelation: 'regions_with_bbox';
+            referencedColumns: ['id'];
+          },
         ];
       };
       regions: {
@@ -215,6 +222,13 @@ export type Database = {
             referencedRelation: 'regions';
             referencedColumns: ['id'];
           },
+          {
+            foreignKeyName: 'trails_region_id_fkey';
+            columns: ['region_id'];
+            isOneToOne: false;
+            referencedRelation: 'regions_with_bbox';
+            referencedColumns: ['id'];
+          },
         ];
       };
     };
@@ -258,6 +272,27 @@ export type Database = {
           f_table_schema?: unknown;
           srid?: number | null;
           type?: string | null;
+        };
+        Relationships: [];
+      };
+      regions_with_bbox: {
+        Row: {
+          bbox: unknown;
+          bbox_arr: Json | null;
+          id: number | null;
+          name: string | null;
+        };
+        Insert: {
+          bbox?: unknown;
+          bbox_arr?: never;
+          id?: number | null;
+          name?: string | null;
+        };
+        Update: {
+          bbox?: unknown;
+          bbox_arr?: never;
+          id?: number | null;
+          name?: string | null;
         };
         Relationships: [];
       };
@@ -331,6 +366,13 @@ export type Database = {
             columns: ['region_id'];
             isOneToOne: false;
             referencedRelation: 'regions';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'trails_region_id_fkey';
+            columns: ['region_id'];
+            isOneToOne: false;
+            referencedRelation: 'regions_with_bbox';
             referencedColumns: ['id'];
           },
         ];

@@ -60,9 +60,7 @@ export const TRAIL_CLASS_COLORS: Record<string, string> = {
   ACCESS: 'bg-purple-600',
   PATH: 'bg-slate-200',
   SECONDARY: 'bg-slate-200',
-  IMBY: 'bg-yellow-200',
   LIFT: 'bg-yellow-300',
-  TBD: 'bg-slate-400',
 };
 
 export const DIRECTION_LABELS: Record<string, string> = {

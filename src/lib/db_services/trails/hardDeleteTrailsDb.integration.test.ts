@@ -5,11 +5,7 @@ import {
   signedInClient,
 } from '../supabaseTestClients';
 import { fixtureCreateTrail } from './testHelpers';
-import {
-  suiteSetup,
-  suiteTeardown,
-  type SuiteFixtures,
-} from '../profiles/testHelpers';
+import { TestSuite, type BuiltTestSuite } from '../testSuite';
 
 /**
  * Hard-delete via PostgREST DELETE (table-level RLS policy).
@@ -21,14 +17,14 @@ import {
  */
 
 const P = '__hard_delete_trails_test__';
-let suite: SuiteFixtures;
+let suite: BuiltTestSuite;
 
 beforeAll(async () => {
-  suite = await suiteSetup(P);
+  suite = await new TestSuite(P).createRegion('main').createAllUsers().build();
 });
 
 afterAll(async () => {
-  await suiteTeardown(suite);
+  await suite.teardown();
 });
 
 async function rowExists(id: number): Promise<boolean> {
@@ -172,4 +168,8 @@ describe('hard delete trails (RLS) — super_admin (permitted)', () => {
       .eq('id', 999_999_999);
     expect(error).toBeNull();
   });
+});
+
+describe('hard delete trails (RLS) — pending user', () => {
+  it.todo('row survives after pending (google SSO) user DELETE attempt');
 });
