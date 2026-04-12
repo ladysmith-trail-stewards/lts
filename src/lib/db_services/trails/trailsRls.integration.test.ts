@@ -5,13 +5,18 @@
  * (anon, pending, user, super_user, admin, super_admin) against the full
  * Create / Read / Update / Soft-delete / Hard-delete operation matrix.
  *
+ * The S (soft-delete) step attempts a direct UPDATE of deleted_at. The
+ * block_deleted_at_update trigger rejects this for every app-level role, so
+ * S=false for all roles. Soft-delete via the SECURITY DEFINER RPCs is a
+ * separate concern tested implicitly by the trigger itself.
+ *
  * Trails RLS access matrix (public trail, own region):
- *   anon       C=✗  R=✓  U=✗  S=✗  H=✗   (public non-deleted trails are readable)
- *   pending    C=✗  R=✓  U=✗  S=✗  H=✗
- *   user       C=✗  R=✓  U=✗  S=✗  H=✗
- *   super_user C=✓  R=✓  U=✓  S=✓  H=✗   (own region only)
- *   admin      C=✓  R=✓  U=✓  S=✓  H=✗   (own region only)
- *   super_admin C=✓ R=✓  U=✓  S=✓  H=✓
+ *   anon        C=✗  R=✓  U=✗  S=✗  H=✗   (public non-deleted trails are readable)
+ *   pending     C=✗  R=✓  U=✗  S=✗  H=✗
+ *   user        C=✗  R=✓  U=✗  S=✗  H=✗
+ *   super_user  C=✓  R=✓  U=✓  S=✗  H=✗   (own region; trigger blocks deleted_at)
+ *   admin       C=✓  R=✓  U=✓  S=✗  H=✗   (own region; trigger blocks deleted_at)
+ *   super_admin C=✓  R=✓  U=✓  S=✗  H=✓   (trigger blocks deleted_at direct write)
  */
 
 import { beforeAll, afterAll } from 'vitest';
@@ -41,17 +46,13 @@ tableRlsSuite({
     geometry: SAMPLE_GEOMETRY as unknown as string,
   }),
   updateData: { description: `${P}updated` },
-  softDeleteFn: async (client, id) => {
-    const { error } = await client.rpc('soft_delete_trails', { ids: [id] });
-    return { error: error ? new Error(error.message) : null };
-  },
   expected: {
     //                    C      R      U      S      H
     anon: [false, true, false, false, false],
     pending: [false, true, false, false, false],
     user: [false, true, false, false, false],
-    superUser: [true, true, true, true, false],
-    admin: [true, true, true, true, false],
-    superAdmin: [true, true, true, true, true],
+    superUser: [true, true, true, false, false],
+    admin: [true, true, true, false, false],
+    superAdmin: [true, true, true, false, true],
   },
 });

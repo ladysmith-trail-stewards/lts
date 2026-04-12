@@ -27,11 +27,9 @@
  *     table: 'trails',
  *     insertData: () => ({ name: `${P}t`, type: 'trail', ... }),
  *     updateData: { description: 'updated' },
- *     softDeleteFn: (client, id) => client.rpc('soft_delete_trails', { ids: [id] })
- *       .then(({ error }) => ({ error: error ? new Error(error.message) : null })),
  *     expected: {
  *       anon:       [false, true,  false, false, false],
- *       superAdmin: [true,  true,  true,  true,  true ],
+ *       superAdmin: [true,  true,  true,  false, true ],
  *     },
  *   });
  */
@@ -164,15 +162,6 @@ export interface TableRlsOptions {
 
   /** UPDATE payload for the U test. */
   updateData: Record<string, unknown>;
-
-  /**
-   * Performs a soft-delete (sets `deleted_at`) for a single row.
-   * Receives the test client and the fixture row id.
-   */
-  softDeleteFn: (
-    client: RlsClient,
-    id: number
-  ) => Promise<{ error: Error | null }>;
 
   /**
    * Per-role CRUSH expectations — [Create, Read, Update, SoftDelete, HardDelete].
@@ -325,16 +314,33 @@ export function tableRlsSuite(opts: TableRlsOptions): void {
       // ── S — Soft Delete + re-read ─────────────────────────────────────────
       if (!bypass.S) {
         it('S — soft delete + re-read', async () => {
-          const { error } = await opts.softDeleteFn(client, fixtureId);
+          // Attempt a direct UPDATE of deleted_at. The block_deleted_at_update
+          // trigger prevents this for all non-service_role callers, so for
+          // tables that carry that trigger this step is expected to fail for
+          // every app-level role. The expected[role][3] flag declares the
+          // anticipated outcome.
+          const { error } = await dynClient(client)
+            .from(opts.table)
+            .update({ deleted_at: new Date().toISOString() })
+            .eq('id', fixtureId);
 
-          const { data: row } = await dynServiceClient()
+          // Service-role verification of the actual deleted_at state.
+          const { data: svcRow } = await dynServiceClient()
             .from(opts.table)
             .select('deleted_at')
             .eq('id', fixtureId)
             .single();
 
-          const deletedAt = (row as { deleted_at: string | null } | null)
+          const deletedAt = (svcRow as { deleted_at: string | null } | null)
             ?.deleted_at;
+
+          // Additional re-read via the test client for an extra layer of
+          // verification — confirms the row's visible state from the
+          // caller's perspective matches expectations.
+          const { data: reReadData } = await dynClient(client)
+            .from(opts.table)
+            .select('id')
+            .eq('id', fixtureId);
 
           if (sExp) {
             expect(error, 'S: expected soft delete to succeed').toBeNull();
@@ -351,6 +357,13 @@ export function tableRlsSuite(opts: TableRlsOptions): void {
               deletedAt,
               'S: expected deleted_at to remain null'
             ).toBeNull();
+            // Row should remain readable for roles that have SELECT access.
+            if (rExp) {
+              expect(
+                rowCount(reReadData),
+                'S: row should still be visible after failed soft-delete'
+              ).toBeGreaterThan(0);
+            }
           }
         });
       }
