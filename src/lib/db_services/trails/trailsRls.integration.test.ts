@@ -5,18 +5,18 @@
  * (anon, pending, user, super_user, admin, super_admin) against the full
  * Create / Read / Update / Soft-delete / Hard-delete operation matrix.
  *
- * The S (soft-delete) step attempts a direct UPDATE of deleted_at. The
- * block_deleted_at_update trigger rejects this for every app-level role, so
- * S=false for all roles. Soft-delete via the SECURITY DEFINER RPCs is a
- * separate concern tested implicitly by the trigger itself.
+ * Soft-delete on `trails` is gated behind the `soft_delete_trails` RPC
+ * (SECURITY DEFINER). The RPC sets `app.soft_delete_rpc = 'on'` so that the
+ * `block_deleted_at_update` trigger allows the UPDATE; a direct UPDATE of
+ * `deleted_at` is blocked for all app-level roles.
  *
  * Trails RLS access matrix (public trail, own region):
- *   anon        C=✗  R=✓  U=✗  S=✗  H=✗   (public non-deleted trails are readable)
+ *   anon        C=✗  R=✓  U=✗  S=✗  H=✗
  *   pending     C=✗  R=✓  U=✗  S=✗  H=✗
  *   user        C=✗  R=✓  U=✗  S=✗  H=✗
- *   super_user  C=✓  R=✓  U=✓  S=✗  H=✗   (own region; trigger blocks deleted_at)
- *   admin       C=✓  R=✓  U=✓  S=✗  H=✗   (own region; trigger blocks deleted_at)
- *   super_admin C=✓  R=✓  U=✓  S=✗  H=✓   (trigger blocks deleted_at direct write)
+ *   super_user  C=✓  R=✓  U=✓  S=✓  H=✗   (own region only)
+ *   admin       C=✓  R=✓  U=✓  S=✓  H=✗   (own region only)
+ *   super_admin C=✓  R=✓  U=✓  S=✓  H=✓
  */
 
 import { beforeAll, afterAll } from 'vitest';
@@ -46,13 +46,19 @@ tableRlsSuite({
     geometry: SAMPLE_GEOMETRY as unknown as string,
   }),
   updateData: { description: `${P}updated` },
+  // Soft-delete must go through the RPC — direct deleted_at UPDATE is blocked
+  // by the block_deleted_at_update trigger for all app-level roles.
+  softDeleteFn: async (client, id) => {
+    const { error } = await client.rpc('soft_delete_trails', { ids: [id] });
+    return { error: error ? new Error(error.message) : null };
+  },
   expected: {
     //                    C      R      U      S      H
     anon: [false, true, false, false, false],
     pending: [false, true, false, false, false],
     user: [false, true, false, false, false],
-    superUser: [true, true, true, false, false],
-    admin: [true, true, true, false, false],
-    superAdmin: [true, true, true, false, true],
+    superUser: [true, true, true, true, false],
+    admin: [true, true, true, true, false],
+    superAdmin: [true, true, true, true, true],
   },
 });

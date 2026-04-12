@@ -27,9 +27,14 @@
  *     table: 'trails',
  *     insertData: () => ({ name: `${P}t`, type: 'trail', ... }),
  *     updateData: { description: 'updated' },
+ *     // Optional — omit to fall back to a direct deleted_at UPDATE (blocked
+ *     // by the trigger for all app-level roles, so S=false for everyone).
+ *     softDeleteFn: async (client, id) =>
+ *       client.rpc('soft_delete_trails', { ids: [id] })
+ *         .then(({ error }) => ({ error: error ? new Error(error.message) : null })),
  *     expected: {
  *       anon:       [false, true,  false, false, false],
- *       superAdmin: [true,  true,  true,  false, true ],
+ *       superAdmin: [true,  true,  true,  true,  true ],
  *     },
  *   });
  */
@@ -162,6 +167,24 @@ export interface TableRlsOptions {
 
   /** UPDATE payload for the U test. */
   updateData: Record<string, unknown>;
+
+  /**
+   * Optional soft-delete implementation for the S test.
+   *
+   * When provided, the S step calls this function rather than attempting a
+   * direct `deleted_at` UPDATE. Tables that gate soft-delete behind a
+   * SECURITY DEFINER RPC (e.g. `soft_delete_trails`) must supply this so that
+   * permitted roles (super_user, admin, super_admin) can actually soft-delete
+   * — the trigger blocks direct `deleted_at` writes for all app-level roles.
+   *
+   * When omitted, the S step falls back to a direct UPDATE of `deleted_at`,
+   * which will be blocked by the `block_deleted_at_update` trigger for all
+   * app-level roles (S=false for everyone).
+   */
+  softDeleteFn?: (
+    client: RlsClient,
+    id: number
+  ) => Promise<{ error: Error | null }>;
 
   /**
    * Per-role CRUSH expectations — [Create, Read, Update, SoftDelete, HardDelete].
@@ -314,15 +337,19 @@ export function tableRlsSuite(opts: TableRlsOptions): void {
       // ── S — Soft Delete + re-read ─────────────────────────────────────────
       if (!bypass.S) {
         it('S — soft delete + re-read', async () => {
-          // Attempt a direct UPDATE of deleted_at. The block_deleted_at_update
-          // trigger prevents this for all non-service_role callers, so for
-          // tables that carry that trigger this step is expected to fail for
-          // every app-level role. The expected[role][3] flag declares the
-          // anticipated outcome.
-          const { error } = await dynClient(client)
-            .from(opts.table)
-            .update({ deleted_at: new Date().toISOString() })
-            .eq('id', fixtureId);
+          // Use the caller-supplied soft-delete function if provided (e.g. an
+          // RPC that sets `app.soft_delete_rpc = 'on'` to satisfy the trigger).
+          // Fall back to a direct `deleted_at` UPDATE, which the
+          // block_deleted_at_update trigger will reject for all app-level roles.
+          const { error } = opts.softDeleteFn
+            ? await opts.softDeleteFn(client, fixtureId)
+            : await dynClient(client)
+                .from(opts.table)
+                .update({ deleted_at: new Date().toISOString() })
+                .eq('id', fixtureId)
+                .then(({ error: e }: { error: unknown }) => ({
+                  error: e ? new Error(String(e)) : null,
+                }));
 
           // Service-role verification of the actual deleted_at state.
           const { data: svcRow } = await dynServiceClient()
