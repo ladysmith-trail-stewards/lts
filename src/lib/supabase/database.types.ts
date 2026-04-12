@@ -724,6 +724,16 @@ export type Database = {
       };
       postgis_version: { Args: never; Returns: string };
       postgis_wagyu_version: { Args: never; Returns: string };
+      set_region_bbox: {
+        Args: {
+          p_max_lat: number;
+          p_max_lng: number;
+          p_min_lat: number;
+          p_min_lng: number;
+          p_region_id: number;
+        };
+        Returns: undefined;
+      };
       soft_delete_profiles: { Args: { ids: number[] }; Returns: undefined };
       soft_delete_trails: { Args: { ids: number[] }; Returns: undefined };
       st_3dclosestpoint: {
