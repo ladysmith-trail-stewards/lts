@@ -644,6 +644,15 @@ export type Database = {
           security_definer: boolean;
         }[];
       };
+      get_soft_delete_perms: {
+        Args: never;
+        Returns: {
+          admin_perm: string;
+          super_user_perm: string;
+          table_name: string;
+          user_perm: string;
+        }[];
+      };
       get_trails_utm: {
         Args: { trail_ids: number[] };
         Returns: {

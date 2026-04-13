@@ -17,23 +17,22 @@
 > **`pending` role** — new Google/OAuth sign-ups land here until an admin promotes them to `user`.
 > No policies grant `pending` any access (identical to `anon` at the data layer).
 >
-> **Soft delete** — setting `deleted_at` is the standard non-destructive removal path.
-> The DELETE column in the matrix reflects hard-delete RLS only (`super_admin` only).
-> Soft-delete is performed by setting `deleted_at` directly via UPDATE; the `block_deleted_at_update`
-> trigger enforces role-based rules (JWT claims) to determine which records each role may soft-delete.
-> `super_admin` may soft-delete anything; `admin` may soft-delete profiles in their region or their own;
-> `super_user` may soft-delete their own profile; `user` may soft-delete their own profile.
-> Soft-deleted rows are hidden from `trails_view` and excluded by application queries.
+> **Soft-D** — the Soft-D column shows who may set `deleted_at` via a direct `UPDATE`.
+> The `block_deleted_at_update` trigger enforces this per-table; the DELETE column reflects hard-delete RLS only.
+> `super_admin` always has full soft-delete access. Database-level roles (`service_role`, `postgres`) bypass the trigger entirely.
+> Per-table permissions (from live DB trigger args):
+> `profiles`: admin=rows in own region, super_user=own row only, user=own row only
+> `trails`: admin=rows in own region, super_user=rows in own region, user=none
 
 ### `profiles`
 
-| Role        | SELECT | INSERT | UPDATE | DELETE |
-| ----------- | :----: | :----: | :----: | :----: |
-| Anon        |   —    |   —    |   —    |   —    |
-| User        |   👤   |   —    |   👤   |   —    |
-| Super User  |   👤   |   —    |   👤   |   —    |
-| Admin       |   📍   |   📍   |   📍   |   —    |
-| Super Admin |   ✅   |   ✅   |   ✅   |   ✅   |
+| Role        | SELECT | INSERT | UPDATE | DELETE | Soft-D |
+| ----------- | :----: | :----: | :----: | :----: | :----: |
+| Anon        |   —    |   —    |   —    |   —    |   —    |
+| User        |   👤   |   —    |   👤   |   —    |   👤   |
+| Super User  |   👤   |   —    |   👤   |   —    |   👤   |
+| Admin       |   📍   |   📍   |   📍   |   —    |   📍   |
+| Super Admin |   ✅   |   ✅   |   ✅   |   ✅   |   ✅   |
 
 ### `regions`
 
@@ -57,13 +56,13 @@
 
 ### `trails`
 
-| Role        | SELECT | INSERT | UPDATE | DELETE |
-| ----------- | :----: | :----: | :----: | :----: |
-| Anon        |   —    |   —    |   —    |   —    |
-| User        |   ✅   |   —    |   —    |   —    |
-| Super User  |   ✅   |   📍   |   📍   |   —    |
-| Admin       |   ✅   |   📍   |   📍   |   —    |
-| Super Admin |   ✅   |   ✅   |   ✅   |   ✅   |
+| Role        | SELECT | INSERT | UPDATE | DELETE | Soft-D |
+| ----------- | :----: | :----: | :----: | :----: | :----: |
+| Anon        |   —    |   —    |   —    |   —    |   —    |
+| User        |   ✅   |   —    |   —    |   —    |   —    |
+| Super User  |   ✅   |   📍   |   📍   |   —    |   📍   |
+| Admin       |   ✅   |   📍   |   📍   |   —    |   📍   |
+| Super Admin |   ✅   |   ✅   |   ✅   |   ✅   |   ✅   |
 
 ---
 

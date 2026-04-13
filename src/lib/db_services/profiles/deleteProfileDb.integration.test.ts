@@ -4,7 +4,7 @@ import { serviceClient } from '../supabaseTestClients';
 import { fixtureCreateProfile, fixtureDeleteProfiles } from './testHelpers';
 import { TestSuite, type BuiltTestSuite } from '../testSuite';
 
-const P = '__soft_delete_profiles_test__';
+const P = '__delete_profile_test__';
 
 let suite: BuiltTestSuite;
 

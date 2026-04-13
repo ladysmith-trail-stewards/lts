@@ -6,15 +6,42 @@ comment on column public.regions.deleted_at is
   'Soft-delete timestamp. NULL = active. Only super_admin may set this.';
 
 
+-- block_deleted_at_update(admin_perm, super_user_perm, user_perm)
+--
+-- Trigger function that enforces role-based soft-delete rules.
+-- Each trigger passes three positional arguments declaring what scope
+-- each role is permitted to soft-delete on that table:
+--
+--   TG_ARGV[0]  admin permission
+--   TG_ARGV[1]  super_user permission
+--   TG_ARGV[2]  user permission
+--
+-- Permission values (case-insensitive):
+--   ALL    — may soft-delete any row
+--   REGION — may soft-delete rows where region_id matches their JWT region
+--             (own row is implicitly covered since it shares the same region)
+--   OWN    — may soft-delete rows where auth_user_id matches their JWT uid
+--   NONE   — may not soft-delete
+--
+-- super_admin always has ALL. Database-level roles (service_role, postgres,
+-- supabase_admin) always bypass. Any role not listed above is denied.
+-- Default when auto-attached to a new table: REGION / REGION / NONE.
 create or replace function public.block_deleted_at_update()
 returns trigger
 language plpgsql
 set search_path = ''
 as $$
 declare
-  v_role      text   := (select auth.jwt() ->> 'user_role');
-  v_region_id bigint := (select (auth.jwt() ->> 'region_id')::bigint);
-  v_uid       uuid   := (select auth.uid());
+  v_role        text   := (select auth.jwt() ->> 'user_role');
+  v_region_id   bigint := (select (auth.jwt() ->> 'region_id')::bigint);
+  v_uid         uuid   := (select auth.uid());
+
+  -- Read per-role permissions from trigger arguments (defaults: REGION / REGION / NONE).
+  perm_admin      text := upper(coalesce(TG_ARGV[0], 'REGION'));
+  perm_super_user text := upper(coalesce(TG_ARGV[1], 'REGION'));
+  perm_user       text := upper(coalesce(TG_ARGV[2], 'NONE'));
+
+  v_perm text;
 begin
   -- Only run if deleted_at is actually changing.
   if new.deleted_at is not distinct from old.deleted_at then
@@ -26,39 +53,39 @@ begin
     return new;
   end if;
 
-  -- super_admin may soft-delete anything, regardless of table.
+  -- super_admin always has ALL.
   if v_role = 'super_admin' then
     return new;
   end if;
 
-  if TG_TABLE_NAME = 'profiles' then
-    if v_role = 'admin' then
-      if new.auth_user_id = v_uid or new.region_id = v_region_id then
-        return new;
-      end if;
-      raise exception 'permission denied: profile is outside your region'
-        using errcode = 'insufficient_privilege';
-    elsif v_role = 'super_user' then
-      if new.auth_user_id = v_uid then
-        return new;
-      end if;
-      raise exception 'permission denied: super_user may only soft-delete their own profile'
-        using errcode = 'insufficient_privilege';
-    end if;
-  elsif TG_TABLE_NAME = 'regions' then
-    null; -- fall through to the final denial
-  else
-    if v_role in ('admin', 'super_user') then
-      if new.region_id = v_region_id then
-        return new;
-      end if;
-      raise exception 'permission denied: % is outside your region', TG_TABLE_NAME
-        using errcode = 'insufficient_privilege';
-    end if;
+  -- Resolve the permission for the calling role.
+  v_perm := case v_role
+    when 'admin'      then perm_admin
+    when 'super_user' then perm_super_user
+    when 'user'       then perm_user
+    else 'NONE'
+  end;
 
+  -- Enforce the permission.
+  if v_perm = 'ALL' then
+    return new;
+  elsif v_perm = 'REGION' then
+    if new.region_id = v_region_id then
+      return new;
+    end if;
+    raise exception 'permission denied: row is outside your region'
+      using errcode = 'insufficient_privilege';
+  elsif v_perm = 'OWN' then
+    if new.auth_user_id = v_uid then
+      return new;
+    end if;
+    raise exception 'permission denied: you may only soft-delete your own record'
+      using errcode = 'insufficient_privilege';
   end if;
 
-  raise exception 'permission denied: role % may not soft-delete %', coalesce(v_role, 'anon'), TG_TABLE_NAME
+  -- NONE or unrecognised role.
+  raise exception 'permission denied: role % may not soft-delete rows in %',
+    coalesce(v_role, 'anon'), TG_TABLE_NAME
     using errcode = 'insufficient_privilege';
 end;
 $$;
@@ -99,7 +126,7 @@ begin
     execute format(
       'create trigger %I
          before update on public.%I
-         for each row execute function public.block_deleted_at_update()',
+         for each row execute function public.block_deleted_at_update(''REGION'', ''REGION'', ''NONE'')',
       r.tbl || '_block_deleted_at', r.tbl
     );
   end loop;
@@ -124,9 +151,9 @@ create event trigger auto_attach_block_deleted_at
 drop trigger if exists profiles_block_deleted_at on public.profiles;
 create trigger profiles_block_deleted_at
   before update on public.profiles
-  for each row execute function public.block_deleted_at_update();
+  for each row execute function public.block_deleted_at_update('REGION', 'OWN', 'OWN');
 
 drop trigger if exists trails_block_deleted_at on public.trails;
 create trigger trails_block_deleted_at
   before update on public.trails
-  for each row execute function public.block_deleted_at_update();
+  for each row execute function public.block_deleted_at_update('REGION', 'REGION', 'NONE');

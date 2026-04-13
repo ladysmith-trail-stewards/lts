@@ -73,6 +73,13 @@ const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
 // ---------------------------------------------------------------------------
 
 const COMMANDS = ['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'ALL'];
+const DISPLAY_COMMANDS = [
+  'SELECT',
+  'INSERT',
+  'UPDATE',
+  'DELETE',
+  'SOFT_DELETE',
+];
 
 // Ordered display roles (rows of the matrix)
 const ROLES = ['anon', 'user', 'super_user', 'admin', 'super_admin'];
@@ -186,15 +193,32 @@ function isOwnScopedForRole(using_expr, check_expr, role) {
 // Scope priority: higher index wins
 const SCOPE_RANK = { own: 1, region: 2, always: 3 };
 
+/** Convert a trigger-arg permission string to a matrix scope value. */
+function permToScope(perm) {
+  switch ((perm ?? '').toUpperCase()) {
+    case 'ALL':
+      return 'always';
+    case 'REGION':
+      return 'region';
+    case 'OWN':
+      return 'own';
+    default:
+      return null; // NONE → no access
+  }
+}
+
 /**
  * Build a role × command matrix for one table.
  * Cell values: 'always' | 'region' | 'own' | null
+ *
+ * @param {object[]} policies
+ * @param {{ admin_perm, super_user_perm, user_perm } | null} softDeletePerms
  */
-function buildMatrix(policies) {
+function buildMatrix(policies, softDeletePerms) {
   const matrix = {};
   for (const role of ROLES) {
     matrix[role] = {};
-    for (const cmd of COMMANDS) matrix[role][cmd] = null;
+    for (const cmd of [...COMMANDS, 'SOFT_DELETE']) matrix[role][cmd] = null;
   }
 
   for (const { policy_name, command, using_expr, check_expr } of policies) {
@@ -231,15 +255,31 @@ function buildMatrix(policies) {
     }
   }
 
+  // Populate SOFT_DELETE column from trigger args.
+  if (softDeletePerms) {
+    const permMap = {
+      admin: softDeletePerms.admin_perm,
+      super_user: softDeletePerms.super_user_perm,
+      user: softDeletePerms.user_perm,
+      // super_admin always has ALL; anon is always NONE
+      super_admin: 'ALL',
+      anon: 'NONE',
+    };
+    for (const role of ROLES) {
+      matrix[role]['SOFT_DELETE'] = permToScope(permMap[role]);
+    }
+  }
+
   return matrix;
 }
 
 function renderMatrix(matrix) {
-  const activeCmds = COMMANDS.filter((cmd) =>
+  const activeCmds = DISPLAY_COMMANDS.filter((cmd) =>
     ROLES.some((r) => matrix[r][cmd] !== null)
   );
 
-  const header = `| Role | ${activeCmds.join(' | ')} |`;
+  const cmdLabel = (cmd) => (cmd === 'SOFT_DELETE' ? 'Soft-D' : cmd);
+  const header = `| Role | ${activeCmds.map(cmdLabel).join(' | ')} |`;
   const sep = `|---|${activeCmds.map(() => ':---:').join('|')}|`;
 
   const rows = ROLES.map((role) => {
@@ -261,7 +301,7 @@ function renderMatrix(matrix) {
 // ---------------------------------------------------------------------------
 
 /** Human-readable matrix section — one matrix per table. */
-function buildMatrixSection(rows) {
+function buildMatrixSection(rows, softDeleteByTable) {
   if (!rows.length) return '_No RLS policies found._\n';
 
   const byTable = {};
@@ -269,7 +309,8 @@ function buildMatrixSection(rows) {
 
   let md = '';
   for (const [table, policies] of Object.entries(byTable)) {
-    const matrix = buildMatrix(policies);
+    const sdPerms = softDeleteByTable?.[table] ?? null;
+    const matrix = buildMatrix(policies, sdPerms);
     md += `### \`${table}\`\n\n`;
     md += renderMatrix(matrix) + '\n\n';
   }
@@ -294,6 +335,7 @@ async function buildRpcSection() {
     'set_geom_updated_at',
     'block_deleted_at_update',
     'attach_block_deleted_at_trigger',
+    'get_soft_delete_perms',
     'get_trails_utm',
     'get_utm_epsg',
   ]);
@@ -362,6 +404,46 @@ if (error) {
 
 const rpcSection = await buildRpcSection();
 
+// ---------------------------------------------------------------------------
+// Fetch soft-delete trigger permissions from the live DB.
+// ---------------------------------------------------------------------------
+console.log('Calling get_soft_delete_perms() via service-role RPC…');
+const { data: sdData, error: sdError } = await supabase.rpc(
+  'get_soft_delete_perms'
+);
+if (sdError) {
+  console.error('get_soft_delete_perms() failed.\n', sdError.message);
+  process.exit(1);
+}
+
+// Index by table_name for O(1) lookup in buildMatrixSection.
+const softDeleteByTable = Object.fromEntries(
+  sdData.map((r) => [r.table_name, r])
+);
+
+// Build the soft-delete blurb dynamically from the fetched data.
+function permLabel(perm) {
+  switch ((perm ?? '').toUpperCase()) {
+    case 'ALL':
+      return 'all rows';
+    case 'REGION':
+      return 'rows in own region';
+    case 'OWN':
+      return 'own row only';
+    default:
+      return 'none';
+  }
+}
+
+const softDeleteBlurb = sdData.length
+  ? sdData
+      .map(
+        ({ table_name, admin_perm, super_user_perm, user_perm }) =>
+          `> \`${table_name}\`: admin=${permLabel(admin_perm)}, super_user=${permLabel(super_user_perm)}, user=${permLabel(user_perm)}`
+      )
+      .join('\n')
+  : '> _(no tables with soft-delete trigger)_';
+
 const md = `# RLS Policies
 
 > Auto-generated by \`scripts/extract-db-policies.js\`.
@@ -381,15 +463,13 @@ const md = `# RLS Policies
 > **\`pending\` role** — new Google/OAuth sign-ups land here until an admin promotes them to \`user\`.
 > No policies grant \`pending\` any access (identical to \`anon\` at the data layer).
 >
-> **Soft delete** — setting \`deleted_at\` is the standard non-destructive removal path.
-> The DELETE column in the matrix reflects hard-delete RLS only (\`super_admin\` only).
-> Soft-delete is performed by setting \`deleted_at\` directly via UPDATE; the \`block_deleted_at_update\`
-> trigger enforces role-based rules (JWT claims) to determine which records each role may soft-delete.
-> \`super_admin\` may soft-delete anything; \`admin\` may soft-delete profiles in their region or their own;
-> \`super_user\` may soft-delete their own profile; \`user\` may soft-delete their own profile.
-> Soft-deleted rows are hidden from \`trails_view\` and excluded by application queries.
+> **Soft-D** — the Soft-D column shows who may set \`deleted_at\` via a direct \`UPDATE\`.
+> The \`block_deleted_at_update\` trigger enforces this per-table; the DELETE column reflects hard-delete RLS only.
+> \`super_admin\` always has full soft-delete access. Database-level roles (\`service_role\`, \`postgres\`) bypass the trigger entirely.
+> Per-table permissions (from live DB trigger args):
+${softDeleteBlurb}
 
-${buildMatrixSection(data)}
+${buildMatrixSection(data, softDeleteByTable)}
 ---
 
 ## RPCs

@@ -317,21 +317,39 @@ describe('profiles RLS — UPDATE — admin (own region only)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Column-level: deleted_at cannot be set by low-privilege roles
+// Soft-delete: deleted_at writeable by trigger-enforced scope rules
 // ---------------------------------------------------------------------------
-describe('profiles RLS — deleted_at direct UPDATE blocked for user', () => {
-  it('user cannot set deleted_at directly via UPDATE', async () => {
+describe('profiles RLS — soft-delete via deleted_at UPDATE', () => {
+  it('user can soft-delete their own profile', async () => {
     const client = await signedInClient(suite.user.email, suite.user.password);
-    await client
+    const { error } = await client
       .from('profiles')
       .update({ deleted_at: new Date().toISOString() } as never)
       .eq('id', fixtureUserProfileId);
-    // PostgREST silently drops columns not in the column grant — no error,
-    // but deleted_at must remain null (column-level protection).
+    expect(error).toBeNull();
     const { data } = await serviceClient
       .from('profiles')
       .select('deleted_at')
       .eq('id', fixtureUserProfileId)
+      .single();
+    expect(data!.deleted_at).not.toBeNull();
+    // Restore so subsequent tests are not affected.
+    await serviceClient
+      .from('profiles')
+      .update({ deleted_at: null } as never)
+      .eq('id', fixtureUserProfileId);
+  });
+
+  it("user cannot soft-delete another user's profile", async () => {
+    const client = await signedInClient(suite.user.email, suite.user.password);
+    await client
+      .from('profiles')
+      .update({ deleted_at: new Date().toISOString() } as never)
+      .eq('id', region1ProfileId);
+    const { data } = await serviceClient
+      .from('profiles')
+      .select('deleted_at')
+      .eq('id', region1ProfileId)
       .single();
     expect(data!.deleted_at).toBeNull();
   });
