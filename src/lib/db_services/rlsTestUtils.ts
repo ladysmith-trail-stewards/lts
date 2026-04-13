@@ -27,16 +27,14 @@
  *     table: 'trails',
  *     insertData: () => ({ name: `${P}t`, type: 'trail', ... }),
  *     updateData: { description: 'updated' },
- *     // Optional — omit to fall back to a direct deleted_at UPDATE (blocked
- *     // by the trigger for all app-level roles, so S=false for everyone).
- *     softDeleteFn: async (client, id) =>
- *       client.rpc('soft_delete_trails', { ids: [id] })
- *         .then(({ error }) => ({ error: error ? new Error(error.message) : null })),
  *     expected: {
- *       anon:       [false, true,  false, false, false],
- *       superAdmin: [true,  true,  true,  true,  true ],
+ *       anon:       { c: false, r: true,  u: false, s: false, h: false },
+ *       superAdmin: { c: true,  r: true,  u: true,  s: false, h: true  },
  *     },
  *   });
+ *
+ * Omit an operation key (c/r/u/s/h) to skip that test for the role.
+ * Omit a role from `expected` entirely to skip all tests for that role.
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
@@ -63,13 +61,16 @@ export type RoleName =
   | 'superAdmin';
 
 /**
- * CRUSH tuple — per-role expected success flags:
- *   [Create, Read, Update, SoftDelete, HardDelete]
+ * Per-role expected outcomes for each CRUSH operation.
+ * Omit a key to skip that operation's test entirely.
  */
-export type CrushTuple = [boolean, boolean, boolean, boolean, boolean];
-
-/** Skip individual CRUSH operations for a given role. */
-export type CrushBypass = Partial<Record<'C' | 'R' | 'U' | 'S' | 'H', boolean>>;
+export type CrushExpected = {
+  c?: boolean | null;
+  r?: boolean | null;
+  u?: boolean | null;
+  s?: boolean | null;
+  h?: boolean | null;
+};
 
 export type RlsClient = SupabaseClient<Database>;
 
@@ -120,27 +121,16 @@ const ALL_ROLES: RoleConfig[] = [
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Casts a typed Supabase client to `any` so that runtime-generated table/view
- * names (not present in the auto-generated Database schema) can be used with
- * `.from()`. Only used inside test utilities — never in production code.
- */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function dynClient(client: RlsClient): any {
   return client;
 }
 
-/**
- * Casts the service-role client to `any` for the same reason as `dynClient`.
- * The service_role client bypasses RLS and is used only for fixture
- * setup/teardown and post-operation verification.
- */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function dynServiceClient(): any {
   return serviceClient;
 }
 
-/** Returns the number of rows in a Supabase `.select()` result. */
 function rowCount(data: unknown): number {
   return Array.isArray(data) ? data.length : 0;
 }
@@ -150,61 +140,25 @@ function rowCount(data: unknown): number {
 // ---------------------------------------------------------------------------
 
 export interface TableRlsOptions {
-  /**
-   * Thunk returning the current BuiltTestSuite.
-   * Accessed inside `it()` callbacks — safe after the caller's `beforeAll`.
-   */
   suite: () => BuiltTestSuite;
 
   /** Target table name. */
   table: string;
 
-  /**
-   * Thunk returning the INSERT payload for both the C test and fixture rows.
-   * Called inside `it()` callbacks — safe to reference `suite.regionId` etc.
-   */
   insertData: () => Record<string, unknown>;
 
   /** UPDATE payload for the U test. */
   updateData: Record<string, unknown>;
 
   /**
-   * Optional soft-delete implementation for the S test.
-   *
-   * When provided, the S step calls this function rather than attempting a
-   * direct `deleted_at` UPDATE. Tables that gate soft-delete behind a
-   * SECURITY DEFINER RPC (e.g. `soft_delete_trails`) must supply this so that
-   * permitted roles (super_user, admin, super_admin) can actually soft-delete
-   * — the trigger blocks direct `deleted_at` writes for all app-level roles.
-   *
-   * When omitted, the S step falls back to a direct UPDATE of `deleted_at`,
-   * which will be blocked by the `block_deleted_at_update` trigger for all
-   * app-level roles (S=false for everyone).
+   * Per-role CRUSH expectations. Omit a key to skip that operation.
+   * Omit a role entirely to skip all its tests.
    */
-  softDeleteFn?: (
-    client: RlsClient,
-    id: number
-  ) => Promise<{ error: Error | null }>;
-
-  /**
-   * Per-role CRUSH expectations — [Create, Read, Update, SoftDelete, HardDelete].
-   * Omit a role to skip all its tests.
-   */
-  expected: Partial<Record<RoleName, CrushTuple>>;
-
-  /**
-   * Per-role, per-operation bypass flags.
-   * When `true` the corresponding `it()` block is omitted entirely.
-   * Useful for operations with complex prerequisites (e.g. geometry creation).
-   */
-  bypass?: Partial<Record<RoleName, CrushBypass>>;
+  expected: Partial<Record<RoleName, CrushExpected>>;
 
   /**
    * Optional pre-existing row id shared across all roles.
-   * When supplied the utility skips per-role fixture creation and uses this
-   * row instead.  Use only when the row is immutable across the test run, or
-   * when C is bypassed for every role — otherwise role tests will interfere
-   * with each other via shared state.
+   * When supplied the utility skips per-role fixture creation.
    */
   rowId?: () => number;
 }
@@ -214,15 +168,17 @@ export function tableRlsSuite(opts: TableRlsOptions): void {
     const exp = opts.expected[roleConfig.key];
     if (exp === undefined) continue;
 
-    const bypass = opts.bypass?.[roleConfig.key] ?? {};
-    const [cExp, rExp, uExp, sExp, hExp] = exp;
+    const cExp = exp.c;
+    const rExp = exp.r;
+    const uExp = exp.u;
+    const sExp = exp.s;
+    const hExp = exp.h;
 
     describe(`${opts.table} CRUSH — ${roleConfig.label}`, () => {
       let client: RlsClient;
       let fixtureId: number;
       let ownsFixture = false;
 
-      /** Rows created by the C test that need separate cleanup. */
       const extraCreatedIds: number[] = [];
 
       beforeAll(async () => {
@@ -230,11 +186,9 @@ export function tableRlsSuite(opts: TableRlsOptions): void {
         client = await roleConfig.getClient(suite);
 
         if (opts.rowId) {
-          // Use the caller-provided row — no fixture creation needed.
           fixtureId = opts.rowId();
           ownsFixture = false;
         } else {
-          // Create a dedicated fixture row via service_role.
           const { data: row, error } = await dynServiceClient()
             .from(opts.table)
             .insert(opts.insertData())
@@ -263,7 +217,7 @@ export function tableRlsSuite(opts: TableRlsOptions): void {
       });
 
       // ── C — Create ────────────────────────────────────────────────────────
-      if (!bypass.C) {
+      if (cExp != null) {
         it('C — create', async () => {
           const { data, error } = await dynClient(client)
             .from(opts.table)
@@ -282,7 +236,7 @@ export function tableRlsSuite(opts: TableRlsOptions): void {
       }
 
       // ── R — Read ──────────────────────────────────────────────────────────
-      if (!bypass.R) {
+      if (rExp != null) {
         it('R — read', async () => {
           const { data } = await dynClient(client)
             .from(opts.table)
@@ -299,7 +253,7 @@ export function tableRlsSuite(opts: TableRlsOptions): void {
       }
 
       // ── U — Update ────────────────────────────────────────────────────────
-      if (!bypass.U) {
+      if (uExp != null) {
         const firstKey = Object.keys(opts.updateData)[0];
         if (!firstKey) {
           throw new Error(
@@ -313,7 +267,6 @@ export function tableRlsSuite(opts: TableRlsOptions): void {
             .update(opts.updateData)
             .eq('id', fixtureId);
 
-          // Confirm via service_role whether the update took effect.
           const { data: row } = await dynServiceClient()
             .from(opts.table)
             .select(firstKey)
@@ -335,23 +288,13 @@ export function tableRlsSuite(opts: TableRlsOptions): void {
       }
 
       // ── S — Soft Delete + re-read ─────────────────────────────────────────
-      if (!bypass.S) {
+      if (sExp != null) {
         it('S — soft delete + re-read', async () => {
-          // Use the caller-supplied soft-delete function if provided (e.g. an
-          // RPC that sets `app.soft_delete_rpc = 'on'` to satisfy the trigger).
-          // Fall back to a direct `deleted_at` UPDATE, which the
-          // block_deleted_at_update trigger will reject for all app-level roles.
-          const { error } = opts.softDeleteFn
-            ? await opts.softDeleteFn(client, fixtureId)
-            : await dynClient(client)
-                .from(opts.table)
-                .update({ deleted_at: new Date().toISOString() })
-                .eq('id', fixtureId)
-                .then(({ error: e }: { error: unknown }) => ({
-                  error: e ? new Error(String(e)) : null,
-                }));
+          const { error } = await dynClient(client)
+            .from(opts.table)
+            .update({ deleted_at: new Date().toISOString() })
+            .eq('id', fixtureId);
 
-          // Service-role verification of the actual deleted_at state.
           const { data: svcRow } = await dynServiceClient()
             .from(opts.table)
             .select('deleted_at')
@@ -361,9 +304,6 @@ export function tableRlsSuite(opts: TableRlsOptions): void {
           const deletedAt = (svcRow as { deleted_at: string | null } | null)
             ?.deleted_at;
 
-          // Additional re-read via the test client for an extra layer of
-          // verification — confirms the row's visible state from the
-          // caller's perspective matches expectations.
           const { data: reReadData } = await dynClient(client)
             .from(opts.table)
             .select('id')
@@ -384,7 +324,6 @@ export function tableRlsSuite(opts: TableRlsOptions): void {
               deletedAt,
               'S: expected deleted_at to remain null'
             ).toBeNull();
-            // Row should remain readable for roles that have SELECT access.
             if (rExp) {
               expect(
                 rowCount(reReadData),
@@ -396,7 +335,7 @@ export function tableRlsSuite(opts: TableRlsOptions): void {
       }
 
       // ── H — Hard Delete ───────────────────────────────────────────────────
-      if (!bypass.H) {
+      if (hExp != null) {
         it('H — hard delete', async () => {
           await dynClient(client).from(opts.table).delete().eq('id', fixtureId);
 
@@ -425,7 +364,6 @@ export function tableRlsSuite(opts: TableRlsOptions): void {
 // ---------------------------------------------------------------------------
 
 export interface ViewRlsOptions {
-  /** Thunk returning the current BuiltTestSuite. */
   suite: () => BuiltTestSuite;
 
   /** View name (used as the Supabase `.from()` target). */
@@ -433,13 +371,10 @@ export interface ViewRlsOptions {
 
   /**
    * Optional label for the `describe` block title.
-   * Defaults to `view` when omitted.
-   * Useful when testing the same view with different fixture rows
-   * (e.g. a public row vs a soft-deleted row).
+   * Useful when testing the same view with different fixture rows.
    */
   label?: string;
 
-  /** Thunk returning the id of a known row to check visibility for. */
   rowId: () => number;
 
   /** Per-role: `true` = expect row visible, `false` = expect row hidden. */
@@ -483,16 +418,12 @@ export function viewRlsSuite(opts: ViewRlsOptions): void {
 // ---------------------------------------------------------------------------
 
 export interface RpcRlsOptions {
-  /** Thunk returning the current BuiltTestSuite. */
   suite: () => BuiltTestSuite;
 
   /** RPC function name. */
   rpc: string;
 
-  /**
-   * Thunk returning the RPC parameters (called inside `it()` after beforeAll).
-   * Omit for RPCs with no parameters.
-   */
+  /** Thunk returning the RPC parameters. Omit for RPCs with no parameters. */
   params?: () => Record<string, unknown>;
 
   /** Per-role: `true` = expect no error, `false` = expect an error. */
