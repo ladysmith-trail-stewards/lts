@@ -19,7 +19,7 @@ import { beforeAll, afterAll } from 'vitest';
 import { serviceClient } from '../supabaseTestClients';
 import { TestSuite, type BuiltTestSuite } from '../testSuite';
 import { viewRlsSuite } from '../rlsTestUtils';
-import { fixtureCreateTrail, fixtureDeleteTrails } from './testHelpers';
+import { fixtureCreateTrail } from './testHelpers';
 
 const P = '__trails_view_rls_test__';
 let suite: BuiltTestSuite;
@@ -51,7 +51,6 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await fixtureDeleteTrails(publicTrailId, softDeletedTrailId);
   await suite.teardown();
 });
 

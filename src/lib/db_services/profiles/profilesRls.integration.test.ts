@@ -317,9 +317,9 @@ describe('profiles RLS — UPDATE — admin (own region only)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Column-level: deleted_at cannot be set directly
+// Column-level: deleted_at cannot be set by low-privilege roles
 // ---------------------------------------------------------------------------
-describe('profiles RLS — deleted_at direct UPDATE blocked', () => {
+describe('profiles RLS — deleted_at direct UPDATE blocked for user', () => {
   it('user cannot set deleted_at directly via UPDATE', async () => {
     const client = await signedInClient(suite.user.email, suite.user.password);
     await client
@@ -335,22 +335,59 @@ describe('profiles RLS — deleted_at direct UPDATE blocked', () => {
       .single();
     expect(data!.deleted_at).toBeNull();
   });
+});
 
-  it('super_admin cannot set deleted_at directly via UPDATE', async () => {
+describe('profiles RLS — DELETE', () => {
+  async function rowExists(id: number): Promise<boolean> {
+    const { data } = await serviceClient
+      .from('profiles')
+      .select('id')
+      .eq('id', id)
+      .maybeSingle();
+    return data !== null;
+  }
+
+  it('anon cannot hard-delete a profile', async () => {
+    await anonClient.from('profiles').delete().eq('id', region1ProfileId);
+    expect(await rowExists(region1ProfileId)).toBe(true);
+  });
+
+  it('user cannot hard-delete a profile', async () => {
+    const client = await signedInClient(suite.user.email, suite.user.password);
+    await client.from('profiles').delete().eq('id', region1ProfileId);
+    expect(await rowExists(region1ProfileId)).toBe(true);
+  });
+
+  it('admin cannot hard-delete a profile', async () => {
+    const client = await signedInClient(
+      suite.admin.email,
+      suite.admin.password
+    );
+    await client.from('profiles').delete().eq('id', region1ProfileId);
+    expect(await rowExists(region1ProfileId)).toBe(true);
+  });
+
+  it('super_user cannot hard-delete a profile', async () => {
+    const client = await signedInClient(
+      suite.superUser.email,
+      suite.superUser.password
+    );
+    await client.from('profiles').delete().eq('id', region1ProfileId);
+    expect(await rowExists(region1ProfileId)).toBe(true);
+  });
+
+  it('super_admin can hard-delete a profile', async () => {
+    const id = await fixtureCreateProfile({
+      name: `${P}hard-delete-target`,
+      region_id: suite.regionId,
+    });
     const client = await signedInClient(
       suite.superAdmin.email,
       suite.superAdmin.password
     );
-    await client
-      .from('profiles')
-      .update({ deleted_at: new Date().toISOString() } as never)
-      .eq('id', region1ProfileId);
-    // Trigger blocks the update even for super_admin — deleted_at must remain null.
-    const { data } = await serviceClient
-      .from('profiles')
-      .select('deleted_at')
-      .eq('id', region1ProfileId)
-      .single();
-    expect(data!.deleted_at).toBeNull();
+    const { error } = await client.from('profiles').delete().eq('id', id);
+    expect(error).toBeNull();
+    expect(await rowExists(id)).toBe(false);
+    await fixtureDeleteProfiles(id);
   });
 });

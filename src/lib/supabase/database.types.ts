@@ -59,16 +59,19 @@ export type Database = {
       regions: {
         Row: {
           bbox: unknown;
+          deleted_at: string | null;
           id: number;
           name: string;
         };
         Insert: {
           bbox?: unknown;
+          deleted_at?: string | null;
           id?: number;
           name: string;
         };
         Update: {
           bbox?: unknown;
+          deleted_at?: string | null;
           id?: number;
           name?: string;
         };
@@ -632,6 +635,15 @@ export type Database = {
           using_expr: string;
         }[];
       };
+      get_rpc_privileges: {
+        Args: never;
+        Returns: {
+          description: string;
+          grantee: string;
+          routine_name: string;
+          security_definer: boolean;
+        }[];
+      };
       get_trails_utm: {
         Args: { trail_ids: number[] };
         Returns: {
@@ -692,8 +704,6 @@ export type Database = {
         };
         Returns: undefined;
       };
-      soft_delete_profiles: { Args: { ids: number[] }; Returns: undefined };
-      soft_delete_trails: { Args: { ids: number[] }; Returns: undefined };
       st_3dclosestpoint: {
         Args: { geom1: unknown; geom2: unknown };
         Returns: unknown;

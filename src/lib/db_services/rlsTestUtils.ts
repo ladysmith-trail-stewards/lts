@@ -13,15 +13,12 @@
  * `beforeAll`) and registers `describe`/`it` blocks via Vitest's API.
  *
  * Usage example:
- *
  *   const P = '__my_rls_test__';
  *   let suite: BuiltTestSuite;
- *
  *   beforeAll(async () => {
  *     suite = await new TestSuite(P).createRegion('main').createAllUsers().build();
  *   });
  *   afterAll(async () => { await suite.teardown(); });
- *
  *   tableRlsSuite({
  *     suite: () => suite,
  *     table: 'trails',
@@ -29,12 +26,25 @@
  *     updateData: { description: 'updated' },
  *     expected: {
  *       anon:       { c: false, r: true,  u: false, s: false, h: false },
- *       superAdmin: { c: true,  r: true,  u: true,  s: false, h: true  },
+ *       superAdmin: { c: true,  r: true,  u: true,  s: false  },
  *     },
  *   });
  *
  * Omit an operation key (c/r/u/s/h) to skip that test for the role.
  * Omit a role from `expected` entirely to skip all tests for that role.
+ *
+ * Table/View constraints:
+ *  - RlsTable  — tables with `id: number` and `deleted_at: string | null`
+ *  - SoftTable — subset of RlsTable; tables where soft-delete (S) is testable
+ *  - RlsView   — views with `id: number | null` (PostgREST makes view PKs nullable)
+ *  - Internal PostGIS system tables/views (spatial_ref_sys, geography_columns,
+ *    geometry_columns) are excluded via Omit.
+ *
+ * Hard-delete + cascades:
+ *  If a table has child rows with `ON DELETE CASCADE`, Postgres executes the
+ *  cascade as a constraint operation — RLS on the child table is NOT checked.
+ *  Children with `ON DELETE RESTRICT` / `NO ACTION` will cause the DELETE to
+ *  fail with a FK violation regardless of who is deleting.
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
@@ -44,14 +54,55 @@ import {
   signedInClient,
 } from './supabaseTestClients';
 import type { BuiltTestSuite } from './testSuite';
-import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../supabase/database.types';
 
 // ---------------------------------------------------------------------------
-// Public types
+// Table / View name types
 // ---------------------------------------------------------------------------
 
-/** The six security levels tested by every utility. */
+type AllTables = keyof Database['public']['Tables'];
+type AllViews = keyof Database['public']['Views'];
+
+/** PostGIS system tables we never test. */
+type ExcludedTables = 'spatial_ref_sys';
+
+/** PostGIS system views we never test. */
+type ExcludedViews = 'geography_columns' | 'geometry_columns';
+
+/** Tables that have `id: number` and `deleted_at: string | null` — eligible for full CRUSH tests. */
+export type RlsTable = Exclude<
+  {
+    [T in AllTables]: Database['public']['Tables'][T]['Row'] extends {
+      id: number;
+      deleted_at: string | null;
+    }
+      ? T
+      : never;
+  }[AllTables],
+  ExcludedTables
+>;
+
+/** Views that have `id: number | null` — eligible for read-visibility tests. */
+export type RlsView = Exclude<
+  {
+    [V in AllViews]: Database['public']['Views'][V]['Row'] extends {
+      id: number | null;
+    }
+      ? V
+      : never;
+  }[AllViews],
+  ExcludedViews
+>;
+
+// Row type helpers
+type TableRow<T extends AllTables> = Database['public']['Tables'][T]['Row'];
+type TableInsert<T extends AllTables> =
+  Database['public']['Tables'][T]['Insert'];
+
+// ---------------------------------------------------------------------------
+// Role types
+// ---------------------------------------------------------------------------
+
 export type RoleName =
   | 'anon'
   | 'pending'
@@ -60,10 +111,6 @@ export type RoleName =
   | 'admin'
   | 'superAdmin';
 
-/**
- * Per-role expected outcomes for each CRUSH operation.
- * Omit a key to skip that operation's test entirely.
- */
 export type CrushExpected = {
   c?: boolean | null;
   r?: boolean | null;
@@ -72,23 +119,22 @@ export type CrushExpected = {
   h?: boolean | null;
 };
 
-export type RlsClient = SupabaseClient<Database>;
-
 // ---------------------------------------------------------------------------
-// Shared role registry
+// Role config
 // ---------------------------------------------------------------------------
 
 interface RoleConfig {
   label: string;
   key: RoleName;
-  getClient: (suite: BuiltTestSuite) => Promise<RlsClient>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  getClient: (suite: BuiltTestSuite) => Promise<any>;
 }
 
 const ALL_ROLES: RoleConfig[] = [
   {
     label: 'anon',
     key: 'anon',
-    getClient: () => Promise.resolve(anonClient as RlsClient),
+    getClient: () => Promise.resolve(anonClient),
   },
   {
     label: 'pending',
@@ -118,52 +164,25 @@ const ALL_ROLES: RoleConfig[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// Internal helpers
+// tableRlsSuite
 // ---------------------------------------------------------------------------
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function dynClient(client: RlsClient): any {
-  return client;
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function dynServiceClient(): any {
-  return serviceClient;
-}
-
-function rowCount(data: unknown): number {
-  return Array.isArray(data) ? data.length : 0;
-}
-
-// ---------------------------------------------------------------------------
-// tableRlsSuite — CRUSH tests for a table
-// ---------------------------------------------------------------------------
-
-export interface TableRlsOptions {
+export interface TableRlsOptions<T extends RlsTable> {
   suite: () => BuiltTestSuite;
-
-  /** Target table name. */
-  table: string;
-
-  insertData: () => Record<string, unknown>;
-
-  /** UPDATE payload for the U test. */
-  updateData: Record<string, unknown>;
-
-  /**
-   * Per-role CRUSH expectations. Omit a key to skip that operation.
-   * Omit a role entirely to skip all its tests.
-   */
+  table: T;
+  insertData: () => TableInsert<T>;
+  updateData: Partial<TableRow<T>>;
   expected: Partial<Record<RoleName, CrushExpected>>;
-
-  /**
-   * Optional pre-existing row id shared across all roles.
-   * When supplied the utility skips per-role fixture creation.
-   */
+  /** Provide an existing row id to skip service-role seeding. */
   rowId?: () => number;
 }
 
-export function tableRlsSuite(opts: TableRlsOptions): void {
+export function tableRlsSuite<T extends RlsTable>(
+  opts: TableRlsOptions<T>
+): void {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const svc = serviceClient as any;
+
   for (const roleConfig of ALL_ROLES) {
     const exp = opts.expected[roleConfig.key];
     if (exp === undefined) continue;
@@ -175,30 +194,27 @@ export function tableRlsSuite(opts: TableRlsOptions): void {
     const hExp = exp.h;
 
     describe(`${opts.table} CRUSH — ${roleConfig.label}`, () => {
-      let client: RlsClient;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let act: any;
       let fixtureId: number;
       let ownsFixture = false;
-
       const extraCreatedIds: number[] = [];
 
       beforeAll(async () => {
-        const suite = opts.suite();
-        client = await roleConfig.getClient(suite);
+        act = await roleConfig.getClient(opts.suite());
 
         if (opts.rowId) {
           fixtureId = opts.rowId();
-          ownsFixture = false;
         } else {
-          const { data: row, error } = await dynServiceClient()
+          const { data: row, error } = await svc
             .from(opts.table)
             .insert(opts.insertData())
             .select('id')
             .single();
-          if (error) {
+          if (error)
             throw new Error(
-              `tableRlsSuite: fixture create failed (${opts.table}): ${error.message}`
+              `tableRlsSuite: seed failed (${opts.table}): ${error.message}`
             );
-          }
           fixtureId = (row as { id: number }).id;
           ownsFixture = true;
         }
@@ -206,20 +222,16 @@ export function tableRlsSuite(opts: TableRlsOptions): void {
 
       afterAll(async () => {
         for (const id of extraCreatedIds) {
-          await dynServiceClient().from(opts.table).delete().eq('id', id);
+          await svc.from(opts.table).delete().eq('id', id);
         }
         if (ownsFixture) {
-          await dynServiceClient()
-            .from(opts.table)
-            .delete()
-            .eq('id', fixtureId);
+          await svc.from(opts.table).delete().eq('id', fixtureId);
         }
       });
 
-      // ── C — Create ────────────────────────────────────────────────────────
       if (cExp != null) {
         it('C — create', async () => {
-          const { data, error } = await dynClient(client)
+          const { data, error } = await act
             .from(opts.table)
             .insert(opts.insertData())
             .select('id')
@@ -235,15 +247,13 @@ export function tableRlsSuite(opts: TableRlsOptions): void {
         });
       }
 
-      // ── R — Read ──────────────────────────────────────────────────────────
       if (rExp != null) {
         it('R — read', async () => {
-          const { data } = await dynClient(client)
+          const { data } = await act
             .from(opts.table)
             .select('id')
             .eq('id', fixtureId);
-
-          const count = rowCount(data);
+          const count = Array.isArray(data) ? data.length : 0;
           if (rExp) {
             expect(count, 'R: expected row to be visible').toBeGreaterThan(0);
           } else {
@@ -252,22 +262,20 @@ export function tableRlsSuite(opts: TableRlsOptions): void {
         });
       }
 
-      // ── U — Update ────────────────────────────────────────────────────────
       if (uExp != null) {
         const firstKey = Object.keys(opts.updateData)[0];
-        if (!firstKey) {
+        if (!firstKey)
           throw new Error(
-            `tableRlsSuite: updateData must contain at least one field for U tests (table: ${opts.table})`
+            `tableRlsSuite: updateData must have at least one field (table: ${opts.table})`
           );
-        }
 
         it('U — update', async () => {
-          await dynClient(client)
+          await act
             .from(opts.table)
             .update(opts.updateData)
             .eq('id', fixtureId);
 
-          const { data: row } = await dynServiceClient()
+          const { data: row } = await svc
             .from(opts.table)
             .select(firstKey)
             .eq('id', fixtureId)
@@ -277,25 +285,24 @@ export function tableRlsSuite(opts: TableRlsOptions): void {
 
           if (uExp) {
             expect(current, 'U: expected update to persist').toEqual(
-              opts.updateData[firstKey]
+              opts.updateData[firstKey as keyof typeof opts.updateData]
             );
           } else {
             expect(current, 'U: expected row to remain unchanged').not.toEqual(
-              opts.updateData[firstKey]
+              opts.updateData[firstKey as keyof typeof opts.updateData]
             );
           }
         });
       }
 
-      // ── S — Soft Delete + re-read ─────────────────────────────────────────
       if (sExp != null) {
-        it('S — soft delete + re-read', async () => {
-          const { error } = await dynClient(client)
+        it('S — soft delete', async () => {
+          const { error } = await act
             .from(opts.table)
             .update({ deleted_at: new Date().toISOString() })
             .eq('id', fixtureId);
 
-          const { data: svcRow } = await dynServiceClient()
+          const { data: svcRow } = await svc
             .from(opts.table)
             .select('deleted_at')
             .eq('id', fixtureId)
@@ -304,29 +311,33 @@ export function tableRlsSuite(opts: TableRlsOptions): void {
           const deletedAt = (svcRow as { deleted_at: string | null } | null)
             ?.deleted_at;
 
-          const { data: reReadData } = await dynClient(client)
-            .from(opts.table)
-            .select('id')
-            .eq('id', fixtureId);
-
           if (sExp) {
             expect(error, 'S: expected soft delete to succeed').toBeNull();
             expect(
               deletedAt,
               'S: expected deleted_at to be set'
             ).not.toBeNull();
+            // Restore so H test has a live row
+            await svc
+              .from(opts.table)
+              .update({ deleted_at: null })
+              .eq('id', fixtureId);
           } else {
-            expect(
-              error,
-              'S: expected soft delete to be denied'
-            ).not.toBeNull();
+            // Don't assert on `error` here — RLS may silently block the UPDATE
+            // (returning null error + 0 rows changed) rather than raising an error.
+            // The trigger raises an error only when the role can update rows but
+            // deleted_at is blocked. Ground truth is always the actual column value.
             expect(
               deletedAt,
               'S: expected deleted_at to remain null'
             ).toBeNull();
             if (rExp) {
+              const { data: reRead } = await act
+                .from(opts.table)
+                .select('id')
+                .eq('id', fixtureId);
               expect(
-                rowCount(reReadData),
+                Array.isArray(reRead) ? reRead.length : 0,
                 'S: row should still be visible after failed soft-delete'
               ).toBeGreaterThan(0);
             }
@@ -334,12 +345,11 @@ export function tableRlsSuite(opts: TableRlsOptions): void {
         });
       }
 
-      // ── H — Hard Delete ───────────────────────────────────────────────────
       if (hExp != null) {
         it('H — hard delete', async () => {
-          await dynClient(client).from(opts.table).delete().eq('id', fixtureId);
+          await act.from(opts.table).delete().eq('id', fixtureId);
 
-          const { data: row } = await dynServiceClient()
+          const { data: row } = await svc
             .from(opts.table)
             .select('id')
             .eq('id', fixtureId)
@@ -347,6 +357,7 @@ export function tableRlsSuite(opts: TableRlsOptions): void {
 
           if (hExp) {
             expect(row, 'H: expected row to be permanently deleted').toBeNull();
+            ownsFixture = false; // row is gone, skip afterAll cleanup
           } else {
             expect(
               row,
@@ -360,49 +371,38 @@ export function tableRlsSuite(opts: TableRlsOptions): void {
 }
 
 // ---------------------------------------------------------------------------
-// viewRlsSuite — read-visibility test for a view
+// viewRlsSuite
 // ---------------------------------------------------------------------------
 
-export interface ViewRlsOptions {
+export interface ViewRlsOptions<V extends RlsView> {
   suite: () => BuiltTestSuite;
-
-  /** View name (used as the Supabase `.from()` target). */
-  view: string;
-
-  /**
-   * Optional label for the `describe` block title.
-   * Useful when testing the same view with different fixture rows.
-   */
+  view: V;
   label?: string;
-
   rowId: () => number;
-
-  /** Per-role: `true` = expect row visible, `false` = expect row hidden. */
   expected: Partial<Record<RoleName, boolean>>;
 }
 
-export function viewRlsSuite(opts: ViewRlsOptions): void {
+export function viewRlsSuite<V extends RlsView>(opts: ViewRlsOptions<V>): void {
   const prefix = opts.label ?? opts.view;
+
   for (const roleConfig of ALL_ROLES) {
     const expected = opts.expected[roleConfig.key];
     if (expected === undefined) continue;
 
     describe(`${prefix} — ${roleConfig.label}`, () => {
-      let client: RlsClient;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let act: any;
 
       beforeAll(async () => {
-        const suite = opts.suite();
-        client = await roleConfig.getClient(suite);
+        act = await roleConfig.getClient(opts.suite());
       });
 
       it(`R — read (expect: ${expected ? 'visible' : 'hidden'})`, async () => {
-        const id = opts.rowId();
-        const { data } = await dynClient(client)
+        const { data } = await act
           .from(opts.view)
           .select('id')
-          .eq('id', id);
-
-        const count = rowCount(data);
+          .eq('id', opts.rowId());
+        const count = Array.isArray(data) ? data.length : 0;
         if (expected) {
           expect(count, 'R: expected row to be visible').toBeGreaterThan(0);
         } else {
@@ -414,19 +414,13 @@ export function viewRlsSuite(opts: ViewRlsOptions): void {
 }
 
 // ---------------------------------------------------------------------------
-// rpcRlsSuite — call-success test for an RPC
+// rpcRlsSuite
 // ---------------------------------------------------------------------------
 
 export interface RpcRlsOptions {
   suite: () => BuiltTestSuite;
-
-  /** RPC function name. */
-  rpc: string;
-
-  /** Thunk returning the RPC parameters. Omit for RPCs with no parameters. */
+  rpc: keyof Database['public']['Functions'];
   params?: () => Record<string, unknown>;
-
-  /** Per-role: `true` = expect no error, `false` = expect an error. */
   expected: Partial<Record<RoleName, boolean>>;
 }
 
@@ -436,20 +430,17 @@ export function rpcRlsSuite(opts: RpcRlsOptions): void {
     if (expected === undefined) continue;
 
     describe(`${opts.rpc} RPC — ${roleConfig.label}`, () => {
-      let client: RlsClient;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let act: any;
 
       beforeAll(async () => {
-        const suite = opts.suite();
-        client = await roleConfig.getClient(suite);
+        act = await roleConfig.getClient(opts.suite());
       });
 
       it(
         expected ? 'call succeeds (no error)' : 'call is denied (error)',
         async () => {
-          const params = opts.params?.() ?? {};
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { error } = await (client.rpc as any)(opts.rpc, params);
-
+          const { error } = await act.rpc(opts.rpc, opts.params?.() ?? {});
           if (expected) {
             expect(error, `RPC ${opts.rpc}: expected success`).toBeNull();
           } else {

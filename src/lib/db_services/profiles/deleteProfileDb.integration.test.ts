@@ -1,10 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { deleteProfileDb } from './deleteProfileDb';
-import {
-  anonClient,
-  serviceClient,
-  signedInClient,
-} from '../supabaseTestClients';
+import { serviceClient } from '../supabaseTestClients';
 import { fixtureCreateProfile, fixtureDeleteProfiles } from './testHelpers';
 import { TestSuite, type BuiltTestSuite } from '../testSuite';
 
@@ -13,138 +9,21 @@ const P = '__soft_delete_profiles_test__';
 let suite: BuiltTestSuite;
 
 beforeAll(async () => {
-  suite = await new TestSuite(P).createRegion('main').createAllUsers().build();
+  suite = await new TestSuite(P).createRegion('main').build();
 });
 
 afterAll(async () => {
   await suite.teardown();
 });
 
-// ---------------------------------------------------------------------------
-// Fixture user — used for the "own profile" tests so we never touch role-fixture users
-// ---------------------------------------------------------------------------
-const FIXTURE_OWN_NAME = `${P}own-user`;
-const FIXTURE_OWN_EMAIL = `i_test_${FIXTURE_OWN_NAME.replace(/[^a-z0-9]/gi, '-').toLowerCase()}@test-fixture.invalid`;
-const FIXTURE_OWN_PASSWORD = 'fixture-password-123';
-let fixtureOwnId: number;
-
-// ---------------------------------------------------------------------------
-// Anon — denied
-// ---------------------------------------------------------------------------
-describe('deleteProfileDb — anon (denied)', () => {
-  it('returns an error and deleted_at remains null', async () => {
-    const id = await fixtureCreateProfile({ name: `${P}anon-target` });
-
-    const { error } = await deleteProfileDb(anonClient, id);
-    expect(error).not.toBeNull();
-
-    const { data: row } = await serviceClient
-      .from('profiles')
-      .select('id, deleted_at')
-      .eq('id', id)
-      .single();
-    expect(row).not.toBeNull();
-    expect(row!.deleted_at).toBeNull();
-
-    await fixtureDeleteProfiles(id);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// User — can soft-delete own profile only
-// ---------------------------------------------------------------------------
-describe('deleteProfileDb — user (own profile only)', () => {
-  beforeAll(async () => {
-    fixtureOwnId = await fixtureCreateProfile({
-      name: FIXTURE_OWN_NAME,
-      region_id: suite.regionId,
-    });
-  });
-  afterAll(async () => {
-    await fixtureDeleteProfiles(fixtureOwnId);
-  });
-
-  it('can soft-delete their own profile', async () => {
-    const client = await signedInClient(
-      FIXTURE_OWN_EMAIL,
-      FIXTURE_OWN_PASSWORD
-    );
-    const { error } = await deleteProfileDb(client, fixtureOwnId);
-    expect(error).toBeNull();
-
-    const { data: row } = await serviceClient
-      .from('profiles')
-      .select('id, deleted_at')
-      .eq('id', fixtureOwnId)
-      .single();
-    expect(row!.deleted_at).not.toBeNull();
-    // No restore needed — fixtureDeleteProfiles in afterAll handles cleanup
-  });
-
-  it("cannot soft-delete someone else's profile", async () => {
-    const id = await fixtureCreateProfile({ name: `${P}user-other-target` });
-
-    const client = await signedInClient(
-      FIXTURE_OWN_EMAIL,
-      FIXTURE_OWN_PASSWORD
-    );
-    const { error } = await deleteProfileDb(client, id);
-    expect(error).not.toBeNull();
-
-    const { data: row } = await serviceClient
-      .from('profiles')
-      .select('id, deleted_at')
-      .eq('id', id)
-      .single();
-    expect(row!.deleted_at).toBeNull();
-
-    await fixtureDeleteProfiles(id);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Super User — can only soft-delete own profile (not a region-wide role here)
-// ---------------------------------------------------------------------------
-describe('deleteProfileDb — super_user (own profile only)', () => {
-  it("cannot soft-delete another user's profile", async () => {
+describe('deleteProfileDb — sets deleted_at', () => {
+  it('sets deleted_at on the row', async () => {
     const id = await fixtureCreateProfile({
-      name: `${P}super-user-other-target`,
+      name: `${P}target`,
       region_id: suite.regionId,
     });
 
-    const client = await signedInClient(
-      suite.superUser.email,
-      suite.superUser.password
-    );
-    const { error } = await deleteProfileDb(client, id);
-    expect(error).not.toBeNull();
-
-    const { data: row } = await serviceClient
-      .from('profiles')
-      .select('id, deleted_at')
-      .eq('id', id)
-      .single();
-    expect(row!.deleted_at).toBeNull();
-
-    await fixtureDeleteProfiles(id);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Admin — can soft-delete profiles in own region
-// ---------------------------------------------------------------------------
-describe('deleteProfileDb — admin (own region)', () => {
-  it('can soft-delete a profile in their region', async () => {
-    const id = await fixtureCreateProfile({
-      name: `${P}admin-target`,
-      region_id: suite.regionId,
-    });
-
-    const client = await signedInClient(
-      suite.admin.email,
-      suite.admin.password
-    );
-    const { error } = await deleteProfileDb(client, id);
+    const { error } = await deleteProfileDb(serviceClient, id);
     expect(error).toBeNull();
 
     const { data: row } = await serviceClient
@@ -158,39 +37,18 @@ describe('deleteProfileDb — admin (own region)', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Super Admin — can soft-delete any profile
-// ---------------------------------------------------------------------------
-describe('deleteProfileDb — super_admin (any profile)', () => {
-  it('can soft-delete any profile', async () => {
-    const id = await fixtureCreateProfile({ name: `${P}super-admin-target` });
+describe('deleteProfileDb — bulk', () => {
+  it('sets deleted_at on multiple profiles in one call', async () => {
+    const id1 = await fixtureCreateProfile({
+      name: `${P}bulk-1`,
+      region_id: suite.regionId,
+    });
+    const id2 = await fixtureCreateProfile({
+      name: `${P}bulk-2`,
+      region_id: suite.regionId,
+    });
 
-    const client = await signedInClient(
-      suite.superAdmin.email,
-      suite.superAdmin.password
-    );
-    const { error } = await deleteProfileDb(client, id);
-    expect(error).toBeNull();
-
-    const { data: row } = await serviceClient
-      .from('profiles')
-      .select('id, deleted_at')
-      .eq('id', id)
-      .single();
-    expect(row!.deleted_at).not.toBeNull();
-
-    await fixtureDeleteProfiles(id);
-  });
-
-  it('bulk soft-deletes multiple profiles', async () => {
-    const id1 = await fixtureCreateProfile({ name: `${P}bulk-1` });
-    const id2 = await fixtureCreateProfile({ name: `${P}bulk-2` });
-
-    const client = await signedInClient(
-      suite.superAdmin.email,
-      suite.superAdmin.password
-    );
-    const { error } = await deleteProfileDb(client, [id1, id2]);
+    const { error } = await deleteProfileDb(serviceClient, [id1, id2]);
     expect(error).toBeNull();
 
     const { data: rows } = await serviceClient
@@ -204,13 +62,11 @@ describe('deleteProfileDb — super_admin (any profile)', () => {
 
     await fixtureDeleteProfiles(id1, id2);
   });
+});
 
-  it('non-existent id is a silent no-op', async () => {
-    const client = await signedInClient(
-      suite.superAdmin.email,
-      suite.superAdmin.password
-    );
-    const { error } = await deleteProfileDb(client, 9999999);
+describe('deleteProfileDb — non-existent id', () => {
+  it('is a no-op (no error)', async () => {
+    const { error } = await deleteProfileDb(serviceClient, 9999999);
     expect(error).toBeNull();
   });
 });
