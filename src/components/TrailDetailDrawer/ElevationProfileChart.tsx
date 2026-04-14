@@ -3,16 +3,14 @@ import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from 'recharts';
 import type { ActiveDotProps } from 'recharts/types/util/types';
 
 import { ChartContainer, type ChartConfig } from '@/components/ui/chart';
+import type { ElevationPoint } from '@/lib/map/elevationProfile';
 
-export interface ElevationPoint {
-  /** Distance from start in metres */
-  distanceM: number;
-  /** Elevation in metres */
-  elevationM: number;
-}
+export type { ElevationPoint };
 
 interface ElevationProfileChartProps {
   data: ElevationPoint[];
+  /** Called when hovering a point — used to sync the map marker. */
+  onHoverPoint?: (point: ElevationPoint | null) => void;
   onPointClick?: (point: ElevationPoint) => void;
 }
 
@@ -23,18 +21,20 @@ const chartConfig = {
   },
 } satisfies ChartConfig;
 
-function formatDistanceLabel(m: number): string {
-  if (m >= 1000) return `${(m / 1000).toFixed(1)} km`;
-  return `${Math.round(m)} m`;
+function formatKm(km: number): string {
+  if (km >= 1) return `${km.toFixed(1)} km`;
+  return `${Math.round(km * 1000)} m`;
 }
 
 export function ElevationProfileChart({
   data,
+  onHoverPoint,
   onPointClick,
 }: ElevationProfileChartProps) {
   const [hoveredPoint, setHoveredPoint] = useState<ElevationPoint | null>(null);
 
-  const totalDistanceM = data.length > 0 ? data[data.length - 1].distanceM : 0;
+  const totalDistanceKm =
+    data.length > 0 ? data[data.length - 1].distanceKm : 0;
   const minElevation =
     data.length > 0 ? Math.min(...data.map((p) => p.elevationM)) : 0;
   const elevationGain = data.reduce((gain, point, i) => {
@@ -44,16 +44,12 @@ export function ElevationProfileChart({
   }, 0);
   const yMin = minElevation > 50 ? Math.floor(minElevation - 50) : 0;
 
-  const barDistance = hoveredPoint ? hoveredPoint.distanceM : totalDistanceM;
-  const barElevationLabel = hoveredPoint
-    ? `${Math.round(hoveredPoint.elevationM)} m`
-    : `${Math.round(elevationGain)} m`;
-
   function ActiveDot(props: ActiveDotProps) {
     const { cx, cy, payload } = props;
     const point = payload as ElevationPoint;
-    if (hoveredPoint?.distanceM !== point.distanceM) {
+    if (hoveredPoint?.index !== point.index) {
       setHoveredPoint(point);
+      onHoverPoint?.(point);
     }
 
     return (
@@ -70,21 +66,39 @@ export function ElevationProfileChart({
     );
   }
 
+  function handleMouseLeave() {
+    setHoveredPoint(null);
+    onHoverPoint?.(null);
+  }
+
   return (
     <div>
+      {/* Hover data display row */}
       <div className="flex items-center justify-end gap-3 px-1 pb-1 text-xs select-none h-5">
         {hoveredPoint ? (
           <>
             <span className="font-medium text-slate-600">
-              → {formatDistanceLabel(barDistance)}
+              → {formatKm(hoveredPoint.distanceKm)}
             </span>
             <span className="font-medium text-slate-600">
-              ↑ {barElevationLabel}
+              ↑ {Math.round(hoveredPoint.elevationM)} m
+            </span>
+            <span
+              className={`font-medium ${
+                hoveredPoint.elevationDeltaM > 0
+                  ? 'text-green-600'
+                  : hoveredPoint.elevationDeltaM < 0
+                    ? 'text-red-500'
+                    : 'text-slate-400'
+              }`}
+            >
+              {hoveredPoint.elevationDeltaM > 0 ? '+' : ''}
+              {Math.round(hoveredPoint.elevationDeltaM)} m
             </span>
           </>
         ) : (
           <span className="text-slate-400 italic text-[10px]">
-            hover to inspect
+            {`total gain: ${Math.round(elevationGain)} m · ${formatKm(totalDistanceKm)}`}
           </span>
         )}
       </div>
@@ -92,7 +106,7 @@ export function ElevationProfileChart({
         <AreaChart
           data={data}
           margin={{ top: 4, right: 8, left: 0, bottom: 0 }}
-          onMouseLeave={() => setHoveredPoint(null)}
+          onMouseLeave={handleMouseLeave}
         >
           <defs>
             <linearGradient id="elevationGradient" x1="0" y1="0" x2="0" y2="1">
@@ -110,11 +124,11 @@ export function ElevationProfileChart({
           </defs>
           <CartesianGrid vertical={false} />
           <XAxis
-            dataKey="distanceM"
+            dataKey="distanceKm"
             tickLine={false}
             axisLine={false}
             tickMargin={8}
-            tickFormatter={formatDistanceLabel}
+            tickFormatter={(v: number) => formatKm(v)}
             minTickGap={40}
           />
           <YAxis

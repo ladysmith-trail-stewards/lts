@@ -58,6 +58,7 @@ function MapPageInner() {
 
   const {
     mapContainerRef,
+    mapRef,
     currentStyle,
     contourStrength,
     pushTrailUpdate,
@@ -66,6 +67,7 @@ function MapPageInner() {
     handleContourStrength,
     drawApi,
     setEditingTrailId,
+    setElevationHoverPoint,
   } = useMapbox({
     trails,
     selectedTrailId,
@@ -139,6 +141,8 @@ function MapPageInner() {
         drawApi={drawApi}
         regionId={regionId}
         onEditingTrailChange={setEditingTrailId}
+        mapRef={mapRef}
+        onElevationHoverPoint={setElevationHoverPoint}
       />
 
       <div className="absolute bottom-2 left-2 z-10 text-xs text-white/70">

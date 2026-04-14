@@ -24,6 +24,11 @@ export const CONTOUR_LAYER = 'contour-lines';
 export const CONTOUR_LABEL = 'contour-labels';
 export const DEM_SOURCE = 'mapbox-dem';
 
+// ── Elevation profile hover marker ────────────────────────────────────────────
+
+export const ELEV_HOVER_SOURCE = 'elevation-hover-point';
+export const ELEV_HOVER_LAYER = 'elevation-hover-dot';
+
 // ── Initial camera ────────────────────────────────────────────────────────────
 
 export const INITIAL_CENTER: [number, number] = [-123.8154, 48.9994];
