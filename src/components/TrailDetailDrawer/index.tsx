@@ -9,6 +9,8 @@ import type { DrawTrailApi } from '@/hooks/useDrawTrail';
 import type { TrailFeature } from '@/lib/db_services/trails/upsertTrailsDb';
 import { useAuth } from '@/contexts/AuthContext';
 import type { Database } from '@/lib/supabase/database.types';
+import { useElevationProfile } from '@/hooks/useElevationProfile';
+import type { Map as MapboxMap } from 'mapbox-gl';
 
 import {
   TrailEditSchema,
@@ -27,6 +29,8 @@ import {
   TrailClassDot,
   StatusPill,
 } from './TrailDetailSubcomponents';
+
+import { ElevationProfileChart } from './ElevationProfileChart';
 
 import {
   Select,
@@ -76,6 +80,10 @@ interface TrailPanelProps {
   onNavigateToTrail: (id: number) => void;
   /** Called with the trail id when editing starts, null when editing ends. */
   onEditingTrailChange?: (id: number | null) => void;
+  /** Live Mapbox map instance — used for terrain elevation fallback (Case B). */
+  mapRef?: React.RefObject<MapboxMap | null>;
+  /** Called with hovered elevation point to sync the map marker. */
+  onElevationHoverPoint?: (point: { lng: number; lat: number } | null) => void;
 }
 
 function TrailPanel({
@@ -90,6 +98,8 @@ function TrailPanel({
   onCreated,
   onNavigateToTrail,
   onEditingTrailChange,
+  mapRef,
+  onElevationHoverPoint,
 }: TrailPanelProps) {
   const isNew = trail === null;
 
@@ -103,6 +113,13 @@ function TrailPanel({
   >({});
   const [form, setForm] = useState<TrailEditValues>(
     trail ? trailToForm(trail) : NEW_TRAIL_DEFAULTS
+  );
+
+  // Elevation profile — only loaded for existing, non-editing trails
+  const mapInstance = mapRef?.current ?? null;
+  const elevationProfile = useElevationProfile(
+    !isNew && !editing ? currentTrail : null,
+    mapInstance
   );
 
   const drawApiRef = useRef(drawApi);
@@ -373,11 +390,37 @@ function TrailPanel({
               </div>
               <div className="flex divide-x">
                 <div className="text-center flex-1 pr-2">
-                  <div className="font-semibold text-slate-700 text-sm">—</div>
+                  <div className="font-semibold text-slate-700 text-sm">
+                    {elevationProfile.status === 'ready'
+                      ? `${Math.round(
+                          elevationProfile.data.reduce((g, p, i) => {
+                            if (i === 0) return g;
+                            const d =
+                              p.elevationM -
+                              elevationProfile.data[i - 1].elevationM;
+                            return g + (d > 0 ? d : 0);
+                          }, 0)
+                        )} m`
+                      : '—'}
+                  </div>
                   <div>Gain</div>
                 </div>
                 <div className="text-center flex-1 pl-2">
-                  <div className="font-semibold text-slate-700 text-sm">—</div>
+                  <div className="font-semibold text-slate-700 text-sm">
+                    {elevationProfile.status === 'ready'
+                      ? `${Math.round(
+                          Math.abs(
+                            elevationProfile.data.reduce((g, p, i) => {
+                              if (i === 0) return g;
+                              const d =
+                                p.elevationM -
+                                elevationProfile.data[i - 1].elevationM;
+                              return g + (d < 0 ? d : 0);
+                            }, 0)
+                          )
+                        )} m`
+                      : '—'}
+                  </div>
                   <div>Descent</div>
                 </div>
               </div>
@@ -391,15 +434,36 @@ function TrailPanel({
           </div>
         )}
         {/* ── Elevation Profile ─────────────────────────────────────────── */}
-        {/* TODO: unhide once DB tie-in and vertex highlighting are ready */}
-        {/* {!isNew && !editing && (
-          <ElevationProfileChart
-            data={STUB_ELEVATION_DATA}
-            onPointClick={() => {
-              // TODO: highlight corresponding vertex on the map
-            }}
-          />
-        )} */}
+        {!isNew && !editing && (
+          <div>
+            {/* Stale notice — shown whenever elevation data is missing or outdated,
+                regardless of whether the Mapbox fallback produced anything. */}
+            {currentTrail?.elevation_stale && (
+              <div className="flex items-center gap-1.5 mb-1 px-1 text-[10px] text-amber-600 italic">
+                <Loader2 className="w-3 h-3" />
+                Using bad elevation :(
+              </div>
+            )}
+            {elevationProfile.status === 'loading' && (
+              <div className="flex items-center justify-center gap-2 h-40 text-xs text-slate-400">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                Loading elevation…
+              </div>
+            )}
+            {elevationProfile.status === 'error' && (
+              <div className="flex items-center justify-center h-10 text-xs text-slate-400 italic">
+                Elevation unavailable
+              </div>
+            )}
+            {elevationProfile.status === 'ready' &&
+              elevationProfile.data.length > 0 && (
+                <ElevationProfileChart
+                  data={elevationProfile.data}
+                  onHoverPoint={(point) => onElevationHoverPoint?.(point)}
+                />
+              )}
+          </div>
+        )}
         {/* ── Description ──────────────────────────────────────────────── */}
         <div className="space-y-1.5">
           <Label className="text-xs text-slate-500 uppercase tracking-wide">
@@ -854,6 +918,10 @@ interface TrailDetailDrawerProps {
   regionId: number | null;
   onClose?: () => void;
   onEditingTrailChange?: (id: number | null) => void;
+  /** Live Mapbox map ref — used for terrain elevation fallback (Case B). */
+  mapRef?: React.RefObject<MapboxMap | null>;
+  /** Called with hovered elevation point to sync the map marker. */
+  onElevationHoverPoint?: (point: { lng: number; lat: number } | null) => void;
 }
 
 export default function TrailDetailDrawer({
@@ -864,6 +932,8 @@ export default function TrailDetailDrawer({
   regionId,
   onClose: onCloseExternal,
   onEditingTrailChange,
+  mapRef,
+  onElevationHoverPoint,
 }: TrailDetailDrawerProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const trailIdParam = searchParams.get('trailId');
@@ -921,6 +991,8 @@ export default function TrailDetailDrawer({
             onCreated={(saved) => navigateToTrail(saved.id)}
             onNavigateToTrail={navigateToTrail}
             onEditingTrailChange={onEditingTrailChange}
+            mapRef={mapRef}
+            onElevationHoverPoint={onElevationHoverPoint}
           />
         )}
       </div>

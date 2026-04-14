@@ -19,6 +19,8 @@ import {
   INITIAL_PITCH,
   INITIAL_BEARING,
   CONTOUR_STRENGTH_DEFAULT,
+  ELEV_HOVER_SOURCE,
+  ELEV_HOVER_LAYER,
 } from '@/lib/map/config';
 import {
   SELECTED_LAYER_CONFIG,
@@ -62,6 +64,8 @@ export interface UseMapboxOptions {
 
 export interface UseMapboxReturn {
   mapContainerRef: React.RefObject<HTMLDivElement | null>;
+  /** Direct access to the map instance — used for terrain elevation sampling. */
+  mapRef: React.RefObject<mapboxgl.Map | null>;
   currentStyle: StyleKey;
   contourStrength: number;
   mapReady: boolean;
@@ -71,6 +75,12 @@ export interface UseMapboxReturn {
   pushTrailUpdate: (updated: Trail) => void;
   pushTrailDelete: (id: number) => void;
   setEditingTrailId: (id: number | null) => void;
+  /**
+   * Show or clear a highlighted point on the map — syncs the chart hover
+   * position with the corresponding location on the trail.
+   * Pass `null` to clear the marker.
+   */
+  setElevationHoverPoint: (point: { lng: number; lat: number } | null) => void;
 }
 
 export function useMapbox({
@@ -265,6 +275,27 @@ export function useMapbox({
       map.addLayer(TRAILS_LABELS_CONFIG);
       map.addLayer(TRAILS_START_CONFIG);
       map.addLayer(TRAILS_END_CONFIG);
+
+      // Elevation profile hover marker
+      if (!map.getSource(ELEV_HOVER_SOURCE)) {
+        map.addSource(ELEV_HOVER_SOURCE, {
+          type: 'geojson',
+          data: { type: 'FeatureCollection', features: [] },
+        });
+        map.addLayer({
+          id: ELEV_HOVER_LAYER,
+          type: 'circle',
+          source: ELEV_HOVER_SOURCE,
+          slot: 'top',
+          paint: {
+            'circle-radius': 7,
+            'circle-color': '#facc15',
+            'circle-stroke-color': '#fff',
+            'circle-stroke-width': 2,
+            'circle-opacity': 0.95,
+          },
+        });
+      }
     },
     [buildGeoJSON, buildEndpointsGeoJSON]
   );
@@ -484,8 +515,29 @@ export function useMapbox({
     if (map && mapReady) applyContourStrength(map, value);
   };
 
+  function setElevationHoverPoint(point: { lng: number; lat: number } | null) {
+    const map = mapRef.current;
+    if (!map || !map.getSource(ELEV_HOVER_SOURCE)) return;
+    const source = map.getSource(ELEV_HOVER_SOURCE) as mapboxgl.GeoJSONSource;
+    if (!point) {
+      source.setData({ type: 'FeatureCollection', features: [] });
+      return;
+    }
+    source.setData({
+      type: 'FeatureCollection',
+      features: [
+        {
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [point.lng, point.lat] },
+          properties: {},
+        },
+      ],
+    });
+  }
+
   return {
     mapContainerRef,
+    mapRef,
     currentStyle,
     contourStrength,
     mapReady,
@@ -495,5 +547,6 @@ export function useMapbox({
     pushTrailUpdate,
     pushTrailDelete,
     setEditingTrailId,
+    setElevationHoverPoint,
   };
 }
