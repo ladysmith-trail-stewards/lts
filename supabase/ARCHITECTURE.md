@@ -10,6 +10,7 @@
   - `get_rpc_privileges` — reads `pg_catalog`; `service_role` only
   - `get_admin_users` — joins `auth.users`; admin+ only
   - `accept_policy` — updates `policy_accepted_at` and `region_id` atomically for `pending` users
+  - `change_user_role` — updates `profiles.role` and signs out the affected user via the Admin API; admin+ only
 - **Anon users have no write access** to trails and no access to profiles.
 - **Soft-delete is the standard deletion path.** Setting `deleted_at` is the only removal path for `user`, `super_user`, and `admin` roles. Hard-delete (permanent `DELETE`) is `super_admin` only via RLS policy. `deleted_at` is written by a direct `UPDATE`; the `block_deleted_at_update` trigger (attached to every table with a `deleted_at` column) enforces JWT-based scope rules — each trigger declares per-role permissions (`ALL | REGION | OWN | NONE`) as trigger arguments.
 
@@ -53,3 +54,18 @@ All SECURITY DEFINER functions:
 - Set `search_path = public` explicitly to prevent search-path injection.
 - `REVOKE EXECUTE FROM public` then grant only to the intended role(s).
 - Perform explicit role/permission checks inside the function body rather than relying solely on the caller's grants.
+
+## Force sign-out on role change
+
+`change_user_role(target_profile_id bigint, new_role app_role)` updates `profiles.role` **and** immediately revokes the affected user's Supabase sessions so their next request forces a fresh login with correct JWT claims.
+
+It uses `pg_net` to call the Supabase Admin API (`POST /auth/v1/admin/users/{id}/logout`). Two custom config settings must be present in the database:
+
+| Setting key                              | Value                                        |
+| ---------------------------------------- | -------------------------------------------- |
+| `app.settings.supabase_url`              | Project URL (e.g. `https://xxx.supabase.co`) |
+| `app.settings.supabase_service_role_key` | Service-role JWT                             |
+
+Set these in **Supabase dashboard → Project Settings → Database → Configuration → Custom config**.
+
+If either setting is missing the sign-out is silently skipped and only the role update is committed. If the `pg_net` call itself fails the role update is **not** rolled back; the failure is surfaced as a `WARNING` in database logs.

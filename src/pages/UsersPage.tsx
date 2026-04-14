@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   flexRender,
   getCoreRowModel,
@@ -14,6 +14,32 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+
+type AppRole = 'pending' | 'user' | 'super_user' | 'admin' | 'super_admin';
+
+const ALL_ROLES: AppRole[] = [
+  'pending',
+  'user',
+  'super_user',
+  'admin',
+  'super_admin',
+];
 
 interface AdminUser {
   profile_id: number;
@@ -27,43 +53,22 @@ interface AdminUser {
   created_at: string;
 }
 
-const columns: ColumnDef<AdminUser>[] = [
-  {
-    accessorKey: 'name',
-    header: 'Name',
-  },
-  {
-    accessorKey: 'email',
-    header: 'Email',
-  },
-  {
-    accessorKey: 'role',
-    header: 'Role',
-  },
-  {
-    accessorKey: 'region_name',
-    header: 'Region',
-  },
-  {
-    accessorKey: 'phone',
-    header: 'Phone',
-    cell: ({ row }) => row.original.phone ?? '—',
-  },
-  {
-    accessorKey: 'bio',
-    header: 'Bio',
-    cell: ({ row }) => (
-      <span className="max-w-[200px] truncate block">
-        {row.original.bio ?? '—'}
-      </span>
-    ),
-  },
-];
+interface PendingChange {
+  profileId: number;
+  userName: string;
+  currentRole: string;
+  newRole: string;
+}
 
 export default function UsersPage() {
   const [data, setData] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pendingChange, setPendingChange] = useState<PendingChange | null>(
+    null
+  );
+  const [rowErrors, setRowErrors] = useState<Record<number, string>>({});
+  const [submitting, setSubmitting] = useState(false);
 
   type RpcResult = {
     data: AdminUser[] | null;
@@ -97,6 +102,107 @@ export default function UsersPage() {
       mounted = false;
     };
   }, []);
+
+  const handleConfirmChange = async () => {
+    if (!pendingChange) return;
+    setSubmitting(true);
+    const { profileId, newRole } = pendingChange;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error: rpcError } = await (supabase.rpc as any)(
+      'change_user_role',
+      {
+        target_profile_id: profileId,
+        new_role: newRole,
+      }
+    );
+
+    setSubmitting(false);
+
+    if (rpcError) {
+      setRowErrors((prev) => ({ ...prev, [profileId]: rpcError.message }));
+    } else {
+      setRowErrors((prev) => {
+        const next = { ...prev };
+        delete next[profileId];
+        return next;
+      });
+      setData((prev) =>
+        prev.map((u) =>
+          u.profile_id === profileId ? { ...u, role: newRole } : u
+        )
+      );
+    }
+    setPendingChange(null);
+  };
+
+  const columns = useMemo<ColumnDef<AdminUser>[]>(
+    () => [
+      {
+        accessorKey: 'name',
+        header: 'Name',
+      },
+      {
+        accessorKey: 'email',
+        header: 'Email',
+      },
+      {
+        accessorKey: 'role',
+        header: 'Role',
+        cell: ({ row }) => (
+          <div>
+            <Select
+              value={row.original.role}
+              onValueChange={(newRole) => {
+                if (!newRole) return;
+                setPendingChange({
+                  profileId: row.original.profile_id,
+                  userName: row.original.name,
+                  currentRole: row.original.role,
+                  newRole,
+                });
+              }}
+            >
+              <SelectTrigger size="sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {ALL_ROLES.map((r) => (
+                  <SelectItem key={r} value={r}>
+                    {r}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {rowErrors[row.original.profile_id] && (
+              <p className="text-xs text-red-500 mt-1">
+                {rowErrors[row.original.profile_id]}
+              </p>
+            )}
+          </div>
+        ),
+      },
+      {
+        accessorKey: 'region_name',
+        header: 'Region',
+      },
+      {
+        accessorKey: 'phone',
+        header: 'Phone',
+        cell: ({ row }) => row.original.phone ?? '—',
+      },
+      {
+        accessorKey: 'bio',
+        header: 'Bio',
+        cell: ({ row }) => (
+          <span className="max-w-[200px] truncate block">
+            {row.original.bio ?? '—'}
+          </span>
+        ),
+      },
+    ],
+    [rowErrors]
+  );
 
   const table = useReactTable({
     data,
@@ -159,6 +265,37 @@ export default function UsersPage() {
           </Table>
         </div>
       )}
+
+      <Dialog
+        open={pendingChange !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingChange(null);
+        }}
+      >
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Confirm role change</DialogTitle>
+            <DialogDescription>
+              Change <strong>{pendingChange?.userName}</strong> from{' '}
+              <strong>{pendingChange?.currentRole}</strong> to{' '}
+              <strong>{pendingChange?.newRole}</strong>? This will sign the user
+              out immediately.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setPendingChange(null)}
+              disabled={submitting}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleConfirmChange} disabled={submitting}>
+              {submitting ? 'Saving…' : 'Confirm'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
