@@ -36,6 +36,19 @@ export type TrailRow = Omit<
   visibility: string;
   created_at: string;
   updated_at: string;
+  /**
+   * True when the elevation profile is missing entirely or geometry has
+   * changed since the profile was last computed. The Python elevation app
+   * uses this to know which trails need reprocessing.
+   * elevation_coords will be NULL whenever this is true.
+   */
+  elevation_stale: boolean;
+  /**
+   * Elevation profile vertices from trail_elevations.geom4d, pre-computed by
+   * the view. Each inner array is [lng, lat, elevation_m, distance_m].
+   * NULL when elevation_stale is true.
+   */
+  elevation_coords: number[][] | null;
 };
 
 export interface GetTrailsDbArgs {

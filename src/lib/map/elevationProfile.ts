@@ -1,5 +1,3 @@
-import type { Geom4dLineString } from '@/lib/db_services/trails/getTrailElevationDb';
-
 /**
  * Normalised elevation point — single contract regardless of data source.
  * Matches the spec from issue #97.
@@ -40,21 +38,21 @@ export function haversineM(
   return 2 * R * Math.asin(Math.sqrt(a));
 }
 
-// ── Case A — build from 4D geometry (Z = elevation, M = measure distance) ────
+// ── Case A — build from elevation_coords (from trails_view) ──────────────────
 
 /**
- * Normalises a 4D PostGIS LineString into the elevation profile contract.
+ * Normalises the `elevation_coords` column from `trails_view` into the
+ * elevation profile contract.
  *
- * PostGIS serialises XYZM as [lng, lat, Z, M].
- * `M` carries the cumulative distance along the line in the DB's unit (metres).
- * We use M directly for distance rather than recomputing from haversine so the
- * chart stays consistent with the database.
+ * The view aggregates trail_elevations.geom4d into float[][] where each
+ * inner array is [lng, lat, elevation_m, distance_m] — the raw XYZM ordinates
+ * from the PostGIS LineStringZM, ordered by vertex path index.
  */
-export function buildProfileFrom4d(geom4d: Geom4dLineString): ElevationPoint[] {
-  const coords = geom4d.coordinates;
+export function buildProfileFromCoords(coords: number[][]): ElevationPoint[] {
   if (coords.length === 0) return [];
 
-  return coords.map(([lng, lat, z, m], index) => {
+  return coords.map((coord, index) => {
+    const [lng, lat, z, m] = coord;
     const prevZ = index > 0 ? coords[index - 1][2] : z;
     return {
       index,

@@ -1,8 +1,6 @@
 import { useEffect, useRef, useReducer } from 'react';
-import { supabase } from '@/lib/supabase/client';
-import { getTrailElevationDb } from '@/lib/db_services/trails/getTrailElevationDb';
 import {
-  buildProfileFrom4d,
+  buildProfileFromCoords,
   buildProfileFromMapboxTerrain,
   type ElevationPoint,
 } from '@/lib/map/elevationProfile';
@@ -39,20 +37,18 @@ function reducer(
 }
 
 /**
- * Fetches and normalises the elevation profile for a trail.
+ * Derives the elevation profile for a trail.
  *
- * - Case A: Uses `geom4d` from `trail_elevations` when available.
- * - Case B: Falls back to Mapbox terrain sampling when `geom4d` is absent.
- *
- * The `map` argument is required for the Case B fallback. If it is `null` the
- * hook stays in `loading` state until the map is ready.
+ * - Case A: Uses `elevation_coords` from `trails_view` when available.
+ *           This is synchronous — no fetch needed, data already on the trail.
+ * - Case B: Falls back to Mapbox terrain sampling when `elevation_coords` is
+ *           absent. Requires `map` to be non-null.
  */
 export function useElevationProfile(
   trail: Trail | null,
   map: MapboxMapWithTerrain | null
 ): ElevationProfileState {
   const [state, dispatch] = useReducer(reducer, { status: 'idle' });
-  // Keep a stable ref so the async load() closure always uses the latest dispatch.
   const dispatchRef = useRef(dispatch);
   useEffect(() => {
     dispatchRef.current = dispatch;
@@ -64,53 +60,38 @@ export function useElevationProfile(
       return;
     }
 
-    let cancelled = false;
-    dispatchRef.current({ type: 'LOADING' });
-
-    async function load() {
-      // Case A — prefer DB 4D geometry
-      const { data: elevRow, error } = await getTrailElevationDb(
-        supabase,
-        trail!.id
-      );
-
-      if (cancelled) return;
-
-      if (error) {
-        dispatchRef.current({ type: 'ERROR', message: error.message });
-        return;
-      }
-
-      if (elevRow?.geom4d) {
-        const points = buildProfileFrom4d(elevRow.geom4d);
-        if (!cancelled) dispatchRef.current({ type: 'READY', data: points });
-        return;
-      }
-
-      // Case B — fall back to Mapbox terrain
-      if (!map) {
-        // Map not ready yet; stay in loading — effect re-runs when map changes.
-        return;
-      }
-
-      const coords = trail!.geometry_geojson.coordinates as [number, number][];
+    // Case A — elevation_coords already on the trail from trails_view
+    if (trail.elevation_coords && trail.elevation_coords.length > 0) {
       try {
-        const points = buildProfileFromMapboxTerrain(coords, map);
-        if (!cancelled) dispatchRef.current({ type: 'READY', data: points });
+        const points = buildProfileFromCoords(trail.elevation_coords);
+        dispatchRef.current({ type: 'READY', data: points });
       } catch (err) {
-        if (!cancelled)
-          dispatchRef.current({
-            type: 'ERROR',
-            message: err instanceof Error ? err.message : 'Unknown error',
-          });
+        dispatchRef.current({
+          type: 'ERROR',
+          message: err instanceof Error ? err.message : 'Unknown error',
+        });
       }
+      return;
     }
 
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, [trail?.id, map]); // eslint-disable-line react-hooks/exhaustive-deps
+    // Case B — fall back to Mapbox terrain
+    if (!map) {
+      // Map not ready yet; stay in loading until map is available.
+      dispatchRef.current({ type: 'LOADING' });
+      return;
+    }
+
+    const coords = trail.geometry_geojson.coordinates as [number, number][];
+    try {
+      const points = buildProfileFromMapboxTerrain(coords, map);
+      dispatchRef.current({ type: 'READY', data: points });
+    } catch (err) {
+      dispatchRef.current({
+        type: 'ERROR',
+        message: err instanceof Error ? err.message : 'Unknown error',
+      });
+    }
+  }, [trail?.id, trail?.elevation_coords, map]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return state;
 }

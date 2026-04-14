@@ -436,6 +436,14 @@ function TrailPanel({
         {/* ── Elevation Profile ─────────────────────────────────────────── */}
         {!isNew && !editing && (
           <div>
+            {/* Stale notice — shown whenever elevation data is missing or outdated,
+                regardless of whether the Mapbox fallback produced anything. */}
+            {currentTrail?.elevation_stale && (
+              <div className="flex items-center gap-1.5 mb-1 px-1 text-[10px] text-amber-600 italic">
+                <Loader2 className="w-3 h-3" />
+                Using bad elevation :(
+              </div>
+            )}
             {elevationProfile.status === 'loading' && (
               <div className="flex items-center justify-center gap-2 h-40 text-xs text-slate-400">
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />

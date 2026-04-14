@@ -274,6 +274,9 @@ export type Database = {
           description: string | null;
           direction: string | null;
           distance_m: number | null;
+          elevation_coords: number[] | null;
+          elevation_stale: boolean | null;
+          geom_updated_at: string | null;
           geometry_geojson: Json | null;
           hidden: boolean | null;
           id: number | null;
@@ -285,48 +288,6 @@ export type Database = {
           type: string | null;
           updated_at: string | null;
           visibility: string | null;
-        };
-        Insert: {
-          activity_types?: string[] | null;
-          bike?: boolean | null;
-          connector?: boolean | null;
-          created_at?: string | null;
-          deleted_at?: string | null;
-          description?: string | null;
-          direction?: string | null;
-          distance_m?: never;
-          geometry_geojson?: never;
-          hidden?: boolean | null;
-          id?: number | null;
-          name?: string | null;
-          planned?: boolean | null;
-          region_id?: number | null;
-          tf_popularity?: number | null;
-          trail_class?: string | null;
-          type?: string | null;
-          updated_at?: string | null;
-          visibility?: string | null;
-        };
-        Update: {
-          activity_types?: string[] | null;
-          bike?: boolean | null;
-          connector?: boolean | null;
-          created_at?: string | null;
-          deleted_at?: string | null;
-          description?: string | null;
-          direction?: string | null;
-          distance_m?: never;
-          geometry_geojson?: never;
-          hidden?: boolean | null;
-          id?: number | null;
-          name?: string | null;
-          planned?: boolean | null;
-          region_id?: number | null;
-          tf_popularity?: number | null;
-          trail_class?: string | null;
-          type?: string | null;
-          updated_at?: string | null;
-          visibility?: string | null;
         };
         Relationships: [
           {

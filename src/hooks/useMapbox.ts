@@ -515,9 +515,7 @@ export function useMapbox({
     if (map && mapReady) applyContourStrength(map, value);
   };
 
-  function setElevationHoverPoint(
-    point: { lng: number; lat: number } | null
-  ) {
+  function setElevationHoverPoint(point: { lng: number; lat: number } | null) {
     const map = mapRef.current;
     if (!map || !map.getSource(ELEV_HOVER_SOURCE)) return;
     const source = map.getSource(ELEV_HOVER_SOURCE) as mapboxgl.GeoJSONSource;
