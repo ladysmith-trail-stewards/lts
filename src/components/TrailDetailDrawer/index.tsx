@@ -10,11 +10,12 @@ import type { TrailFeature } from '@/lib/db_services/trails/upsertTrailsDb';
 import { useAuth } from '@/contexts/AuthContext';
 import type { Database } from '@/lib/supabase/database.types';
 
+import { useTrailClassOptions } from '@/hooks/useTrailClassOptions';
+import { useTrailDirectionOptions } from '@/hooks/useTrailDirectionOptions';
+
 import {
   TrailEditSchema,
   type TrailEditValues,
-  TRAIL_CLASS_LABELS,
-  DIRECTION_LABELS,
   VISIBILITY_LABELS,
 } from './trailEditSchema';
 import {
@@ -104,6 +105,9 @@ function TrailPanel({
   const [form, setForm] = useState<TrailEditValues>(
     trail ? trailToForm(trail) : NEW_TRAIL_DEFAULTS
   );
+
+  const { options: trailClassOptions } = useTrailClassOptions();
+  const { options: directionOptions } = useTrailDirectionOptions();
 
   const drawApiRef = useRef(drawApi);
   useEffect(() => {
@@ -445,7 +449,7 @@ function TrailPanel({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {Object.entries(TRAIL_CLASS_LABELS).map(([val, label]) => (
+                {trailClassOptions.map(({ value: val, label }) => (
                   <SelectItem key={val} value={val}>
                     <span className="flex items-center gap-2">
                       <TrailClassDot trailClass={val} />
@@ -459,7 +463,9 @@ function TrailPanel({
             <div className="flex items-center gap-2">
               <TrailClassDot trailClass={currentTrail?.trail_class ?? null} />
               <span className="text-sm text-slate-700">
-                {TRAIL_CLASS_LABELS[currentTrail?.trail_class ?? ''] ??
+                {trailClassOptions.find(
+                  (o) => o.value === (currentTrail?.trail_class ?? '')
+                )?.label ??
                   currentTrail?.trail_class ??
                   '—'}
               </span>
@@ -485,7 +491,7 @@ function TrailPanel({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {Object.entries(DIRECTION_LABELS).map(([val, label]) => (
+                {directionOptions.map(({ value: val, label }) => (
                   <SelectItem key={val} value={val}>
                     {label}
                   </SelectItem>
@@ -494,7 +500,9 @@ function TrailPanel({
             </Select>
           ) : (
             <span className="text-sm text-slate-700">
-              {DIRECTION_LABELS[currentTrail?.direction ?? ''] ??
+              {directionOptions.find(
+                (o) => o.value === (currentTrail?.direction ?? '')
+              )?.label ??
                 currentTrail?.direction ??
                 '—'}
             </span>
