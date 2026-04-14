@@ -53,3 +53,38 @@ All SECURITY DEFINER functions:
 - Set `search_path = public` explicitly to prevent search-path injection.
 - `REVOKE EXECUTE FROM public` then grant only to the intended role(s).
 - Perform explicit role/permission checks inside the function body rather than relying solely on the caller's grants.
+
+## Webhooks
+
+Supabase Database Webhooks are configured in the **Supabase dashboard** (not in `config.toml` — they are project-level and cannot be version-controlled in migrations). The configuration below must be kept in sync with this file.
+
+### `on_profile_insert`
+
+Fires on every `INSERT` to `public.profiles` and calls the `notify-new-user` Edge Function, which sends an admin notification email when the new profile has `role = 'pending'`.
+
+| Setting      | Value                                           |
+| ------------ | ----------------------------------------------- |
+| Name         | `on_profile_insert`                             |
+| Table        | `public.profiles`                               |
+| Events       | `INSERT`                                        |
+| Endpoint     | `.../functions/v1/notify-new-user`              |
+| HTTP headers | `Authorization: Bearer <supabase anon key>` (set automatically by Supabase for Edge Function webhooks) |
+
+**To configure in the dashboard:**
+
+1. Go to **Database → Webhooks → Create a new hook**.
+2. Set the name to `on_profile_insert`.
+3. Select table `public.profiles`, event `INSERT`.
+4. Choose **Supabase Edge Functions** as the hook type and select `notify-new-user`.
+5. Save. Supabase automatically injects the `Authorization` header.
+
+**Required Supabase project secrets** (set via **Project Settings → Edge Functions → Secrets**):
+
+| Secret                    | Purpose                                         |
+| ------------------------- | ----------------------------------------------- |
+| `RESEND_API_KEY`          | Authenticates calls to the Resend API           |
+| `RESEND_FROM_ADDRESS`     | Verified Resend sender address                  |
+| `ADMIN_NOTIFICATION_EMAIL`| Destination address for new-user alerts         |
+| `APP_URL`                 | Base URL of the app (defaults to `https://ladysmithtrailstewards.ca`) |
+
+`SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are injected automatically into every Edge Function and do not need to be set manually.
