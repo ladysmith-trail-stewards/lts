@@ -74,8 +74,10 @@ begin
     v_service_key := current_setting('app.settings.supabase_service_role_key', true);
 
     if v_supa_url is not null and v_service_key is not null then
+      -- v_auth_user_id is a uuid column — cast enforces the format and
+      -- prevents any unexpected characters in the URL path segment.
       perform net.http_post(
-        url     := v_supa_url || '/auth/v1/admin/users/' || v_auth_user_id || '/logout',
+        url     := v_supa_url || '/auth/v1/admin/users/' || v_auth_user_id::text || '/logout',
         headers := jsonb_build_object(
           'Authorization', 'Bearer ' || v_service_key,
           'Content-Type',  'application/json'
