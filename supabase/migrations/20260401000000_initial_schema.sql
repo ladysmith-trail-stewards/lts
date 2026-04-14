@@ -65,7 +65,7 @@ create table public.profiles (
 );
 
 comment on column public.profiles.deleted_at is
-  'Soft-delete timestamp. NULL = active. Set via soft_delete_profiles RPC only.';
+  'Soft-delete timestamp. NULL = active. Set via UPDATE; enforced by block_deleted_at_update trigger (see migration 20260411).';
 
 create unique index profiles_name_key on public.profiles using btree (name);
 alter table public.profiles add constraint "profiles_name_key"
@@ -265,9 +265,9 @@ comment on view public.trails_view is
 
 grant select on public.trails_view to anon, authenticated;
 
--- Prevent direct writes to deleted_at on profiles and trails.
--- The only legitimate path is through the soft_delete_* RPCs (SECURITY DEFINER),
--- which set app.soft_delete_rpc = 'on' before updating.
+-- NOTE: This initial block_deleted_at_update function and its triggers are superseded
+-- by migration 20260411000000_soft_delete_via_jwt.sql, which rewrites the function
+-- with TG_ARGV-based permission args (ALL | REGION | OWN | NONE) per role.
 create or replace function public.block_deleted_at_update()
 returns trigger
 language plpgsql

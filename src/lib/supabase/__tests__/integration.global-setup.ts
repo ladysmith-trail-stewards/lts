@@ -32,30 +32,61 @@ if (!url || !secretKey) {
 const client = createClient<any>(url, secretKey);
 
 async function purgeTestFixtures(): Promise<void> {
-  // 1. Find all i_test_ profiles and collect their auth user ids
-  const { data: profiles } = await client
+  const { data: testRegions } = await client
+    .from('regions')
+    .select('id')
+    .like('name', 'i_test_%');
+  const testRegionIds = testRegions?.map((r: { id: number }) => r.id) ?? [];
+
+  if (testRegionIds.length > 0) {
+    await client.from('trails').delete().in('region_id', testRegionIds);
+  }
+
+  if (testRegionIds.length > 0) {
+    const { data: regionProfiles } = await client
+      .from('profiles')
+      .select('id, auth_user_id')
+      .in('region_id', testRegionIds);
+    if (regionProfiles && regionProfiles.length > 0) {
+      await client
+        .from('profiles')
+        .delete()
+        .in(
+          'id',
+          regionProfiles.map((p: { id: number }) => p.id)
+        );
+      await Promise.all(
+        regionProfiles.map(({ auth_user_id }: { auth_user_id: string }) =>
+          client.auth.admin.deleteUser(auth_user_id).catch(() => {})
+        )
+      );
+    }
+  }
+
+  const { data: namedProfiles } = await client
     .from('profiles')
     .select('id, auth_user_id')
     .like('name', 'i_test_%');
 
-  if (profiles && profiles.length > 0) {
+  if (namedProfiles && namedProfiles.length > 0) {
     await client
       .from('profiles')
       .delete()
       .in(
         'id',
-        profiles.map((p: { id: number }) => p.id)
+        namedProfiles.map((p: { id: number }) => p.id)
       );
 
     await Promise.all(
-      profiles.map(({ auth_user_id }: { auth_user_id: string }) =>
+      namedProfiles.map(({ auth_user_id }: { auth_user_id: string }) =>
         client.auth.admin.deleteUser(auth_user_id).catch(() => {})
       )
     );
   }
 
-  // 2. Remove i_test_ regions (after profiles are gone, FK is clear)
-  await client.from('regions').delete().like('name', 'i_test_%');
+  if (testRegionIds.length > 0) {
+    await client.from('regions').delete().like('name', 'i_test_%');
+  }
 }
 
 export async function setup(): Promise<void> {

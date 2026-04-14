@@ -17,21 +17,22 @@
 > **`pending` role** — new Google/OAuth sign-ups land here until an admin promotes them to `user`.
 > No policies grant `pending` any access (identical to `anon` at the data layer).
 >
-> **Soft delete** — setting `deleted_at` is the standard non-destructive removal path.
-> The DELETE column in the matrix reflects hard-delete RLS only (`super_admin` only).
-> All other roles use the `soft_delete_*` RPCs to soft-delete records they're permitted to manage.
-> Soft-deleted rows are hidden from `trails_view` and excluded by application queries.
-> `deleted_at` cannot be set by a direct UPDATE — only via the SECURITY DEFINER soft-delete RPCs.
+> **Soft-D** — the Soft-D column shows who may set `deleted_at` via a direct `UPDATE`.
+> The `block_deleted_at_update` trigger enforces this per-table; the DELETE column reflects hard-delete RLS only.
+> `super_admin` always has full soft-delete access. Database-level roles (`service_role`, `postgres`) bypass the trigger entirely.
+> Per-table permissions (from live DB trigger args):
+> `profiles`: admin=rows in own region, super_user=own row only, user=own row only
+> `trails`: admin=rows in own region, super_user=rows in own region, user=none
 
 ### `profiles`
 
-| Role        | SELECT | INSERT | UPDATE | DELETE |
-| ----------- | :----: | :----: | :----: | :----: |
-| Anon        |   —    |   —    |   —    |   —    |
-| User        |   —    |   —    |   —    |   —    |
-| Super User  |   —    |   —    |   —    |   —    |
-| Admin       |   📍   |   📍   |   📍   |   —    |
-| Super Admin |   ✅   |   ✅   |   ✅   |   ✅   |
+| Role        | SELECT | INSERT | UPDATE | DELETE | Soft-D |
+| ----------- | :----: | :----: | :----: | :----: | :----: |
+| Anon        |   —    |   —    |   —    |   —    |   —    |
+| User        |   👤   |   —    |   👤   |   —    |   👤   |
+| Super User  |   👤   |   —    |   👤   |   —    |   👤   |
+| Admin       |   📍   |   📍   |   📍   |   —    |   📍   |
+| Super Admin |   ✅   |   ✅   |   ✅   |   ✅   |   ✅   |
 
 ### `regions`
 
@@ -55,27 +56,23 @@
 
 ### `trails`
 
-| Role        | SELECT | INSERT | UPDATE | DELETE |
-| ----------- | :----: | :----: | :----: | :----: |
-| Anon        |   —    |   —    |   —    |   —    |
-| User        |   ✅   |   —    |   —    |   —    |
-| Super User  |   ✅   |   📍   |   📍   |   —    |
-| Admin       |   ✅   |   📍   |   📍   |   —    |
-| Super Admin |   ✅   |   ✅   |   ✅   |   ✅   |
+| Role        | SELECT | INSERT | UPDATE | DELETE | Soft-D |
+| ----------- | :----: | :----: | :----: | :----: | :----: |
+| Anon        |   —    |   —    |   —    |   —    |   —    |
+| User        |   ✅   |   —    |   —    |   —    |   —    |
+| Super User  |   ✅   |   📍   |   📍   |   —    |   📍   |
+| Admin       |   ✅   |   📍   |   📍   |   —    |   📍   |
+| Super Admin |   ✅   |   ✅   |   ✅   |   ✅   |   ✅   |
 
 ---
 
 ## RPCs
 
-| RPC                    | Callable by     |  Security  | Notes                                                                                   |
-| ---------------------- | --------------- | :--------: | --------------------------------------------------------------------------------------- |
-| `accept_policy`        | `authenticated` | 🔒 DEFINER | Sets policy_accepted_at = now() and region_id = p_region_id for the calling             |
-| `set_region_bbox`      | `authenticated` |  INVOKER   | Sets the bbox Polygon on a region from four required WGS84 scalar coordinates.          |
-| `soft_delete_profiles` | `authenticated` | 🔒 DEFINER | Sets deleted_at = now() on profiles. SECURITY DEFINER to bypass column-level privilege. |
-| `soft_delete_trails`   | `authenticated` | 🔒 DEFINER | Sets deleted_at = now() on trails. SECURITY DEFINER to bypass column-level privilege.   |
-| `upsert_trails`        | `authenticated` |  INVOKER   | —                                                                                       |
+| RPC               | Callable by                             |  Security  | Notes                                                                                                                                                                                                                                                                                                             |
+| ----------------- | --------------------------------------- | :--------: | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `accept_policy`   | `anon`, `authenticated`, `service_role` | 🔒 DEFINER | Sets policy_accepted_at = now() and region_id = p_region_id for the calling pending user. Raises if the caller is not pending, has already accepted, or p_region_id is not a valid non-default region. SECURITY DEFINER — bypasses column-level UPDATE restrictions on policy_accepted_at.                        |
+| `set_region_bbox` | `authenticated`, `service_role`         |  INVOKER   | Sets the bbox Polygon on a region from four required WGS84 scalar coordinates. All coordinates must be non-null and form a valid non-degenerate envelope (min_lng < max_lng, min_lat < max_lat, within WGS84 bounds). SECURITY INVOKER — RLS on public.regions is enforced: admin and super_admin may set a bbox. |
+| `upsert_trails`   | `anon`, `authenticated`, `service_role` |  INVOKER   | —                                                                                                                                                                                                                                                                                                                 |
 
 > ℹ️ **Security**: `INVOKER` = runs as the calling user (RLS applies normally). `🔒 DEFINER` = runs as the function owner, bypassing RLS — used only where a genuine privilege bypass is required (e.g. writing `deleted_at` past column-level security).
 > ℹ️ `authenticated` = any signed-in user. Individual RPCs may enforce additional role checks internally via `auth.jwt()` claims.
-
-> ℹ️ Derived from migration GRANT/REVOKE statements.

@@ -6,26 +6,25 @@ export interface DeleteProfileDbResult {
 }
 
 /**
- * Soft-deletes one or more profiles by setting deleted_at = now() via the
- * `soft_delete_profiles` RPC (SECURITY DEFINER).
+ * Soft-deletes one or more profiles by setting deleted_at = now() directly.
  *
- * Using an RPC rather than a bare .update() ensures that only deleted_at is
- * written — column-level security blocks direct UPDATE of deleted_at.
- *
- * Role enforcement is handled inside the RPC:
+ * Role enforcement is handled by the `block_deleted_at_update` trigger:
  *   super_admin  → any profile
- *   admin        → own region only
- *   Any auth user → own profile only (self-deletion)
- *   All others   → permission denied (error returned)
+ *   admin        → own region or own profile
+ *   super_user   → own profile only
+ *   all others   → trigger raises permission denied
  *
- * Missing ids are a silent no-op (UPDATE … WHERE id = ANY(…) matches 0 rows).
+ * Missing ids are a silent no-op.
  */
 export async function deleteProfileDb(
   client: SupabaseClient<Database>,
   ids: number | number[]
 ): Promise<DeleteProfileDbResult> {
   const idArray = Array.isArray(ids) ? ids : [ids];
-  const { error } = await client.rpc('soft_delete_profiles', { ids: idArray });
+  const { error } = await client
+    .from('profiles')
+    .update({ deleted_at: new Date().toISOString() })
+    .in('id', idArray);
   if (error) return { error: new Error(error.message) };
   return { error: null };
 }

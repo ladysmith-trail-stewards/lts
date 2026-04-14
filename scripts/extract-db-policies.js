@@ -2,30 +2,23 @@
 /**
  * extract-db-policies.js
  *
- * Calls the `get_rls_policies()` RPC (service-role only) and queries
- * `information_schema.routine_privileges` for RPC grant info, then
- * writes supabase/POLICIES.md — a human + AI readable snapshot of all
- * RLS policies and callable RPCs active in the public schema.
+ * Calls the `get_rls_policies()` and `get_rpc_privileges()` RPCs
+ * (service-role only) then writes supabase/POLICIES.md — a human + AI
+ * readable snapshot of all RLS policies and callable RPCs active in the
+ * local Supabase instance.
  *
- * Run after `pnpm db:reset` or `pnpm db:start`:
+ * Run after `pnpm db:reset` or schema changes:
  *   node scripts/extract-db-policies.js
  *   pnpm db:policies
  *
  * Requires:
- *   - Local Supabase r> **Trails — soft delete**: The matrix DELETE column only reflects RLS policies.
-> `admin` and `super_user` have no DELETE policy (cannot hard-delete) but **can soft-delete**
-> via the `soft_delete_trails` RPC (sets `deleted_at`). Soft-deleted rows are hidden from
-> `trails_view`. `super_admin` can hard-delete directly via PostgREST DELETE (RLS policy).
-> See the **RPCs** section for soft-delete access rules. **Profiles — soft delete**: Same pattern. `admin` has no DELETE policy (cannot hard-delete)
-> but **can soft-delete profiles in their region** via `soft_delete_profiles`. Any authenticated
-> user can soft-delete their own profile (self-deletion). `super_admin` can hard-delete directly
-> via PostgREST DELETE (RLS policy) — no RPC required.(`pnpm db:start`)
- *   - SUPABASE_SERVICE_ROLE_KEY env var (or falls back to local dev key)
- *   - SUPABASE_URL env var (or falls back to local dev URL)
+ *   - Local Supabase running (`pnpm db:start`)
+ *   - VITE_SUPABASE_SECRET_KEY in .env (or SUPABASE_SERVICE_ROLE_KEY in env)
+ *   - VITE_SUPABASE_URL in .env (or SUPABASE_URL in env)
  */
 
 import { createClient } from '@supabase/supabase-js';
-import { writeFileSync, readFileSync, readdirSync } from 'fs';
+import { writeFileSync, readFileSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -80,6 +73,13 @@ const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
 // ---------------------------------------------------------------------------
 
 const COMMANDS = ['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'ALL'];
+const DISPLAY_COMMANDS = [
+  'SELECT',
+  'INSERT',
+  'UPDATE',
+  'DELETE',
+  'SOFT_DELETE',
+];
 
 // Ordered display roles (rows of the matrix)
 const ROLES = ['anon', 'user', 'super_user', 'admin', 'super_admin'];
@@ -130,7 +130,12 @@ function inferRoles(policy_name, using_expr, check_expr) {
   // 'user' — only add plain user if it appears as a role value or policy name token
   if (/[^_a-z]user[^_a-z]|'user'/.test(haystack)) mentioned.add('user');
 
-  if (mentioned.size > 0) return [...mentioned];
+  if (mentioned.size > 0) {
+    // If the policy also has an auth.uid() branch (own-row access), it applies
+    // to ALL authenticated users — not just the explicitly-named roles.
+    if (expr.includes('auth.uid()')) return ['authenticated'];
+    return [...mentioned];
+  }
 
   // auth.uid() only → own-row policy, applies to all authenticated users
   if (expr.includes('auth.uid()')) return ['authenticated'];
@@ -154,9 +159,22 @@ function isRegionScopedForRole(using_expr, check_expr, role) {
   if (!expr.includes("'region_id'") && !expr.includes('get_my_region_id')) {
     return false;
   }
-  // super_admin has an unconditional branch in the same policy — treat as global.
+  // super_admin always has an unconditional branch — treat as global.
   if (role === 'super_admin') return false;
-  return true;
+
+  // Check whether this role is explicitly paired with the region_id guard.
+  // e.g. `user_role in ('admin', 'super_user') and region_id = ...`
+  // vs   `user_role = 'admin' and region_id = ...` (super_user not paired).
+  const rolePattern = new RegExp(`'${role}'`);
+  if (!rolePattern.test(expr)) return false;
+
+  // Confirm the role mention is in a branch that also contains region_id.
+  // Split on top-level OR to check if they're in the same arm.
+  // Simple heuristic: both the role value and 'region_id' appear together
+  // within a reasonable window (500 chars).
+  const idx = expr.indexOf(`'${role}'`);
+  const window = expr.slice(Math.max(0, idx - 200), idx + 200);
+  return window.includes('region_id') || window.includes('get_my_region_id');
 }
 
 /**
@@ -175,15 +193,32 @@ function isOwnScopedForRole(using_expr, check_expr, role) {
 // Scope priority: higher index wins
 const SCOPE_RANK = { own: 1, region: 2, always: 3 };
 
+/** Convert a trigger-arg permission string to a matrix scope value. */
+function permToScope(perm) {
+  switch ((perm ?? '').toUpperCase()) {
+    case 'ALL':
+      return 'always';
+    case 'REGION':
+      return 'region';
+    case 'OWN':
+      return 'own';
+    default:
+      return null; // NONE → no access
+  }
+}
+
 /**
  * Build a role × command matrix for one table.
  * Cell values: 'always' | 'region' | 'own' | null
+ *
+ * @param {object[]} policies
+ * @param {{ admin_perm, super_user_perm, user_perm } | null} softDeletePerms
  */
-function buildMatrix(policies) {
+function buildMatrix(policies, softDeletePerms) {
   const matrix = {};
   for (const role of ROLES) {
     matrix[role] = {};
-    for (const cmd of COMMANDS) matrix[role][cmd] = null;
+    for (const cmd of [...COMMANDS, 'SOFT_DELETE']) matrix[role][cmd] = null;
   }
 
   for (const { policy_name, command, using_expr, check_expr } of policies) {
@@ -220,15 +255,31 @@ function buildMatrix(policies) {
     }
   }
 
+  // Populate SOFT_DELETE column from trigger args.
+  if (softDeletePerms) {
+    const permMap = {
+      admin: softDeletePerms.admin_perm,
+      super_user: softDeletePerms.super_user_perm,
+      user: softDeletePerms.user_perm,
+      // super_admin always has ALL; anon is always NONE
+      super_admin: 'ALL',
+      anon: 'NONE',
+    };
+    for (const role of ROLES) {
+      matrix[role]['SOFT_DELETE'] = permToScope(permMap[role]);
+    }
+  }
+
   return matrix;
 }
 
 function renderMatrix(matrix) {
-  const activeCmds = COMMANDS.filter((cmd) =>
+  const activeCmds = DISPLAY_COMMANDS.filter((cmd) =>
     ROLES.some((r) => matrix[r][cmd] !== null)
   );
 
-  const header = `| Role | ${activeCmds.join(' | ')} |`;
+  const cmdLabel = (cmd) => (cmd === 'SOFT_DELETE' ? 'Soft-D' : cmd);
+  const header = `| Role | ${activeCmds.map(cmdLabel).join(' | ')} |`;
   const sep = `|---|${activeCmds.map(() => ':---:').join('|')}|`;
 
   const rows = ROLES.map((role) => {
@@ -250,7 +301,7 @@ function renderMatrix(matrix) {
 // ---------------------------------------------------------------------------
 
 /** Human-readable matrix section — one matrix per table. */
-function buildMatrixSection(rows) {
+function buildMatrixSection(rows, softDeleteByTable) {
   if (!rows.length) return '_No RLS policies found._\n';
 
   const byTable = {};
@@ -258,7 +309,8 @@ function buildMatrixSection(rows) {
 
   let md = '';
   for (const [table, policies] of Object.entries(byTable)) {
-    const matrix = buildMatrix(policies);
+    const sdPerms = softDeleteByTable?.[table] ?? null;
+    const matrix = buildMatrix(policies, sdPerms);
     md += `### \`${table}\`\n\n`;
     md += renderMatrix(matrix) + '\n\n';
   }
@@ -266,230 +318,67 @@ function buildMatrixSection(rows) {
 }
 
 /**
- * RPCs section — queries pg_proc + pg_namespace for every public-schema
- * function and the roles that have EXECUTE grants on it, then renders a
- * per-function grantee table.
- *
- * Internal helpers (handle_new_user, get_rls_policies, get_admin_users,
- * custom_access_token_hook, set_updated_at) are filtered out — only RPCs
- * intended to be called by application code are shown.
+ * RPCs section — calls get_rpc_privileges() (service-role only) to get
+ * every public-schema function with its grantees, SECURITY DEFINER flag,
+ * and description straight from the live DB. Fails hard if unreachable.
  */
-async function buildRpcSection(supabase) {
-  // Internal / trigger functions to exclude from RPC docs
+async function buildRpcSection() {
   const INTERNAL_RPCS = new Set([
     'handle_new_user',
     'get_rls_policies',
+    'get_rpc_privileges',
     'get_admin_users',
+    'get_my_role',
+    'get_my_region_id',
+    'custom_access_token_hook',
+    'set_updated_at',
+    'set_geom_updated_at',
+    'block_deleted_at_update',
+    'attach_block_deleted_at_trigger',
+    'get_soft_delete_perms',
+    'get_trails_utm',
+    'get_utm_epsg',
   ]);
 
-  // Query via the Supabase DB REST endpoint using a raw SQL approach.
-  // We embed the SQL as a call to the get_rls_policies function's
-  // companion by posting directly to /rest/v1/rpc/get_rls_policies
-  // — but for arbitrary SQL we use the /pg endpoint or the
-  // admin API. Simplest reliable approach: use fetch against
-  // the Postgres direct connection string is not available here,
-  // so we call a SQL query via the Supabase management API proxy
-  // at /pg/query if it exists, otherwise fall back to a well-formed
-  // PostgREST RPC call.
+  const { data, error } = await supabase.rpc('get_rpc_privileges');
 
-  // Use the Supabase REST meta: /rest/v1/rpc against a helper
-  // that returns routine + grantee info from pg_catalog.
-  const body = JSON.stringify({
-    query: `
-      SELECT
-        p.proname                                    AS routine_name,
-        r.rolname                                    AS grantee,
-        obj_description(p.oid, 'pg_proc')            AS description
-      FROM pg_proc p
-      JOIN pg_namespace n ON n.oid = p.pronamespace
-      CROSS JOIN pg_roles r
-      WHERE n.nspname = 'public'
-        AND r.rolname IN ('anon', 'authenticated', 'service_role')
-        AND has_function_privilege(r.oid, p.oid, 'EXECUTE')
-      ORDER BY p.proname, r.rolname;
-    `,
-  });
-
-  // Try the local Supabase pg meta API (available in local dev)
-  const pgMetaRes = await fetch(
-    `${SUPABASE_URL.replace(':54321', ':54322')}/query`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
-      },
-      body,
-    }
-  ).catch(() => null);
-
-  let privRows = null;
-
-  if (pgMetaRes?.ok) {
-    const json = await pgMetaRes.json();
-    privRows = json.rows ?? json;
+  if (error) {
+    console.error(
+      'get_rpc_privileges() RPC failed. Is local Supabase running? (`pnpm db:start`)\n',
+      error.message
+    );
+    process.exit(1);
   }
 
-  // Fallback: try the pg-meta service on its standard local port 54323
-  if (!privRows) {
-    const pgMeta2Res = await fetch(`http://127.0.0.1:54323/query`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'pg-meta-key': SERVICE_ROLE_KEY,
-      },
-      body,
-    }).catch(() => null);
-
-    if (pgMeta2Res?.ok) {
-      const json = await pgMeta2Res.json();
-      privRows = json.rows ?? json;
-    }
-  }
-
-  if (!privRows) {
-    // Final fallback: derive from migration files (static, always accurate)
-    return buildRpcSectionStatic();
-  }
-
-  // Group by routine_name → { grantees: Set, description: string|null }
+  // Group by routine_name
   const byRpc = {};
-  for (const { routine_name, grantee, description } of privRows) {
+  for (const { routine_name, security_definer, description, grantee } of data) {
     if (INTERNAL_RPCS.has(routine_name)) continue;
     byRpc[routine_name] ??= {
       grantees: new Set(),
+      securityDefiner: security_definer === true,
       description: description ?? null,
     };
     byRpc[routine_name].grantees.add(grantee);
-    if (description) byRpc[routine_name].description = description;
-  }
-
-  if (!Object.keys(byRpc).length) {
-    return buildRpcSectionStatic();
   }
 
   return renderRpcTable(byRpc);
-}
-
-/**
- * Static fallback: parse GRANT/REVOKE lines from migration SQL files
- * to build the RPC → grantee map without needing a live DB query.
- * Also detects SECURITY DEFINER functions.
- */
-function buildRpcSectionStatic() {
-  const migrationsDir = resolve(__dirname, '../supabase/migrations');
-  let files;
-  try {
-    files = readdirSync(migrationsDir)
-      .filter((f) => f.endsWith('.sql'))
-      .sort()
-      .map((f) => readFileSync(resolve(migrationsDir, f), 'utf8'));
-  } catch {
-    return '_Could not determine RPC privileges._\n';
-  }
-
-  const INTERNAL_RPCS = new Set([
-    'get_my_role',
-    'get_my_region_id',
-    'handle_new_user',
-    'get_rls_policies',
-    'get_admin_users',
-    'custom_access_token_hook',
-    'set_updated_at',
-  ]);
-
-  // Track: rpcName → { grantees: Set<string>, securityDefiner: boolean }
-  const grants = {};
-
-  for (const sql of files) {
-    // Find each public function declaration and look for SECURITY DEFINER
-    // and COMMENT ON FUNCTION in the migration SQL.
-    const fnRe = /create\s+or\s+replace\s+function\s+public\.(\w+)\s*\(/gi;
-    let m;
-    while ((m = fnRe.exec(sql)) !== null) {
-      const name = m[1];
-      const window = sql.slice(m.index, m.index + 400);
-      const secDef = /security\s+definer/i.test(window);
-      if (!INTERNAL_RPCS.has(name)) {
-        grants[name] ??= {
-          grantees: new Set(),
-          securityDefiner: false,
-          description: null,
-        };
-        if (secDef) grants[name].securityDefiner = true;
-      }
-    }
-
-    // Extract COMMENT ON FUNCTION descriptions
-    const commentRe =
-      /comment\s+on\s+function\s+public\.(\w+)\s*\([^)]*\)\s+is\s+'((?:[^']|'')+)'/gi;
-    let cm;
-    while ((cm = commentRe.exec(sql)) !== null) {
-      const [, name, rawComment] = cm;
-      if (!INTERNAL_RPCS.has(name) && grants[name]) {
-        // Postgres concatenates adjacent string literals; collapse them and unescape ''
-        grants[name].description = rawComment.replace(/''/g, "'");
-      }
-    }
-
-    // Match GRANT EXECUTE … TO <role>
-    const grantMatches = [
-      ...sql.matchAll(
-        /grant\s+execute\s+on\s+function\s+public\.(\w+)[^;]*to\s+(\w+)/gi
-      ),
-    ];
-    for (const m of grantMatches) {
-      const [, name, grantee] = m;
-      if (!INTERNAL_RPCS.has(name)) {
-        grants[name] ??= { grantees: new Set(), securityDefiner: false };
-        grants[name].grantees.add(grantee);
-      }
-    }
-
-    // Match REVOKE EXECUTE … FROM <role> — remove from set
-    const revokeMatches = [
-      ...sql.matchAll(
-        /revoke\s+execute\s+on\s+function\s+public\.(\w+)[^;]*from\s+(\w+)/gi
-      ),
-    ];
-    for (const m of revokeMatches) {
-      const [, name, grantee] = m;
-      grants[name]?.grantees.delete(grantee);
-    }
-  }
-
-  // Remove internal RPCs that slipped through
-  for (const name of INTERNAL_RPCS) delete grants[name];
-
-  const filtered = Object.fromEntries(
-    Object.entries(grants).filter(([, v]) => v.grantees.size > 0)
-  );
-
-  if (!Object.keys(filtered).length) return '_No application RPCs found._\n';
-
-  // Convert to the shape renderRpcTable expects: name → { grantees, securityDefiner }
-  return (
-    renderRpcTable(filtered) +
-    '\n> ℹ️ Derived from migration GRANT/REVOKE statements.\n'
-  );
 }
 
 function renderRpcTable(byRpc) {
   const GRANTEE_ORDER = ['anon', 'authenticated', 'service_role'];
 
   let md = '| RPC | Callable by | Security | Notes |\n|---|---|:---:| ---|\n';
-  for (const [name, val] of Object.entries(byRpc).sort()) {
-    // val may be a Set (legacy live-DB path) or { grantees, securityDefiner, description }
-    const grantees = val instanceof Set ? val : val.grantees;
-    const secDef = val instanceof Set ? false : val.securityDefiner;
-    const desc = val instanceof Set ? null : val.description;
-
+  for (const [
+    name,
+    { grantees, securityDefiner, description },
+  ] of Object.entries(byRpc).sort()) {
     const cleaned = [...grantees]
       .filter((g) => GRANTEE_ORDER.includes(g))
       .sort((a, b) => GRANTEE_ORDER.indexOf(a) - GRANTEE_ORDER.indexOf(b));
 
-    const secLabel = secDef ? '🔒 DEFINER' : 'INVOKER';
-    md += `| \`${name}\` | ${cleaned.map((g) => `\`${g}\``).join(', ') || '—'} | ${secLabel} | ${desc ?? '—'} |\n`;
+    const secLabel = securityDefiner ? '🔒 DEFINER' : 'INVOKER';
+    md += `| \`${name}\` | ${cleaned.map((g) => `\`${g}\``).join(', ') || '—'} | ${secLabel} | ${description ?? '—'} |\n`;
   }
 
   md += `\n> ℹ️ **Security**: \`INVOKER\` = runs as the calling user (RLS applies normally). \`🔒 DEFINER\` = runs as the function owner, bypassing RLS — used only where a genuine privilege bypass is required (e.g. writing \`deleted_at\` past column-level security).\n`;
@@ -513,7 +402,47 @@ if (error) {
   process.exit(1);
 }
 
-const rpcSection = await buildRpcSection(supabase);
+const rpcSection = await buildRpcSection();
+
+// ---------------------------------------------------------------------------
+// Fetch soft-delete trigger permissions from the live DB.
+// ---------------------------------------------------------------------------
+console.log('Calling get_soft_delete_perms() via service-role RPC…');
+const { data: sdData, error: sdError } = await supabase.rpc(
+  'get_soft_delete_perms'
+);
+if (sdError) {
+  console.error('get_soft_delete_perms() failed.\n', sdError.message);
+  process.exit(1);
+}
+
+// Index by table_name for O(1) lookup in buildMatrixSection.
+const softDeleteByTable = Object.fromEntries(
+  sdData.map((r) => [r.table_name, r])
+);
+
+// Build the soft-delete blurb dynamically from the fetched data.
+function permLabel(perm) {
+  switch ((perm ?? '').toUpperCase()) {
+    case 'ALL':
+      return 'all rows';
+    case 'REGION':
+      return 'rows in own region';
+    case 'OWN':
+      return 'own row only';
+    default:
+      return 'none';
+  }
+}
+
+const softDeleteBlurb = sdData.length
+  ? sdData
+      .map(
+        ({ table_name, admin_perm, super_user_perm, user_perm }) =>
+          `> \`${table_name}\`: admin=${permLabel(admin_perm)}, super_user=${permLabel(super_user_perm)}, user=${permLabel(user_perm)}`
+      )
+      .join('\n')
+  : '> _(no tables with soft-delete trigger)_';
 
 const md = `# RLS Policies
 
@@ -534,13 +463,13 @@ const md = `# RLS Policies
 > **\`pending\` role** — new Google/OAuth sign-ups land here until an admin promotes them to \`user\`.
 > No policies grant \`pending\` any access (identical to \`anon\` at the data layer).
 >
-> **Soft delete** — setting \`deleted_at\` is the standard non-destructive removal path.
-> The DELETE column in the matrix reflects hard-delete RLS only (\`super_admin\` only).
-> All other roles use the \`soft_delete_*\` RPCs to soft-delete records they're permitted to manage.
-> Soft-deleted rows are hidden from \`trails_view\` and excluded by application queries.
-> \`deleted_at\` cannot be set by a direct UPDATE — only via the SECURITY DEFINER soft-delete RPCs.
+> **Soft-D** — the Soft-D column shows who may set \`deleted_at\` via a direct \`UPDATE\`.
+> The \`block_deleted_at_update\` trigger enforces this per-table; the DELETE column reflects hard-delete RLS only.
+> \`super_admin\` always has full soft-delete access. Database-level roles (\`service_role\`, \`postgres\`) bypass the trigger entirely.
+> Per-table permissions (from live DB trigger args):
+${softDeleteBlurb}
 
-${buildMatrixSection(data)}
+${buildMatrixSection(data, softDeleteByTable)}
 ---
 
 ## RPCs

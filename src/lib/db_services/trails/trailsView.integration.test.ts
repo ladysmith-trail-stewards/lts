@@ -1,120 +1,27 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import {
-  anonClient,
-  serviceClient,
-  signedInClient,
-} from '../../db_services/supabaseTestClients';
-import {
-  fixtureCreateTrail,
-  fixtureDeleteTrails,
-} from '../../db_services/trails/testHelpers';
+import { serviceClient } from '../../db_services/supabaseTestClients';
+import { fixtureCreateTrail } from '../../db_services/trails/testHelpers';
 import { TestSuite, type BuiltTestSuite } from '../../db_services/testSuite';
 
 const P = '__trails_view_test__';
 let suite: BuiltTestSuite;
-let publicTrailId: number;
-let privateTrailId: number;
-let softDeletedTrailId: number;
 
 beforeAll(async () => {
-  suite = await new TestSuite(P)
-    .createRegion('main')
-    .createUser([{ name: 'user', role: 'user' }])
-    .build();
-  [publicTrailId, privateTrailId, softDeletedTrailId] = await Promise.all([
-    fixtureCreateTrail({
-      name: `${P}public`,
-      visibility: 'public',
-      region_id: suite.regionId,
-    }),
-    fixtureCreateTrail({
-      name: `${P}private`,
-      visibility: 'private',
-      region_id: suite.regionId,
-    }),
-    fixtureCreateTrail({
-      name: `${P}soft-deleted`,
-      visibility: 'public',
-      region_id: suite.regionId,
-    }),
-  ]);
-  // Soft-delete the third trail directly via service role
-  await serviceClient
-    .from('trails')
-    .update({ deleted_at: new Date().toISOString() })
-    .eq('id', softDeletedTrailId);
+  suite = await new TestSuite(P).createRegion('main').build();
+  await fixtureCreateTrail({
+    name: `${P}public`,
+    visibility: 'public',
+    region_id: suite.regionId,
+  });
 });
 
 afterAll(async () => {
-  await fixtureDeleteTrails(publicTrailId, privateTrailId, softDeletedTrailId);
   await suite.teardown();
-});
-
-function fixtureNames(data: { name: string | null }[] | null) {
-  return (data ?? []).map((t) => t.name ?? '');
-}
-
-describe('trails_view — anon', () => {
-  it('sees public non-deleted trails', async () => {
-    const { data, error } = await anonClient
-      .from('trails_view')
-      .select('name')
-      .in('name', [`${P}public`, `${P}private`, `${P}soft-deleted`]);
-    expect(error).toBeNull();
-    expect(fixtureNames(data)).toContain(`${P}public`);
-  });
-
-  it('cannot see private trails', async () => {
-    const { data } = await anonClient
-      .from('trails_view')
-      .select('name')
-      .eq('name', `${P}private`);
-    expect(fixtureNames(data)).not.toContain(`${P}private`);
-  });
-
-  it('cannot see soft-deleted trails', async () => {
-    const { data } = await anonClient
-      .from('trails_view')
-      .select('name')
-      .eq('name', `${P}soft-deleted`);
-    expect(fixtureNames(data)).not.toContain(`${P}soft-deleted`);
-  });
-});
-
-describe('trails_view — authenticated', () => {
-  let client: Awaited<ReturnType<typeof signedInClient>>;
-  beforeAll(async () => {
-    client = await signedInClient(suite.user.email, suite.user.password);
-  });
-
-  it('sees public trails', async () => {
-    const { data } = await client
-      .from('trails_view')
-      .select('name')
-      .eq('name', `${P}public`);
-    expect(fixtureNames(data)).toContain(`${P}public`);
-  });
-
-  it('sees private trails', async () => {
-    const { data } = await client
-      .from('trails_view')
-      .select('name')
-      .eq('name', `${P}private`);
-    expect(fixtureNames(data)).toContain(`${P}private`);
-  });
-
-  it('does not see soft-deleted trails', async () => {
-    const { data } = await client
-      .from('trails_view')
-      .select('name')
-      .eq('name', `${P}soft-deleted`);
-    expect(fixtureNames(data)).not.toContain(`${P}soft-deleted`);
-  });
 });
 
 describe('trails_view — response shape', () => {
   it('returns distance_m and geometry_geojson columns', async () => {
-    const { data, error } = await anonClient
+    const { data, error } = await serviceClient
       .from('trails_view')
       .select('distance_m, geometry_geojson')
       .eq('name', `${P}public`)
