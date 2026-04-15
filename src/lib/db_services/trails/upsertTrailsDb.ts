@@ -1,6 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, TablesInsert } from '@/lib/supabase/database.types';
 import { toJson } from '@/lib/utils';
+import { StaleSessionError } from '@/lib/db_services/errors';
+
+export { StaleSessionError } from '@/lib/db_services/errors';
 
 type TrailInsert = TablesInsert<'trails'>;
 
@@ -43,6 +46,10 @@ export interface UpsertTrailsDbResult {
  * per-row in `results`.  RLS / permission errors abort the entire batch and
  * surface as a top-level `error` (results will be empty).
  * RLS enforced server-side (caller must be admin / super_user / super_admin).
+ *
+ * Throws `StaleSessionError` when the DB detects a stale JWT role claim.
+ * Callers should catch this, call supabase.auth.refreshSession(), and handle
+ * the resulting SIGNED_OUT event (which AuthContext already redirects to /login).
  */
 export async function upsertTrailsDb(
   client: SupabaseClient<Database>,
@@ -55,6 +62,9 @@ export async function upsertTrailsDb(
   });
 
   if (error) {
+    if (error.code === 'P0001' && error.message.startsWith('stale_jwt:')) {
+      throw new StaleSessionError();
+    }
     return {
       results: [],
       allOk: false,

@@ -41,7 +41,7 @@
 | Anon        |   ✅   |   —    |   —    |   —    |
 | User        |   ✅   |   —    |   —    |   —    |
 | Super User  |   ✅   |   —    |   —    |   —    |
-| Admin       |   ✅   |   —    |   ✅   |   —    |
+| Admin       |   ✅   |   —    |   📍   |   —    |
 | Super Admin |   ✅   |   ✅   |   ✅   |   ✅   |
 
 ### `trail_elevations`
@@ -58,7 +58,7 @@
 
 | Role        | SELECT | INSERT | UPDATE | DELETE | Soft-D |
 | ----------- | :----: | :----: | :----: | :----: | :----: |
-| Anon        |   —    |   —    |   —    |   —    |   —    |
+| Anon        |   ✅   |   —    |   —    |   —    |   —    |
 | User        |   ✅   |   —    |   —    |   —    |   —    |
 | Super User  |   ✅   |   📍   |   📍   |   —    |   📍   |
 | Admin       |   ✅   |   📍   |   📍   |   —    |   📍   |
@@ -68,11 +68,13 @@
 
 ## RPCs
 
-| RPC               | Callable by                             |  Security  | Notes                                                                                                                                                                                                                                                                                                             |
-| ----------------- | --------------------------------------- | :--------: | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `accept_policy`   | `anon`, `authenticated`, `service_role` | 🔒 DEFINER | Sets policy_accepted_at = now() and region_id = p_region_id for the calling pending user. Raises if the caller is not pending, has already accepted, or p_region_id is not a valid non-default region. SECURITY DEFINER — bypasses column-level UPDATE restrictions on policy_accepted_at.                        |
-| `set_region_bbox` | `authenticated`, `service_role`         |  INVOKER   | Sets the bbox Polygon on a region from four required WGS84 scalar coordinates. All coordinates must be non-null and form a valid non-degenerate envelope (min_lng < max_lng, min_lat < max_lat, within WGS84 bounds). SECURITY INVOKER — RLS on public.regions is enforced: admin and super_admin may set a bbox. |
-| `upsert_trails`   | `anon`, `authenticated`, `service_role` |  INVOKER   | —                                                                                                                                                                                                                                                                                                                 |
+| RPC                            | Callable by                             |  Security  | Notes                                                                                                                                                                                                                                                                                                             |
+| ------------------------------ | --------------------------------------- | :--------: | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `accept_policy`                | `anon`, `authenticated`, `service_role` | 🔒 DEFINER | Sets policy_accepted_at = now() and region_id = p_region_id for the calling pending user. Raises if the caller is not pending, has already accepted, or p_region_id is not a valid non-default region. SECURITY DEFINER — bypasses column-level UPDATE restrictions on policy_accepted_at.                        |
+| `assert_data_write_permission` | `authenticated`, `service_role`         | 🔒 DEFINER | Live-role guard for trail writes. Returns TRUE on success; raises on failure. Call from RLS policies as: (public.assert_data_write_permission(region_id) = true). Also callable as a direct RPC for pre-flight checks. Raises stale_jwt if the JWT role differs from the live profile role.                       |
+| `change_user_role`             | `authenticated`, `service_role`         | 🔒 DEFINER | —                                                                                                                                                                                                                                                                                                                 |
+| `set_region_bbox`              | `authenticated`, `service_role`         |  INVOKER   | Sets the bbox Polygon on a region from four required WGS84 scalar coordinates. All coordinates must be non-null and form a valid non-degenerate envelope (min_lng < max_lng, min_lat < max_lat, within WGS84 bounds). SECURITY INVOKER — RLS on public.regions is enforced: admin and super_admin may set a bbox. |
+| `upsert_trails`                | `anon`, `authenticated`, `service_role` |  INVOKER   | —                                                                                                                                                                                                                                                                                                                 |
 
 > ℹ️ **Security**: `INVOKER` = runs as the calling user (RLS applies normally). `🔒 DEFINER` = runs as the function owner, bypassing RLS — used only where a genuine privilege bypass is required (e.g. writing `deleted_at` past column-level security).
 > ℹ️ `authenticated` = any signed-in user. Individual RPCs may enforce additional role checks internally via `auth.jwt()` claims.

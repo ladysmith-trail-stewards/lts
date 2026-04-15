@@ -6,9 +6,11 @@ import {
 } from '@/lib/db_services/trails/getTrailsDb';
 import {
   upsertTrailsDb,
+  StaleSessionError,
   type TrailFeature,
 } from '@/lib/db_services/trails/upsertTrailsDb';
 import { deleteTrailsDb } from '@/lib/db_services/trails/deleteTrailsDb';
+import { useAuth } from '@/contexts/AuthContext';
 
 export type Trail = Omit<TrailRow, 'geometry_geojson'> & {
   /** GeoJSON LineString geometry, typed narrowly for map consumers. */
@@ -29,6 +31,7 @@ type State = {
  * RLS is enforced server-side — results reflect the caller's access level.
  */
 export function useTrails(opts: { hidden?: boolean } = {}) {
+  const { handleStaleSession } = useAuth();
   const [state, setState] = useState<State>({
     trails: [],
     loading: true,
@@ -77,7 +80,15 @@ export function useTrails(opts: { hidden?: boolean } = {}) {
    */
   const saveTrail = useCallback(
     async (feature: TrailFeature): Promise<Trail> => {
-      const { results, allOk, error } = await upsertTrailsDb(supabase, feature);
+      let results, allOk, error;
+      try {
+        ({ results, allOk, error } = await upsertTrailsDb(supabase, feature));
+      } catch (err) {
+        if (err instanceof StaleSessionError) {
+          await handleStaleSession(err);
+        }
+        throw err;
+      }
 
       if (error || !allOk) {
         throw new Error(
@@ -104,7 +115,7 @@ export function useTrails(opts: { hidden?: boolean } = {}) {
 
       return saved;
     },
-    []
+    [handleStaleSession]
   );
 
   /**

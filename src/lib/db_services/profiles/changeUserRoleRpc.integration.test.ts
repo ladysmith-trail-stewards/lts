@@ -135,7 +135,7 @@ describe('change_user_role — super_admin', () => {
 });
 
 // ---------------------------------------------------------------------------
-// admin — region-scoped, cannot promote to admin+
+// admin — region-scoped, cannot promote to super_admin
 // ---------------------------------------------------------------------------
 
 describe('change_user_role — admin', () => {
@@ -147,24 +147,30 @@ describe('change_user_role — admin', () => {
 
   it('can change a pending user in own region to user', async () => {
     const target = suite.pending;
-    const originalRole = await getRole(target.profileId);
     const { error } = await callRpc(client, target.profileId, 'user');
     expect(error).toBeNull();
     expect(await getRole(target.profileId)).toBe('user');
     // restore
     await serviceClient
       .from('profiles')
-      .update({ role: originalRole })
+      .update({ role: 'pending' })
+      .eq('id', target.profileId);
+  });
+
+  it('can promote to admin in own region', async () => {
+    const target = suite.superUser;
+    const { error } = await callRpc(client, target.profileId, 'admin');
+    expect(error).toBeNull();
+    expect(await getRole(target.profileId)).toBe('admin');
+    // restore
+    await serviceClient
+      .from('profiles')
+      .update({ role: 'super_user' })
       .eq('id', target.profileId);
   });
 
   it('cannot change a profile in a different region', async () => {
     const { error } = await callRpc(client, suiteB.user.profileId, 'pending');
-    expect(error).not.toBeNull();
-  });
-
-  it('cannot promote to admin', async () => {
-    const { error } = await callRpc(client, suite.user.profileId, 'admin');
     expect(error).not.toBeNull();
   });
 

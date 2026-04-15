@@ -2,12 +2,12 @@
 --
 -- SECURITY DEFINER RPC that updates profiles.role and immediately revokes the
 -- affected user's Supabase sessions via the Admin API (pg_net), forcing a
--- clean re-login with fresh JWT claims.
+-- clean re-login with correct JWT claims.
 --
 -- Permission model:
 --   super_admin  — may change any profile to any role.
 --   admin        — may only change profiles in their own region;
---                  may not promote to admin or super_admin.
+--                  may not promote to super_admin.
 --   all others   — raises insufficient_privilege.
 --
 -- The pg_net sign-out call is fire-and-forget: if it fails the role update is
@@ -15,7 +15,7 @@
 --
 -- Required custom config (Supabase dashboard → Project Settings → Database →
 -- Configuration → Custom config):
---   app.settings.supabase_url             — e.g. https://xxxx.supabase.co
+--   app.settings.supabase_url              — e.g. https://xxxx.supabase.co
 --   app.settings.supabase_service_role_key — the service_role JWT
 
 create or replace function public.change_user_role(
@@ -59,7 +59,7 @@ begin
         using errcode = 'insufficient_privilege';
     end if;
 
-    if new_role in ('admin', 'super_admin') then
+    if new_role = 'super_admin' then
       raise exception 'insufficient_privilege'
         using errcode = 'insufficient_privilege';
     end if;
