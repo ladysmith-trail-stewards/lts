@@ -435,6 +435,20 @@ export type Database = {
             };
             Returns: string;
           };
+      assert_data_write_permission: {
+        Args: { p_region_id?: number };
+        Returns: boolean;
+      };
+      change_user_role: {
+        Args: {
+          new_role: Database['public']['Enums']['app_role'];
+          target_profile_id: number;
+        };
+        Returns: {
+          id: number;
+          role: Database['public']['Enums']['app_role'];
+        }[];
+      };
       custom_access_token_hook: { Args: { event: Json }; Returns: Json };
       disablelongtransactions: { Args: never; Returns: string };
       dropgeometrycolumn:

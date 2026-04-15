@@ -1,7 +1,16 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+} from 'react';
 import type { User } from '@supabase/supabase-js';
+import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase/client';
 import type { Database } from '@/lib/supabase/database.types';
+import { StaleSessionError } from '@/lib/db_services/errors';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -20,6 +29,12 @@ export interface AuthState {
    *  `policy_accepted` JWT claim stamped by custom_access_token_hook. */
   policyAccepted: boolean;
   loading: boolean;
+  /**
+   * Call when a DB write returns a StaleSessionError (errcode: stale_jwt).
+   * Shows a warning toast, signs the user out, and lets RequireAuth redirect
+   * to /login via the SIGNED_OUT auth event. Re-throws so callers can bail out.
+   */
+  handleStaleSession: (err: unknown) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthState>({
@@ -30,11 +45,13 @@ const AuthContext = createContext<AuthState>({
   isSuperAdmin: false,
   policyAccepted: false,
   loading: true,
+  handleStaleSession: async () => {},
 });
 
 // ── Provider ──────────────────────────────────────────────────────────────────
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const navigate = useNavigate();
   const [user, setUser] = useState<User | null | undefined>(undefined);
   const [role, setRole] = useState<AppRole | null>(null);
   const [regionId, setRegionId] = useState<number | null>(null);
@@ -44,6 +61,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   /** isAdmin is derived from role — no separate state needed. */
   const isAdmin = role === 'admin' || role === 'super_admin';
   const isSuperAdmin = role === 'super_admin';
+
+  /**
+   * Handles a StaleSessionError from a DB write.
+   * Shows a toast, signs the user out, then redirects to /login via the
+   * SIGNED_OUT auth event (RequireAuth handles the redirect).
+   * Re-throws so callers can bail out of their current operation.
+   */
+  const handleStaleSession = useCallback(
+    async (err: unknown): Promise<void> => {
+      if (err instanceof StaleSessionError) {
+        toast.warning('Your session is out of date — please log in again.', {
+          id: 'stale-session',
+          duration: 5000,
+        });
+        await supabase.auth.signOut();
+        navigate('/login', { replace: true });
+      }
+      throw err;
+    },
+    [navigate]
+  );
 
   /**
    * Apply claims from a JWT payload to context state.
@@ -121,6 +159,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isSuperAdmin,
         policyAccepted,
         loading,
+        handleStaleSession,
       }}
     >
       {children}

@@ -4,6 +4,7 @@ import {
   serviceClient,
 } from '../../db_services/supabaseTestClients';
 import { TestSuite, type BuiltTestSuite } from '../../db_services/testSuite';
+import { SAMPLE_GEOMETRY } from '../../db_services/trails/testHelpers';
 
 const P = '__jwt_claims_test__';
 
@@ -160,5 +161,89 @@ describe('JWT claims — soft-deleted profile fallback', () => {
     await serviceClient.auth.admin.deleteUser(authUserId);
 
     expect(payload.user_role).toBe('pending');
+  });
+});
+
+describe('stale JWT — write rejected after role downgrade', () => {
+  /**
+   * Simulates the real-world scenario where an admin downgrades a user's role
+   * but that user still holds a valid JWT with the old (higher) role claim.
+   *
+   * The DB must reject the write with P0001 / 'stale_jwt:' so the client can
+   * detect it, refresh the session, and redirect to login if revoked.
+   */
+
+  it('trail INSERT with stale super_admin JWT returns P0001 stale_jwt error', async () => {
+    // Sign in as super_admin — JWT now contains user_role = 'super_admin'.
+    const client = await signedInClient(
+      suite.superAdmin.email,
+      suite.superAdmin.password
+    );
+
+    // Downgrade the live profile role behind the user's back (no token refresh).
+    await serviceClient
+      .from('profiles')
+      .update({ role: 'user' })
+      .eq('auth_user_id', suite.superAdmin.authUserId);
+
+    try {
+      const { error } = await client.from('trails').insert({
+        name: `${P}stale_jwt_trail`,
+        type: 'trail',
+        visibility: 'public',
+        region_id: suite.regionId,
+        geometry: SAMPLE_GEOMETRY as unknown as string,
+      });
+
+      expect(error, 'expected an error but got none').not.toBeNull();
+      expect(error!.code).toBe('P0001');
+      expect(error!.message).toMatch(/^stale_jwt:/);
+    } finally {
+      // Always restore the role so other tests in the suite are unaffected.
+      await serviceClient
+        .from('profiles')
+        .update({ role: 'super_admin' })
+        .eq('auth_user_id', suite.superAdmin.authUserId);
+    }
+  });
+
+  it('trail INSERT succeeds after session is refreshed to reflect new role', async () => {
+    // Downgrade to super_user so they still have write access after refresh.
+    await serviceClient
+      .from('profiles')
+      .update({ role: 'super_user' })
+      .eq('auth_user_id', suite.superAdmin.authUserId);
+
+    try {
+      // Fresh sign-in — new JWT reflects the live role.
+      const freshClient = await signedInClient(
+        suite.superAdmin.email,
+        suite.superAdmin.password
+      );
+
+      const { data: session } = await freshClient.auth.getSession();
+      const payload = decodeJwtPayload(session.session!.access_token);
+      expect(payload.user_role).toBe('super_user');
+
+      const { error } = await freshClient.from('trails').insert({
+        name: `${P}refreshed_jwt_trail`,
+        type: 'trail',
+        visibility: 'public',
+        region_id: suite.regionId,
+        geometry: SAMPLE_GEOMETRY as unknown as string,
+      });
+
+      expect(
+        error,
+        `unexpected error after refresh: ${error?.message}`
+      ).toBeNull();
+    } finally {
+      // Restore super_admin role and clean up the inserted trail.
+      await serviceClient
+        .from('profiles')
+        .update({ role: 'super_admin' })
+        .eq('auth_user_id', suite.superAdmin.authUserId);
+      await serviceClient.from('trails').delete().like('name', `${P}%`);
+    }
   });
 });

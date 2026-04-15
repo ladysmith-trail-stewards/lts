@@ -115,9 +115,20 @@ function inferRoles(policy_name, using_expr, check_expr) {
   // Policy applies to all roles (using (true) or no role restriction)
   if (expr.trim() === 'true') return ['all'];
 
-  // auth.role() = 'authenticated' → every signed-in role
+  // auth.role() = 'authenticated' → every signed-in role.
+  // But if the expression is an OR with a non-role-gated branch (e.g.
+  // `deleted_at is null and visibility = 'public'`), anon can satisfy that
+  // branch too — so the policy covers all roles.
   if (expr.includes("'authenticated'") && expr.includes('auth.role()')) {
-    return ['authenticated'];
+    // Heuristic: if there's an OR and the expression has content that isn't
+    // purely an auth.role() check, assume anon can reach the other branch.
+    const hasOpenBranch =
+      expr.includes(' or ') &&
+      !expr
+        .replace(/\(select auth\.role\(\)\)\s*=\s*'authenticated'/g, '')
+        .trim()
+        .startsWith('or');
+    return hasOpenBranch ? ['all'] : ['authenticated'];
   }
 
   // Collect roles mentioned in JWT claim checks or policy names.
@@ -140,6 +151,14 @@ function inferRoles(policy_name, using_expr, check_expr) {
   // auth.uid() only → own-row policy, applies to all authenticated users
   if (expr.includes('auth.uid()')) return ['authenticated'];
 
+  // assert_data_write_permission() — SECURITY DEFINER guard that permits
+  // super_admin (global), admin and super_user (region-scoped), and denies
+  // all others. Return the three permitted roles so the matrix renders
+  // correctly without needing JWT role strings in the expression.
+  if (expr.includes('assert_data_write_permission')) {
+    return ['super_admin', 'admin', 'super_user'];
+  }
+
   return ['anon'];
 }
 
@@ -156,6 +175,14 @@ function inferRoles(policy_name, using_expr, check_expr) {
  */
 function isRegionScopedForRole(using_expr, check_expr, role) {
   const expr = `${using_expr ?? ''} ${check_expr ?? ''}`;
+
+  // assert_data_write_permission enforces region scoping internally for
+  // admin and super_user; super_admin always has global access.
+  if (expr.includes('assert_data_write_permission')) {
+    if (role === 'super_admin') return false;
+    if (role === 'admin' || role === 'super_user') return true;
+  }
+
   if (!expr.includes("'region_id'") && !expr.includes('get_my_region_id')) {
     return false;
   }
