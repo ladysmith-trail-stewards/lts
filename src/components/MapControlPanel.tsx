@@ -12,6 +12,12 @@ interface MapControlPanelProps {
   onStyleChange: (style: StyleKey) => void;
   onContourStrength: (value: number) => void;
   onAddTrail: () => void;
+  showGeneralPoints: boolean;
+  showGeneralLines: boolean;
+  showGeneralPolygons: boolean;
+  onToggleGeneralPoints: (next: boolean) => void;
+  onToggleGeneralLines: (next: boolean) => void;
+  onToggleGeneralPolygons: (next: boolean) => void;
 }
 
 export default function MapControlPanel({
@@ -25,6 +31,12 @@ export default function MapControlPanel({
   onStyleChange,
   onContourStrength,
   onAddTrail,
+  showGeneralPoints,
+  showGeneralLines,
+  showGeneralPolygons,
+  onToggleGeneralPoints,
+  onToggleGeneralLines,
+  onToggleGeneralPolygons,
 }: MapControlPanelProps) {
   return (
     <div className="bg-white rounded-lg shadow-lg border border-gray-200 p-3 min-w-[150px] space-y-3">
@@ -69,6 +81,39 @@ export default function MapControlPanel({
           )}
         </div>
       )}
+
+      <div className="border-t pt-3 space-y-1.5">
+        <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
+          Other Data
+        </h3>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={showGeneralPoints}
+            onChange={(e) => onToggleGeneralPoints(e.target.checked)}
+            className="w-3.5 h-3.5 text-green-600 focus:ring-green-500"
+          />
+          <span className="text-sm text-slate-700">Points</span>
+        </label>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={showGeneralLines}
+            onChange={(e) => onToggleGeneralLines(e.target.checked)}
+            className="w-3.5 h-3.5 text-green-600 focus:ring-green-500"
+          />
+          <span className="text-sm text-slate-700">Lines</span>
+        </label>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={showGeneralPolygons}
+            onChange={(e) => onToggleGeneralPolygons(e.target.checked)}
+            className="w-3.5 h-3.5 text-green-600 focus:ring-green-500"
+          />
+          <span className="text-sm text-slate-700">Polygons</span>
+        </label>
+      </div>
 
       {/* Contour controls */}
       <div className="border-t pt-3">

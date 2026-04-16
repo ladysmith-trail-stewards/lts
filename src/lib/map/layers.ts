@@ -2,6 +2,7 @@ import type {
   LineLayerSpecification,
   SymbolLayerSpecification,
   CircleLayerSpecification,
+  FillLayerSpecification,
   ExpressionSpecification,
   FilterSpecification,
 } from 'mapbox-gl';
@@ -13,6 +14,10 @@ import {
   TRAILS_ENDPOINTS,
   TRAILS_START,
   TRAILS_END,
+  GENERAL_GEOM_SOURCE,
+  GENERAL_GEOM_POINTS,
+  GENERAL_GEOM_LINES,
+  GENERAL_GEOM_POLYGONS,
 } from '@/lib/map/config';
 
 // ── Trail expressions ─────────────────────────────────────────────────────────
@@ -190,5 +195,62 @@ export const TRAILS_END_CONFIG: Omit<CircleLayerSpecification, 'id'> & {
     'circle-stroke-color': '#fff',
     'circle-stroke-width': 1.5,
     'circle-opacity': 0.9,
+  },
+};
+
+export const GENERAL_GEOM_POINTS_CONFIG: Omit<
+  CircleLayerSpecification,
+  'id'
+> & {
+  id: string;
+} = {
+  id: GENERAL_GEOM_POINTS,
+  type: 'circle',
+  source: GENERAL_GEOM_SOURCE,
+  slot: 'top',
+  filter: ['==', ['get', 'geometry_group'], 'Point'],
+  paint: {
+    'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 3, 16, 7],
+    'circle-color': '#2563eb',
+    'circle-stroke-color': '#ffffff',
+    'circle-stroke-width': 1.25,
+    'circle-opacity': 0.9,
+  },
+};
+
+export const GENERAL_GEOM_LINES_CONFIG: Omit<LineLayerSpecification, 'id'> & {
+  id: string;
+} = {
+  id: GENERAL_GEOM_LINES,
+  type: 'line',
+  source: GENERAL_GEOM_SOURCE,
+  slot: 'middle',
+  filter: ['==', ['get', 'geometry_group'], 'LineString'],
+  layout: {
+    'line-join': 'round',
+    'line-cap': 'round',
+  },
+  paint: {
+    'line-color': '#1d4ed8',
+    'line-width': 2.5,
+    'line-opacity': 0.9,
+  },
+};
+
+export const GENERAL_GEOM_POLYGONS_CONFIG: Omit<
+  FillLayerSpecification,
+  'id'
+> & {
+  id: string;
+} = {
+  id: GENERAL_GEOM_POLYGONS,
+  type: 'fill',
+  source: GENERAL_GEOM_SOURCE,
+  slot: 'middle',
+  filter: ['==', ['get', 'geometry_group'], 'Polygon'],
+  paint: {
+    'fill-color': '#16a34a',
+    'fill-opacity': 0.25,
+    'fill-outline-color': '#15803d',
   },
 };

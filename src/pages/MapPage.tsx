@@ -3,9 +3,11 @@ import mapboxgl from 'mapbox-gl';
 import { useSearchParams } from 'react-router-dom';
 import { useMapbox } from '@/hooks/useMapbox';
 import { useTrails } from '@/hooks/useTrails';
+import { useGeneralGeom } from '@/hooks/useGeneralGeom';
 import { useAuth } from '@/contexts/AuthContext';
 import MapControlPanel from '@/components/MapControlPanel';
 import TrailDetailDrawer from '@/components/TrailDetailDrawer';
+import { useState } from 'react';
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN as
   | string
@@ -53,6 +55,14 @@ function MapPageInner() {
     saveTrail,
     deleteTrail,
   } = useTrails();
+  const {
+    features: generalGeom,
+    error: generalGeomError,
+    loading: generalGeomLoading,
+  } = useGeneralGeom();
+  const [showGeneralPoints, setShowGeneralPoints] = useState(true);
+  const [showGeneralLines, setShowGeneralLines] = useState(true);
+  const [showGeneralPolygons, setShowGeneralPolygons] = useState(true);
 
   // ── Map ───────────────────────────────────────────────────────────────────────
 
@@ -70,6 +80,12 @@ function MapPageInner() {
     setElevationHoverPoint,
   } = useMapbox({
     trails,
+    generalGeom,
+    generalGeomVisibility: {
+      points: showGeneralPoints,
+      lines: showGeneralLines,
+      polygons: showGeneralPolygons,
+    },
     selectedTrailId,
     searchParams,
     setSearchParams,
@@ -113,6 +129,12 @@ function MapPageInner() {
         </div>
       )}
 
+      {generalGeomError && (
+        <div className="absolute bottom-14 left-1/2 -translate-x-1/2 z-10 bg-red-50 border border-red-200 rounded-full px-4 py-1.5 text-xs text-red-700 shadow">
+          Failed to load other geometry: {generalGeomError}
+        </div>
+      )}
+
       <div className="absolute top-4 left-4 z-10">
         <MapControlPanel
           currentStyle={currentStyle}
@@ -122,8 +144,14 @@ function MapPageInner() {
           trailsError={trailsError}
           canEdit={canEdit}
           isEditing={drawApi.isEditing}
+          showGeneralPoints={showGeneralPoints}
+          showGeneralLines={showGeneralLines}
+          showGeneralPolygons={showGeneralPolygons}
           onStyleChange={handleStyleChange}
           onContourStrength={handleContourStrength}
+          onToggleGeneralPoints={setShowGeneralPoints}
+          onToggleGeneralLines={setShowGeneralLines}
+          onToggleGeneralPolygons={setShowGeneralPolygons}
           onAddTrail={() =>
             setSearchParams((prev) => {
               const next = new URLSearchParams(prev);
@@ -133,6 +161,12 @@ function MapPageInner() {
           }
         />
       </div>
+
+      {generalGeomLoading && (
+        <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-10 bg-white/90 rounded-full px-4 py-1.5 text-xs text-slate-600 shadow">
+          Loading other geometry…
+        </div>
+      )}
 
       <TrailDetailDrawer
         trails={trails}

@@ -23,6 +23,10 @@ export const CONTOUR_SOURCE = 'mapbox-terrain';
 export const CONTOUR_LAYER = 'contour-lines';
 export const CONTOUR_LABEL = 'contour-labels';
 export const DEM_SOURCE = 'mapbox-dem';
+export const GENERAL_GEOM_SOURCE = 'general-geom';
+export const GENERAL_GEOM_POINTS = 'general-geom-points';
+export const GENERAL_GEOM_LINES = 'general-geom-lines';
+export const GENERAL_GEOM_POLYGONS = 'general-geom-polygons';
 
 // ── Elevation profile hover marker ────────────────────────────────────────────
 
