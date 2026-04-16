@@ -5,8 +5,7 @@ export interface GeneralGeomCollectionImportInput {
   label: string;
   description?: string | null;
   visibility: 'public' | 'private' | 'shared';
-  region_id: number;
-  geom_type: string;
+  feature_collection_type: string;
   style?: Record<string, unknown>;
 }
 
@@ -36,7 +35,6 @@ export async function importGeneralGeomCollectionDb(
   client: SupabaseClient<Database>,
   args: {
     collection: GeneralGeomCollectionImportInput;
-    mapper: GeneralGeomFeatureImportMapper;
     features: GeoJSON.Feature[];
     sourceEpsg?: number;
   }
@@ -55,7 +53,6 @@ export async function importGeneralGeomCollectionDb(
 
   const { data, error } = await rpc('import_general_geom_collection', {
     p_collection: args.collection,
-    p_mapper: args.mapper,
     p_features: args.features,
     p_source_epsg: args.sourceEpsg ?? 4326,
   });

@@ -7,7 +7,6 @@ import { useGeneralGeom } from '@/hooks/useGeneralGeom';
 import { useAuth } from '@/contexts/AuthContext';
 import MapControlPanel from '@/components/MapControlPanel';
 import TrailDetailDrawer from '@/components/TrailDetailDrawer';
-import { useState } from 'react';
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN as
   | string
@@ -57,12 +56,13 @@ function MapPageInner() {
   } = useTrails();
   const {
     features: generalGeom,
+    collections: generalCollections,
+    visibleCollectionIds,
+    visibleCollectionIdSet,
+    setCollectionVisible,
     error: generalGeomError,
     loading: generalGeomLoading,
   } = useGeneralGeom();
-  const [showGeneralPoints, setShowGeneralPoints] = useState(true);
-  const [showGeneralLines, setShowGeneralLines] = useState(true);
-  const [showGeneralPolygons, setShowGeneralPolygons] = useState(true);
 
   // ── Map ───────────────────────────────────────────────────────────────────────
 
@@ -81,11 +81,7 @@ function MapPageInner() {
   } = useMapbox({
     trails,
     generalGeom,
-    generalGeomVisibility: {
-      points: showGeneralPoints,
-      lines: showGeneralLines,
-      polygons: showGeneralPolygons,
-    },
+    visibleGeneralGeomCollectionIds: visibleCollectionIdSet,
     selectedTrailId,
     searchParams,
     setSearchParams,
@@ -144,14 +140,11 @@ function MapPageInner() {
           trailsError={trailsError}
           canEdit={canEdit}
           isEditing={drawApi.isEditing}
-          showGeneralPoints={showGeneralPoints}
-          showGeneralLines={showGeneralLines}
-          showGeneralPolygons={showGeneralPolygons}
+          generalCollections={generalCollections}
+          visibleCollectionIds={visibleCollectionIds}
           onStyleChange={handleStyleChange}
           onContourStrength={handleContourStrength}
-          onToggleGeneralPoints={setShowGeneralPoints}
-          onToggleGeneralLines={setShowGeneralLines}
-          onToggleGeneralPolygons={setShowGeneralPolygons}
+          onToggleCollectionVisibility={setCollectionVisible}
           onAddTrail={() =>
             setSearchParams((prev) => {
               const next = new URLSearchParams(prev);

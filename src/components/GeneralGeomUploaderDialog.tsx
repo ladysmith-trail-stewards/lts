@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import {
   FileUploadIcon,
@@ -16,10 +16,6 @@ import {
   type UploaderConfig,
   type RawFeature,
 } from '@/lib/geoUploader';
-import {
-  getRegionsDb,
-  type RegionRecord,
-} from '@/lib/db_services/regions/getRegionsDb';
 import {
   importGeneralGeomCollectionDb,
   type GeneralGeomFeatureImportMapper,
@@ -49,16 +45,24 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
+import GeneralGeomMapperSection from '@/components/GeneralGeomMapperSection';
 
 type UploadStatus = 'idle' | 'parsing' | 'review' | 'uploading' | 'done';
 
 type GeneralGeomRecord = GeoJSON.Feature;
 
+type MappedUploadFeature = {
+  key: string;
+  collectionLabelBase: string;
+  geomType: string;
+  feature: GeoJSON.Feature;
+};
+
 const baseConfig: UploaderConfig<GeneralGeomRecord> = {
   title: 'Upload General Geometry',
   formats: ['geojson', 'gpx', 'kml'],
   geometryType: 'Any',
-  regionBased: true,
+  regionBased: false,
   noun: 'feature',
   mapFeature: (raw: RawFeature) => {
     const label =
@@ -78,6 +82,8 @@ const baseConfig: UploaderConfig<GeneralGeomRecord> = {
   submit: async () => [],
 };
 
+const VISIBILITY_VALUES = new Set(['public', 'private', 'shared']);
+
 export interface GeneralGeomUploaderDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -92,11 +98,11 @@ export default function GeneralGeomUploaderDialog({
   const [status, setStatus] = useState<UploadStatus>('idle');
   const [pending, setPending] = useState<PendingItem<GeneralGeomRecord>[]>([]);
   const [warnings, setWarnings] = useState<string[]>([]);
-  const [regions, setRegions] = useState<RegionRecord[]>([]);
-  const [regionId, setRegionId] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [epsg, setEpsg] = useState(4326);
-  const [collectionLabel, setCollectionLabel] = useState('Imported Geometry');
+  const [collectionLabelField, setCollectionLabelField] = useState('');
+  const [collectionLabelFallback, setCollectionLabelFallback] =
+    useState('Imported Geometry');
   const [collectionDescription, setCollectionDescription] = useState('');
   const [collectionVisibility, setCollectionVisibility] = useState<
     'public' | 'private' | 'shared'
@@ -105,12 +111,6 @@ export default function GeneralGeomUploaderDialog({
     DEFAULT_GENERAL_GEOM_MAPPER
   );
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    getRegionsDb(supabase).then(({ data }) => {
-      if (data) setRegions(data);
-    });
-  }, []);
 
   const mapperFields = useMemo(() => {
     return listMapperFields(
@@ -129,19 +129,17 @@ export default function GeneralGeomUploaderDialog({
       setStatus('parsing');
       setWarnings([]);
 
-      const selectedRegion = regions.find((r) => r.id === regionId);
-      const effectiveConfig = selectedRegion?.bbox
-        ? { ...baseConfig, boundingBox: selectedRegion.bbox }
-        : baseConfig;
-
-      const { items, warnings: w } = await parseFiles(
+      const { items, warnings: fileWarnings } = await parseFiles(
         fileArray,
-        effectiveConfig,
-        regionId
+        baseConfig,
+        null
       );
 
       if (items.length === 0) {
-        setWarnings([...w, 'No valid geometries found in uploaded files.']);
+        setWarnings([
+          ...fileWarnings,
+          'No valid geometries found in uploaded files.',
+        ]);
         setStatus('idle');
         return;
       }
@@ -159,59 +157,76 @@ export default function GeneralGeomUploaderDialog({
       });
 
       setPending(mappedItems);
-      setWarnings(w);
+      setWarnings(fileWarnings);
       setStatus('review');
     },
-    [mapper, regionId, regions]
+    [mapper]
   );
 
   const handleUpload = useCallback(async () => {
-    if (regionId === null) {
-      toast.error('Please select a region before uploading.');
+    if (!collectionLabelFallback.trim() && !collectionLabelField.trim()) {
+      toast.error(
+        'Collection label fallback is required when no collection label field is set.'
+      );
       return;
     }
 
-    if (!collectionLabel.trim()) {
-      toast.error('Collection label is required.');
+    const mapped = mapPendingFeatures({
+      pending,
+      mapper,
+      collectionLabelField,
+      collectionLabelFallback,
+    });
+
+    if (!mapped.ok) {
+      setWarnings(mapped.errors);
+      toast.error(
+        'Mapped data is missing required values. Fix mapping and try again.'
+      );
+      setStatus('review');
       return;
     }
 
     setStatus('uploading');
 
-    const byGeomType = new Map<string, PendingItem<GeneralGeomRecord>[]>();
-
-    for (const item of pending) {
-      const kind = geometryGroup(item.record.geometry.type);
-      const existing = byGeomType.get(kind) ?? [];
-      existing.push(item);
-      byGeomType.set(kind, existing);
-    }
-
-    let totalSuccess = 0;
     const resultByKey = new Map<
       string,
       { ok: boolean; message: string | null }
     >();
+    let totalSuccess = 0;
 
-    for (const [geomType, items] of byGeomType.entries()) {
-      const features = items.map((item) => ({
-        ...item.record,
-        properties: {
-          ...(item.record.properties ?? {}),
-          [mapper.label.field]: item.label,
-        },
-      }));
+    const byCollectionLabel = new Map<string, Set<string>>();
+    for (const item of mapped.items) {
+      const existing =
+        byCollectionLabel.get(item.collectionLabelBase) ?? new Set<string>();
+      existing.add(item.geomType);
+      byCollectionLabel.set(item.collectionLabelBase, existing);
+    }
+
+    const grouped = new Map<string, MappedUploadFeature[]>();
+    for (const item of mapped.items) {
+      const key = `${item.collectionLabelBase}::${item.geomType}`;
+      const existing = grouped.get(key) ?? [];
+      existing.push(item);
+      grouped.set(key, existing);
+    }
+
+    for (const [groupKey, items] of grouped.entries()) {
+      const [collectionLabelBase, geomType] = groupKey.split('::');
+      const isMixed =
+        (byCollectionLabel.get(collectionLabelBase)?.size ?? 0) > 1;
+      const collectionLabel = isMixed
+        ? `${collectionLabelBase} (${geomType})`
+        : collectionLabelBase;
 
       const { results, error } = await importGeneralGeomCollectionDb(supabase, {
         collection: {
           label: collectionLabel,
           description: collectionDescription || null,
           visibility: collectionVisibility,
-          region_id: regionId,
-          geom_type: geomType,
+          feature_collection_type: geomType,
         },
-        mapper,
-        features,
+        features: items.map((item) => item.feature),
         sourceEpsg: epsg,
       });
 
@@ -255,13 +270,13 @@ export default function GeneralGeomUploaderDialog({
     if (totalSuccess > 0) onUploaded?.(totalSuccess);
   }, [
     collectionDescription,
-    collectionLabel,
+    collectionLabelFallback,
+    collectionLabelField,
     collectionVisibility,
     epsg,
     mapper,
     onUploaded,
     pending,
-    regionId,
   ]);
 
   const reset = useCallback(() => {
@@ -297,11 +312,7 @@ export default function GeneralGeomUploaderDialog({
     setPending((prev) => prev.filter((item) => item.key !== key));
   }, []);
 
-  const canUpload =
-    status === 'review' &&
-    pending.length > 0 &&
-    regionId !== null &&
-    collectionLabel.trim();
+  const canUpload = status === 'review' && pending.length > 0;
 
   const acceptAttr = baseConfig.formats
     .flatMap((f) => GEO_FILE_FORMAT_EXTENSIONS[f])
@@ -378,7 +389,7 @@ export default function GeneralGeomUploaderDialog({
 
         {warnings.length > 0 && (
           <ul className="flex flex-col gap-1">
-            {warnings.map((w, i) => (
+            {warnings.map((warning, i) => (
               <li
                 key={i}
                 className="flex items-start gap-2 text-xs text-amber-700 dark:text-amber-400"
@@ -388,7 +399,7 @@ export default function GeneralGeomUploaderDialog({
                   className="size-4 mt-px shrink-0"
                   strokeWidth={2}
                 />
-                {w}
+                {warning}
               </li>
             ))}
           </ul>
@@ -398,56 +409,42 @@ export default function GeneralGeomUploaderDialog({
           pending.length > 0 && (
             <div className="grid md:grid-cols-2 gap-4 overflow-y-auto flex-1 min-h-0">
               <div className="space-y-3">
-                <h3 className="text-sm font-medium">Collection</h3>
-                <Input
-                  value={collectionLabel}
-                  onChange={(e) => setCollectionLabel(e.target.value)}
-                  placeholder="Collection label"
+                <h3 className="text-sm font-medium">Collection Mapping</h3>
+                <GeneralGeomMapperSection
+                  label="Collection Label"
+                  fields={mapperFields}
+                  fieldValue={collectionLabelField}
+                  fallbackValue={collectionLabelFallback}
                   disabled={status !== 'review'}
+                  onFieldChange={setCollectionLabelField}
+                  onFallbackChange={setCollectionLabelFallback}
                 />
+
                 <Input
                   value={collectionDescription}
                   onChange={(e) => setCollectionDescription(e.target.value)}
                   placeholder="Collection description"
                   disabled={status !== 'review'}
                 />
-                <div className="grid grid-cols-2 gap-2">
-                  <Select
-                    value={regionId !== null ? String(regionId) : ''}
-                    onValueChange={(v) => setRegionId(Number(v ?? 0))}
-                    disabled={status !== 'review'}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select region…" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {regions.map((r) => (
-                        <SelectItem key={r.id} value={String(r.id)}>
-                          {r.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
 
-                  <Select
-                    value={collectionVisibility}
-                    onValueChange={(v) =>
-                      setCollectionVisibility(
-                        (v ?? 'public') as 'public' | 'private' | 'shared'
-                      )
-                    }
-                    disabled={status !== 'review'}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Visibility" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="public">Public</SelectItem>
-                      <SelectItem value="private">Private</SelectItem>
-                      <SelectItem value="shared">Shared</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                <Select
+                  value={collectionVisibility}
+                  onValueChange={(v) =>
+                    setCollectionVisibility(
+                      (v ?? 'public') as 'public' | 'private' | 'shared'
+                    )
+                  }
+                  disabled={status !== 'review'}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Visibility" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="public">Public</SelectItem>
+                    <SelectItem value="private">Private</SelectItem>
+                    <SelectItem value="shared">Shared</SelectItem>
+                  </SelectContent>
+                </Select>
 
                 <Input
                   type="number"
@@ -462,9 +459,9 @@ export default function GeneralGeomUploaderDialog({
                   usually EPSG:4326.
                 </p>
 
-                <h3 className="text-sm font-medium pt-2">Feature mapper</h3>
+                <h3 className="text-sm font-medium pt-2">Feature Mapper</h3>
 
-                <MapperSection
+                <GeneralGeomMapperSection
                   label="Type"
                   fields={mapperFields}
                   fieldValue={mapper.type.field}
@@ -478,7 +475,7 @@ export default function GeneralGeomUploaderDialog({
                   }
                 />
 
-                <MapperSection
+                <GeneralGeomMapperSection
                   label="Subtype"
                   fields={mapperFields}
                   fieldValue={mapper.subtype.field}
@@ -492,7 +489,7 @@ export default function GeneralGeomUploaderDialog({
                   }
                 />
 
-                <MapperSection
+                <GeneralGeomMapperSection
                   label="Visibility"
                   fields={mapperFields}
                   fieldValue={mapper.visibility.field}
@@ -506,7 +503,7 @@ export default function GeneralGeomUploaderDialog({
                   }
                 />
 
-                <MapperSection
+                <GeneralGeomMapperSection
                   label="Label"
                   fields={mapperFields}
                   fieldValue={mapper.label.field}
@@ -533,7 +530,7 @@ export default function GeneralGeomUploaderDialog({
                   placeholder="Label auto-increment suffix"
                 />
 
-                <MapperSection
+                <GeneralGeomMapperSection
                   label="Description"
                   fields={mapperFields}
                   fieldValue={mapper.description.field}
@@ -651,54 +648,110 @@ export default function GeneralGeomUploaderDialog({
   );
 }
 
-function MapperSection({
-  label,
-  fields,
-  fieldValue,
-  fallbackValue,
-  onFieldChange,
-  onFallbackChange,
-  disabled,
-}: {
-  label: string;
-  fields: string[];
-  fieldValue: string;
-  fallbackValue: string;
-  onFieldChange: (value: string) => void;
-  onFallbackChange: (value: string) => void;
-  disabled: boolean;
-}) {
-  return (
-    <div className="grid grid-cols-2 gap-2">
-      <Select
-        value={fieldValue}
-        onValueChange={(value) => onFieldChange(value ?? '')}
-        disabled={disabled}
-      >
-        <SelectTrigger>
-          <SelectValue placeholder={`${label} field`} />
-        </SelectTrigger>
-        <SelectContent>
-          {fields.length === 0 && (
-            <div className="px-2 py-1 text-xs text-muted-foreground">
-              No fields found
-            </div>
-          )}
-          {fields.map((field) => (
-            <SelectItem key={field} value={field}>
-              {field}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <Input
-        value={fallbackValue}
-        onChange={(e) => onFallbackChange(e.target.value)}
-        disabled={disabled}
-        placeholder={`${label} fallback`}
-      />
-    </div>
-  );
+function mapPendingFeatures(args: {
+  pending: PendingItem<GeneralGeomRecord>[];
+  mapper: GeneralGeomFeatureImportMapper;
+  collectionLabelField: string;
+  collectionLabelFallback: string;
+}):
+  | { ok: true; items: MappedUploadFeature[] }
+  | { ok: false; errors: string[] } {
+  const { pending, mapper, collectionLabelField, collectionLabelFallback } =
+    args;
+  const items: MappedUploadFeature[] = [];
+  const errors: string[] = [];
+
+  for (let index = 0; index < pending.length; index += 1) {
+    const item = pending[index];
+    const props = (item.record.properties ?? {}) as Record<string, unknown>;
+
+    const mappedType = readMappedString(
+      props,
+      mapper.type.field,
+      mapper.type.fallback
+    );
+    if (!mappedType) {
+      errors.push(`${item.label || `Feature ${index + 1}`}: Type is required.`);
+      continue;
+    }
+
+    const mappedVisibility = readMappedString(
+      props,
+      mapper.visibility.field,
+      mapper.visibility.fallback
+    );
+    if (!mappedVisibility || !VISIBILITY_VALUES.has(mappedVisibility)) {
+      errors.push(
+        `${item.label || `Feature ${index + 1}`}: Visibility is required and must be public/private/shared.`
+      );
+      continue;
+    }
+
+    const mappedLabel = item.label.trim();
+    if (!mappedLabel) {
+      errors.push(`${item.key}: Label is required.`);
+      continue;
+    }
+
+    const collectionLabelBase = readMappedString(
+      props,
+      collectionLabelField,
+      collectionLabelFallback
+    );
+
+    if (!collectionLabelBase) {
+      errors.push(`${mappedLabel}: Collection label is required.`);
+      continue;
+    }
+
+    const subtype = readMappedString(
+      props,
+      mapper.subtype.field,
+      mapper.subtype.fallback
+    );
+    const descriptionBase = readMappedString(
+      props,
+      mapper.description.field,
+      mapper.description.fallback
+    );
+    const description = mapper.description.include_props_json
+      ? [descriptionBase || null, JSON.stringify(props)]
+          .filter(Boolean)
+          .join('\n')
+      : descriptionBase;
+
+    items.push({
+      key: item.key,
+      collectionLabelBase,
+      geomType: geometryGroup(item.record.geometry.type),
+      feature: {
+        type: 'Feature',
+        geometry: item.record.geometry,
+        properties: {
+          type: mappedType,
+          subtype: subtype || null,
+          visibility: mappedVisibility as 'public' | 'private' | 'shared',
+          label: mappedLabel,
+          description: description || null,
+        },
+      },
+    });
+  }
+
+  if (errors.length > 0) return { ok: false, errors };
+  return { ok: true, items };
+}
+
+function readMappedString(
+  props: Record<string, unknown>,
+  field: string,
+  fallback: string
+): string {
+  const value = field ? props[field] : undefined;
+  if (typeof value === 'string' && value.trim()) return value.trim();
+  if ((typeof value === 'number' || typeof value === 'boolean') && field)
+    return String(value);
+  return fallback.trim();
 }
 
 function geometryGroup(type: GeoJSON.Geometry['type']): string {

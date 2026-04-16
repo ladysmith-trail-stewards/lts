@@ -23,9 +23,6 @@ import {
   ELEV_HOVER_SOURCE,
   ELEV_HOVER_LAYER,
   GENERAL_GEOM_SOURCE,
-  GENERAL_GEOM_POINTS,
-  GENERAL_GEOM_LINES,
-  GENERAL_GEOM_POLYGONS,
 } from '@/lib/map/config';
 import {
   SELECTED_LAYER_CONFIG,
@@ -87,11 +84,7 @@ function generalGeomToFeature(row: GeneralGeomRow): GeoJSON.Feature {
 export interface UseMapboxOptions {
   trails: Trail[];
   generalGeom: GeneralGeomRow[];
-  generalGeomVisibility: {
-    points: boolean;
-    lines: boolean;
-    polygons: boolean;
-  };
+  visibleGeneralGeomCollectionIds: Set<number>;
   onTrailClick?: (trailId: number) => void;
   selectedTrailId?: number | null;
   searchParams?: URLSearchParams;
@@ -122,7 +115,7 @@ export interface UseMapboxReturn {
 export function useMapbox({
   trails,
   generalGeom,
-  generalGeomVisibility,
+  visibleGeneralGeomCollectionIds,
   onTrailClick,
   selectedTrailId = null,
   searchParams,
@@ -219,9 +212,11 @@ export function useMapbox({
   const buildGeneralGeomGeoJSON = useCallback(
     (): GeoJSON.FeatureCollection => ({
       type: 'FeatureCollection',
-      features: generalGeom.map((row) => generalGeomToFeature(row)),
+      features: generalGeom
+        .filter((row) => visibleGeneralGeomCollectionIds.has(row.collection_id))
+        .map((row) => generalGeomToFeature(row)),
     }),
-    [generalGeom]
+    [generalGeom, visibleGeneralGeomCollectionIds]
   );
 
   const buildEndpointsGeoJSON = useCallback(
@@ -359,24 +354,8 @@ export function useMapbox({
         map.addLayer(GENERAL_GEOM_LINES_CONFIG);
         map.addLayer(GENERAL_GEOM_POINTS_CONFIG);
       }
-
-      map.setLayoutProperty(
-        GENERAL_GEOM_POINTS,
-        'visibility',
-        generalGeomVisibility.points ? 'visible' : 'none'
-      );
-      map.setLayoutProperty(
-        GENERAL_GEOM_LINES,
-        'visibility',
-        generalGeomVisibility.lines ? 'visible' : 'none'
-      );
-      map.setLayoutProperty(
-        GENERAL_GEOM_POLYGONS,
-        'visibility',
-        generalGeomVisibility.polygons ? 'visible' : 'none'
-      );
     },
-    [buildGeneralGeomGeoJSON, generalGeomVisibility]
+    [buildGeneralGeomGeoJSON]
   );
 
   // ── Contour layer IDs (discovered from the loaded style) ─────────────────────

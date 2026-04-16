@@ -7,7 +7,7 @@ create table public.general_geom_collection (
   visibility  text not null default 'public'
                check (visibility in ('public', 'private', 'shared')),
   region_id   bigint not null references public.regions (id) on delete cascade,
-  geom_type   text not null,
+  feature_collection_type text not null,
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now(),
   deleted_at  timestamptz default null
@@ -29,7 +29,7 @@ create table public.general_geom (
 );
 
 create index general_geom_collection_region_idx on public.general_geom_collection (region_id);
-create index general_geom_collection_geom_type_idx on public.general_geom_collection (geom_type);
+create index general_geom_collection_feature_collection_type_idx on public.general_geom_collection (feature_collection_type);
 create index general_geom_collection_deleted_at_idx on public.general_geom_collection (deleted_at);
 create index general_geom_collection_visibility_idx on public.general_geom_collection (visibility);
 create index general_geom_collection_added_by_idx on public.general_geom_collection (added_by);
@@ -58,7 +58,7 @@ grant update (
   style,
   visibility,
   region_id,
-  geom_type,
+  feature_collection_type,
   deleted_at,
   updated_at
 ) on public.general_geom_collection to authenticated;
@@ -181,7 +181,7 @@ select
   g.id,
   g.collection_id,
   c.label as collection_label,
-  c.geom_type,
+  c.feature_collection_type,
   c.region_id,
   c.visibility as collection_visibility,
   g.type,
@@ -203,7 +203,6 @@ grant select on public.general_geom_view to anon, authenticated;
 
 create or replace function public.import_general_geom_collection(
   p_collection jsonb,
-  p_mapper jsonb,
   p_features jsonb,
   p_source_epsg integer default 4326
 )
@@ -224,7 +223,7 @@ as $$
       style,
       visibility,
       region_id,
-      geom_type
+      feature_collection_type
     )
     values (
       (
@@ -238,8 +237,17 @@ as $$
       nullif(p_collection ->> 'description', ''),
       coalesce(p_collection -> 'style', '{}'::jsonb),
       coalesce(nullif(p_collection ->> 'visibility', ''), 'public'),
-      (p_collection ->> 'region_id')::bigint,
-      coalesce(nullif(p_collection ->> 'geom_type', ''), 'Geometry')
+      coalesce(
+        (p_collection ->> 'region_id')::bigint,
+        (
+          select p.region_id
+          from public.profiles p
+          where p.auth_user_id = auth.uid()
+            and p.deleted_at is null
+          limit 1
+        )
+      ),
+      coalesce(nullif(p_collection ->> 'feature_collection_type', ''), 'Geometry')
     )
     returning id
   ),
@@ -279,43 +287,11 @@ as $$
     )
     select
       c.id,
-      coalesce(
-        nullif(trim(parsed.props ->> nullif(p_mapper #>> '{type,field}', '')), ''),
-        nullif(trim(p_mapper #>> '{type,fallback}'), ''),
-        'feature'
-      ),
-      coalesce(
-        nullif(trim(parsed.props ->> nullif(p_mapper #>> '{subtype,field}', '')), ''),
-        nullif(trim(p_mapper #>> '{subtype,fallback}'), '')
-      ),
-      coalesce(
-        nullif(trim(parsed.props ->> nullif(p_mapper #>> '{visibility,field}', '')), ''),
-        nullif(trim(p_mapper #>> '{visibility,fallback}'), ''),
-        'public'
-      ),
-      coalesce(
-        nullif(trim(parsed.props ->> nullif(p_mapper #>> '{label,field}', '')), ''),
-        nullif(trim(p_mapper #>> '{label,fallback}'), ''),
-        concat(
-          coalesce(nullif(p_mapper #>> '{label,auto_increment_suffix}', ''), 'Feature '),
-          parsed.ord::text
-        )
-      ),
-      case
-        when coalesce((p_mapper #>> '{description,include_props_json}')::boolean, false)
-        then concat_ws(
-          E'\n',
-          coalesce(
-            nullif(trim(parsed.props ->> nullif(p_mapper #>> '{description,field}', '')), ''),
-            nullif(trim(p_mapper #>> '{description,fallback}'), '')
-          ),
-          parsed.props::text
-        )
-        else coalesce(
-          nullif(trim(parsed.props ->> nullif(p_mapper #>> '{description,field}', '')), ''),
-          nullif(trim(p_mapper #>> '{description,fallback}'), '')
-        )
-      end,
+      nullif(trim(parsed.props ->> 'type'), ''),
+      nullif(trim(parsed.props ->> 'subtype'), ''),
+      nullif(trim(parsed.props ->> 'visibility'), ''),
+      nullif(trim(parsed.props ->> 'label'), ''),
+      nullif(trim(parsed.props ->> 'description'), ''),
       parsed.geom
     from parsed
     cross join collection_insert c
@@ -325,5 +301,5 @@ as $$
   select true, inserted.id, null::text from inserted;
 $$;
 
-revoke execute on function public.import_general_geom_collection(jsonb, jsonb, jsonb, integer) from public;
-grant execute on function public.import_general_geom_collection(jsonb, jsonb, jsonb, integer) to authenticated;
+revoke execute on function public.import_general_geom_collection(jsonb, jsonb, integer) from public;
+grant execute on function public.import_general_geom_collection(jsonb, jsonb, integer) to authenticated;

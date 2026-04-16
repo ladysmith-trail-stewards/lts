@@ -1,5 +1,6 @@
 import { Plus } from 'lucide-react';
 import { MAP_STYLES, type StyleKey } from '@/lib/map/config';
+import type { GeneralGeomCollectionOption } from '@/hooks/useGeneralGeom';
 
 interface MapControlPanelProps {
   currentStyle: StyleKey;
@@ -12,12 +13,9 @@ interface MapControlPanelProps {
   onStyleChange: (style: StyleKey) => void;
   onContourStrength: (value: number) => void;
   onAddTrail: () => void;
-  showGeneralPoints: boolean;
-  showGeneralLines: boolean;
-  showGeneralPolygons: boolean;
-  onToggleGeneralPoints: (next: boolean) => void;
-  onToggleGeneralLines: (next: boolean) => void;
-  onToggleGeneralPolygons: (next: boolean) => void;
+  generalCollections: GeneralGeomCollectionOption[];
+  visibleCollectionIds: number[];
+  onToggleCollectionVisibility: (collectionId: number, next: boolean) => void;
 }
 
 export default function MapControlPanel({
@@ -31,16 +29,14 @@ export default function MapControlPanel({
   onStyleChange,
   onContourStrength,
   onAddTrail,
-  showGeneralPoints,
-  showGeneralLines,
-  showGeneralPolygons,
-  onToggleGeneralPoints,
-  onToggleGeneralLines,
-  onToggleGeneralPolygons,
+  generalCollections,
+  visibleCollectionIds,
+  onToggleCollectionVisibility,
 }: MapControlPanelProps) {
+  const visibleSet = new Set(visibleCollectionIds);
+
   return (
-    <div className="bg-white rounded-lg shadow-lg border border-gray-200 p-3 min-w-[150px] space-y-3">
-      {/* Style */}
+    <div className="bg-white rounded-lg shadow-lg border border-gray-200 p-3 min-w-[200px] space-y-3 max-h-[80vh] overflow-y-auto">
       <div>
         <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
           Style
@@ -62,7 +58,6 @@ export default function MapControlPanel({
         </div>
       </div>
 
-      {/* Trail count + Add Trail button */}
       {!loading && !trailsError && (
         <div className="border-t pt-2 space-y-2">
           <p className="text-xs text-slate-500">
@@ -84,38 +79,36 @@ export default function MapControlPanel({
 
       <div className="border-t pt-3 space-y-1.5">
         <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
-          Other Data
+          Feature Collections
         </h3>
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={showGeneralPoints}
-            onChange={(e) => onToggleGeneralPoints(e.target.checked)}
-            className="w-3.5 h-3.5 text-green-600 focus:ring-green-500"
-          />
-          <span className="text-sm text-slate-700">Points</span>
-        </label>
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={showGeneralLines}
-            onChange={(e) => onToggleGeneralLines(e.target.checked)}
-            className="w-3.5 h-3.5 text-green-600 focus:ring-green-500"
-          />
-          <span className="text-sm text-slate-700">Lines</span>
-        </label>
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={showGeneralPolygons}
-            onChange={(e) => onToggleGeneralPolygons(e.target.checked)}
-            className="w-3.5 h-3.5 text-green-600 focus:ring-green-500"
-          />
-          <span className="text-sm text-slate-700">Polygons</span>
-        </label>
+        {generalCollections.length === 0 ? (
+          <p className="text-xs text-slate-500">No imported collections</p>
+        ) : (
+          generalCollections.map((collection) => (
+            <label
+              key={collection.id}
+              className="flex items-start gap-2 cursor-pointer"
+            >
+              <input
+                type="checkbox"
+                checked={visibleSet.has(collection.id)}
+                onChange={(e) =>
+                  onToggleCollectionVisibility(collection.id, e.target.checked)
+                }
+                className="mt-0.5 w-3.5 h-3.5 text-green-600 focus:ring-green-500"
+              />
+              <span className="text-xs text-slate-700 leading-snug">
+                {collection.label}
+                <span className="text-slate-500">
+                  {' '}
+                  ({collection.featureCollectionType}, {collection.count})
+                </span>
+              </span>
+            </label>
+          ))
+        )}
       </div>
 
-      {/* Contour controls */}
       <div className="border-t pt-3">
         <div className="flex items-center justify-between mb-1.5">
           <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
