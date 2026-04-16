@@ -689,7 +689,9 @@ function mapPendingFeatures(args: {
 
     const mappedLabel = item.label.trim();
     if (!mappedLabel) {
-      errors.push(`${item.key}: Label is required.`);
+      errors.push(
+        `${item.label || `Feature ${index + 1}`}: Label is required.`
+      );
       continue;
     }
 
