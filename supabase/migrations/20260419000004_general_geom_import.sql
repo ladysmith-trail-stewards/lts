@@ -322,7 +322,7 @@ as $$
     where parsed.geom is not null
     returning id
   )
-  select true, id, null::text from inserted;
+  select true, inserted.id, null::text from inserted;
 $$;
 
 revoke execute on function public.import_general_geom_collection(jsonb, jsonb, jsonb, integer) from public;

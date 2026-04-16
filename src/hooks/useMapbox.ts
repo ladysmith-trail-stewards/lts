@@ -69,10 +69,7 @@ function generalGeomGroup(type: GeoJSON.Geometry['type']): string {
   return 'Other';
 }
 
-function generalGeomToFeature(
-  row: GeneralGeomRow,
-  visibleGroups: { points: boolean; lines: boolean; polygons: boolean }
-): GeoJSON.Feature {
+function generalGeomToFeature(row: GeneralGeomRow): GeoJSON.Feature {
   const group = generalGeomGroup(row.geometry_geojson.type);
   return {
     type: 'Feature',
@@ -83,10 +80,6 @@ function generalGeomToFeature(
       label: row.label,
       visibility: row.visibility,
       geometry_group: group,
-      visible:
-        (group === 'Point' && visibleGroups.points) ||
-        (group === 'LineString' && visibleGroups.lines) ||
-        (group === 'Polygon' && visibleGroups.polygons),
     },
   };
 }
@@ -226,11 +219,9 @@ export function useMapbox({
   const buildGeneralGeomGeoJSON = useCallback(
     (): GeoJSON.FeatureCollection => ({
       type: 'FeatureCollection',
-      features: generalGeom.map((row) =>
-        generalGeomToFeature(row, generalGeomVisibility)
-      ),
+      features: generalGeom.map((row) => generalGeomToFeature(row)),
     }),
-    [generalGeom, generalGeomVisibility]
+    [generalGeom]
   );
 
   const buildEndpointsGeoJSON = useCallback(

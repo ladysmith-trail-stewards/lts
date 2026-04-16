@@ -530,7 +530,7 @@ export default function GeneralGeomUploaderDialog({
                     )
                   }
                   disabled={status !== 'review'}
-                  placeholder="Label auto-increment prefix"
+                  placeholder="Label auto-increment suffix"
                 />
 
                 <MapperSection
