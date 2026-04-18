@@ -1,12 +1,15 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import {
   FileUploadIcon,
   AlertCircleIcon,
   Tick02Icon,
   Cancel01Icon,
+  Location01Icon,
+  GeometricShapes02Icon,
+  Route01Icon,
 } from '@hugeicons/core-free-icons';
-import { HugeiconsIcon } from '@hugeicons/react';
+import { HugeiconsIcon, type IconSvgElement } from '@hugeicons/react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase/client';
 import {
@@ -16,6 +19,7 @@ import {
   type UploaderConfig,
   type RawFeature,
 } from '@/lib/geoUploader';
+import * as v from 'valibot';
 import {
   importGeneralGeomCollectionDb,
   type GeneralGeomFeatureImportMapper,
@@ -26,6 +30,14 @@ import {
   mapFeatureLabel,
   type GeneralGeomRawFeature,
 } from '@/lib/uploaderConfigs/generalGeomMapper';
+import {
+  GeneralGeomCollectionInputSchema,
+  MappedFeaturePropsSchema,
+} from '@/lib/uploaderConfigs/generalGeomSchema';
+import {
+  getRegionsDb,
+  type RegionRecordMeta,
+} from '@/lib/db_services/regions/getRegionsDb';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -82,7 +94,23 @@ const baseConfig: UploaderConfig<GeneralGeomRecord> = {
   submit: async () => [],
 };
 
-const VISIBILITY_VALUES = new Set(['public', 'private', 'shared']);
+const GEOM_GROUP_ORDER = [
+  'Point',
+  'LineString',
+  'Polygon',
+  'Geometry',
+] as const;
+type GeomGroupKey = (typeof GEOM_GROUP_ORDER)[number];
+
+const GEOM_GROUP_META: Record<
+  GeomGroupKey,
+  { icon: IconSvgElement; label: string }
+> = {
+  Point: { icon: Location01Icon, label: 'Points' },
+  LineString: { icon: Route01Icon, label: 'Lines' },
+  Polygon: { icon: GeometricShapes02Icon, label: 'Polygons' },
+  Geometry: { icon: GeometricShapes02Icon, label: 'Geometry' },
+};
 
 export interface GeneralGeomUploaderDialogProps {
   open: boolean;
@@ -99,8 +127,9 @@ export default function GeneralGeomUploaderDialog({
   const [pending, setPending] = useState<PendingItem<GeneralGeomRecord>[]>([]);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [isDragging, setIsDragging] = useState(false);
+  const [regions, setRegions] = useState<RegionRecordMeta[]>([]);
+  const [regionId, setRegionId] = useState<number | null>(null);
   const [epsg, setEpsg] = useState(4326);
-  const [collectionLabelField, setCollectionLabelField] = useState('');
   const [collectionLabelFallback, setCollectionLabelFallback] =
     useState('Imported Geometry');
   const [collectionDescription, setCollectionDescription] = useState('');
@@ -111,6 +140,29 @@ export default function GeneralGeomUploaderDialog({
     DEFAULT_GENERAL_GEOM_MAPPER
   );
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (open) {
+      getRegionsDb(supabase, { metaOnly: true }).then(({ data }) => {
+        if (data) setRegions(data);
+      });
+    }
+  }, [open]);
+
+  // Re-derive feature labels whenever the mapper changes (label field / fallback / suffix).
+  useEffect(() => {
+    if (status !== 'review') return;
+    setPending((prev) =>
+      prev.map((item, index) => {
+        const feature: GeneralGeomRawFeature = {
+          geometry: item.record.geometry,
+          properties: (item.record.properties ?? {}) as Record<string, unknown>,
+        };
+        return { ...item, label: mapFeatureLabel(feature, mapper, index) };
+      })
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mapper]);
 
   const mapperFields = useMemo(() => {
     return listMapperFields(
@@ -164,17 +216,25 @@ export default function GeneralGeomUploaderDialog({
   );
 
   const handleUpload = useCallback(async () => {
-    if (!collectionLabelFallback.trim() && !collectionLabelField.trim()) {
-      toast.error(
-        'Collection label fallback is required when no collection label field is set.'
-      );
+    // Validate collection-level inputs with Valibot.
+    const collectionResult = v.safeParse(GeneralGeomCollectionInputSchema, {
+      label: collectionLabelFallback,
+      description: collectionDescription || null,
+      visibility: collectionVisibility,
+      feature_collection_type: 'Geometry', // set per-group below
+      region_id: regionId,
+    });
+
+    if (!collectionResult.success) {
+      const issues = collectionResult.issues.map((i) => i.message);
+      setWarnings(issues);
+      toast.error(issues[0]);
       return;
     }
 
     const mapped = mapPendingFeatures({
       pending,
       mapper,
-      collectionLabelField,
       collectionLabelFallback,
     });
 
@@ -225,6 +285,7 @@ export default function GeneralGeomUploaderDialog({
           description: collectionDescription || null,
           visibility: collectionVisibility,
           feature_collection_type: geomType,
+          region_id: regionId,
         },
         features: items.map((item) => item.feature),
         sourceEpsg: epsg,
@@ -271,18 +332,19 @@ export default function GeneralGeomUploaderDialog({
   }, [
     collectionDescription,
     collectionLabelFallback,
-    collectionLabelField,
     collectionVisibility,
     epsg,
     mapper,
     onUploaded,
     pending,
+    regionId,
   ]);
 
   const reset = useCallback(() => {
     setStatus('idle');
     setPending([]);
     setWarnings([]);
+    setRegionId(null);
   }, []);
 
   const updateMapperField = useCallback(
@@ -312,7 +374,8 @@ export default function GeneralGeomUploaderDialog({
     setPending((prev) => prev.filter((item) => item.key !== key));
   }, []);
 
-  const canUpload = status === 'review' && pending.length > 0;
+  const canUpload =
+    status === 'review' && pending.length > 0 && regionId !== null;
 
   const acceptAttr = baseConfig.formats
     .flatMap((f) => GEO_FILE_FORMAT_EXTENSIONS[f])
@@ -407,142 +470,230 @@ export default function GeneralGeomUploaderDialog({
 
         {(status === 'review' || status === 'uploading' || status === 'done') &&
           pending.length > 0 && (
-            <div className="grid md:grid-cols-2 gap-4 overflow-y-auto flex-1 min-h-0">
-              <div className="space-y-3">
+            <div className="grid md:grid-cols-[2fr_1fr] gap-4 flex-1 min-h-0 overflow-hidden">
+              <div className="space-y-3 overflow-y-auto pr-1">
                 <h3 className="text-sm font-medium">Collection Mapping</h3>
-                <GeneralGeomMapperSection
-                  label="Collection Label"
-                  fields={mapperFields}
-                  fieldValue={collectionLabelField}
-                  fallbackValue={collectionLabelFallback}
-                  disabled={status !== 'review'}
-                  onFieldChange={setCollectionLabelField}
-                  onFallbackChange={setCollectionLabelFallback}
-                />
 
-                <Input
-                  value={collectionDescription}
-                  onChange={(e) => setCollectionDescription(e.target.value)}
-                  placeholder="Collection description"
-                  disabled={status !== 'review'}
-                />
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">
+                    Collection name
+                  </p>
+                  <Input
+                    value={collectionLabelFallback}
+                    onChange={(e) => setCollectionLabelFallback(e.target.value)}
+                    placeholder="e.g. Imported Geometry"
+                    disabled={status !== 'review'}
+                  />
+                </div>
 
-                <Select
-                  value={collectionVisibility}
-                  onValueChange={(v) =>
-                    setCollectionVisibility(
-                      (v ?? 'public') as 'public' | 'private' | 'shared'
-                    )
-                  }
-                  disabled={status !== 'review'}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Visibility" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="public">Public</SelectItem>
-                    <SelectItem value="private">Private</SelectItem>
-                    <SelectItem value="shared">Shared</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">
+                    Collection description
+                  </p>
+                  <Input
+                    value={collectionDescription}
+                    onChange={(e) => setCollectionDescription(e.target.value)}
+                    placeholder="Optional"
+                    disabled={status !== 'review'}
+                  />
+                </div>
 
-                <Input
-                  type="number"
-                  value={epsg}
-                  onChange={(e) => setEpsg(Number(e.target.value) || 4326)}
-                  disabled={status !== 'review'}
-                  placeholder="EPSG (default 4326)"
-                />
+                {/* Region · Visibility · EPSG on one row */}
+                <div className="flex gap-2">
+                  <div className="flex-1 space-y-1">
+                    <p className="text-xs text-muted-foreground">
+                      Region <span className="text-red-500">*</span>
+                    </p>
+                    <Select
+                      value={regionId !== null ? String(regionId) : ''}
+                      onValueChange={(v) => setRegionId(Number(v))}
+                      disabled={status !== 'review'}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Select region…">
+                          {regionId !== null
+                            ? (regions.find((r) => r.id === regionId)?.name ??
+                              '')
+                            : null}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {regions.map((r) => (
+                          <SelectItem key={r.id} value={String(r.id)}>
+                            {r.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-                <p className="text-xs text-muted-foreground">
-                  EPSG defaults to 4326. If data is latitude/longitude, it is
-                  usually EPSG:4326.
-                </p>
+                  <div className="flex-1 space-y-1">
+                    <p className="text-xs text-muted-foreground">Visibility</p>
+                    <Select
+                      value={collectionVisibility}
+                      onValueChange={(v) =>
+                        setCollectionVisibility(
+                          (v ?? 'public') as 'public' | 'private' | 'shared'
+                        )
+                      }
+                      disabled={status !== 'review'}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Visibility" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="public">Public</SelectItem>
+                        <SelectItem value="private">Private</SelectItem>
+                        <SelectItem value="shared">Shared</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-                <h3 className="text-sm font-medium pt-2">Feature Mapper</h3>
+                  <div className="flex-1 space-y-1">
+                    <p className="text-xs text-muted-foreground">EPSG</p>
+                    <Input
+                      type="number"
+                      value={epsg}
+                      onChange={(e) => setEpsg(Number(e.target.value) || 4326)}
+                      disabled={status !== 'review'}
+                      placeholder="4326"
+                    />
+                  </div>
+                </div>
 
-                <GeneralGeomMapperSection
-                  label="Type"
-                  fields={mapperFields}
-                  fieldValue={mapper.type.field}
-                  fallbackValue={mapper.type.fallback}
-                  disabled={status !== 'review'}
-                  onFieldChange={(value) =>
-                    updateMapperField('type', 'field', value)
-                  }
-                  onFallbackChange={(value) =>
-                    updateMapperField('type', 'fallback', value)
-                  }
-                />
+                <div className="flex items-center justify-between pt-2">
+                  <h3 className="text-sm font-medium">Feature Mapper</h3>
+                  <button
+                    type="button"
+                    className="text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40"
+                    disabled={status !== 'review'}
+                    onClick={() => setMapper(DEFAULT_GENERAL_GEOM_MAPPER)}
+                  >
+                    Reset mapper
+                  </button>
+                </div>
 
-                <GeneralGeomMapperSection
-                  label="Subtype"
-                  fields={mapperFields}
-                  fieldValue={mapper.subtype.field}
-                  fallbackValue={mapper.subtype.fallback}
-                  disabled={status !== 'review'}
-                  onFieldChange={(value) =>
-                    updateMapperField('subtype', 'field', value)
-                  }
-                  onFallbackChange={(value) =>
-                    updateMapperField('subtype', 'fallback', value)
-                  }
-                />
+                <table className="w-full text-sm border-separate border-spacing-0">
+                  <thead>
+                    <tr>
+                      <th className="text-left text-[10px] font-normal text-muted-foreground/60 pb-1 w-24">
+                        Target
+                      </th>
+                      <th className="text-left text-[10px] font-normal text-muted-foreground/60 pb-1 pr-2">
+                        Input parameter
+                      </th>
+                      <th className="text-left text-[10px] font-normal text-muted-foreground/60 pb-1">
+                        Fallback
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <GeneralGeomMapperSection
+                      label="Label"
+                      fields={mapperFields}
+                      fieldValue={mapper.label.field}
+                      fallbackValue={mapper.label.fallback}
+                      fallbackPlaceholder="Optional"
+                      disabled={status !== 'review'}
+                      onFieldChange={(value) =>
+                        updateMapperField('label', 'field', value)
+                      }
+                      onFallbackChange={(value) =>
+                        updateMapperField('label', 'fallback', value)
+                      }
+                    />
 
-                <GeneralGeomMapperSection
-                  label="Visibility"
-                  fields={mapperFields}
-                  fieldValue={mapper.visibility.field}
-                  fallbackValue={mapper.visibility.fallback}
-                  disabled={status !== 'review'}
-                  onFieldChange={(value) =>
-                    updateMapperField('visibility', 'field', value)
-                  }
-                  onFallbackChange={(value) =>
-                    updateMapperField('visibility', 'fallback', value)
-                  }
-                />
+                    {!mapper.label.field && (
+                      <tr>
+                        <td className="py-1.5 pr-3 text-sm font-medium whitespace-nowrap align-middle w-24 text-muted-foreground">
+                          Label Suffix
+                        </td>
+                        <td className="py-1.5 pr-2 align-middle">
+                          <Input
+                            value={mapper.label.auto_increment_suffix}
+                            onChange={(e) =>
+                              updateMapperField(
+                                'label',
+                                'auto_increment_suffix',
+                                e.target.value
+                              )
+                            }
+                            disabled={status !== 'review'}
+                            placeholder="e.g. feat"
+                            className="h-8 text-sm"
+                          />
+                        </td>
+                        <td className="py-1.5 align-middle text-xs text-muted-foreground/60 whitespace-nowrap">
+                          →{' '}
+                          {(
+                            mapper.label.auto_increment_suffix || 'feat'
+                          ).trim()}
+                          -1, …
+                        </td>
+                      </tr>
+                    )}
 
-                <GeneralGeomMapperSection
-                  label="Label"
-                  fields={mapperFields}
-                  fieldValue={mapper.label.field}
-                  fallbackValue={mapper.label.fallback}
-                  disabled={status !== 'review'}
-                  onFieldChange={(value) =>
-                    updateMapperField('label', 'field', value)
-                  }
-                  onFallbackChange={(value) =>
-                    updateMapperField('label', 'fallback', value)
-                  }
-                />
+                    <GeneralGeomMapperSection
+                      label="Description"
+                      fields={mapperFields}
+                      fieldValue={mapper.description.field}
+                      fallbackValue={mapper.description.fallback}
+                      fallbackPlaceholder="Optional"
+                      disabled={status !== 'review'}
+                      onFieldChange={(value) =>
+                        updateMapperField('description', 'field', value)
+                      }
+                      onFallbackChange={(value) =>
+                        updateMapperField('description', 'fallback', value)
+                      }
+                    />
 
-                <Input
-                  value={mapper.label.auto_increment_suffix}
-                  onChange={(e) =>
-                    updateMapperField(
-                      'label',
-                      'auto_increment_suffix',
-                      e.target.value
-                    )
-                  }
-                  disabled={status !== 'review'}
-                  placeholder="Label auto-increment suffix"
-                />
+                    <GeneralGeomMapperSection
+                      label="Type"
+                      fields={mapperFields}
+                      fieldValue={mapper.type.field}
+                      fallbackValue={mapper.type.fallback}
+                      fallbackPlaceholder="e.g. feature"
+                      disabled={status !== 'review'}
+                      onFieldChange={(value) =>
+                        updateMapperField('type', 'field', value)
+                      }
+                      onFallbackChange={(value) =>
+                        updateMapperField('type', 'fallback', value)
+                      }
+                    />
 
-                <GeneralGeomMapperSection
-                  label="Description"
-                  fields={mapperFields}
-                  fieldValue={mapper.description.field}
-                  fallbackValue={mapper.description.fallback}
-                  disabled={status !== 'review'}
-                  onFieldChange={(value) =>
-                    updateMapperField('description', 'field', value)
-                  }
-                  onFallbackChange={(value) =>
-                    updateMapperField('description', 'fallback', value)
-                  }
-                />
+                    <GeneralGeomMapperSection
+                      label="Subtype"
+                      fields={mapperFields}
+                      fieldValue={mapper.subtype.field}
+                      fallbackValue={mapper.subtype.fallback}
+                      fallbackPlaceholder="Optional"
+                      disabled={status !== 'review'}
+                      onFieldChange={(value) =>
+                        updateMapperField('subtype', 'field', value)
+                      }
+                      onFallbackChange={(value) =>
+                        updateMapperField('subtype', 'fallback', value)
+                      }
+                    />
+
+                    <GeneralGeomMapperSection
+                      label="Visibility"
+                      fields={mapperFields}
+                      fieldValue={mapper.visibility.field}
+                      fallbackValue={mapper.visibility.fallback}
+                      fallbackPlaceholder="public / private / shared"
+                      disabled={status !== 'review'}
+                      onFieldChange={(value) =>
+                        updateMapperField('visibility', 'field', value)
+                      }
+                      onFallbackChange={(value) =>
+                        updateMapperField('visibility', 'fallback', value)
+                      }
+                    />
+                  </tbody>
+                </table>
 
                 <label className="flex items-center gap-2 text-xs text-muted-foreground">
                   <Switch
@@ -561,62 +712,96 @@ export default function GeneralGeomUploaderDialog({
                 </label>
               </div>
 
-              <div className="space-y-2 overflow-y-auto">
+              <div className="space-y-2 overflow-y-auto min-h-0">
                 <h3 className="text-sm font-medium">
                   Review features ({pending.length})
                 </h3>
-                {pending.map((item) => (
-                  <li
-                    key={item.key}
-                    className="flex items-center gap-2 rounded-xl bg-muted/40 px-3 py-2 text-sm list-none"
-                  >
-                    {item.result ? (
-                      item.result.ok ? (
+                {GEOM_GROUP_ORDER.map((geomType) => {
+                  const group = pending.filter(
+                    (item) =>
+                      geometryGroup(item.record.geometry.type) === geomType
+                  );
+                  if (group.length === 0) return null;
+                  const { icon, label: groupLabel } = GEOM_GROUP_META[geomType];
+                  return (
+                    <div key={geomType} className="space-y-1">
+                      <div className="flex items-center gap-1.5 pt-1">
                         <HugeiconsIcon
-                          icon={Tick02Icon}
-                          className="size-4 shrink-0 text-green-600"
+                          icon={icon}
+                          className="size-3.5 text-muted-foreground shrink-0"
                           strokeWidth={2}
                         />
-                      ) : (
-                        <HugeiconsIcon
-                          icon={Cancel01Icon}
-                          className="size-4 shrink-0 text-destructive"
-                          strokeWidth={2}
-                        />
-                      )
-                    ) : null}
+                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                          {groupLabel} ({group.length})
+                        </span>
+                      </div>
+                      {group.map((item) => (
+                        <li
+                          key={item.key}
+                          className="flex flex-col gap-1 rounded-xl bg-muted/40 px-3 py-2 text-sm list-none"
+                        >
+                          <div className="flex items-center gap-2">
+                            {item.result ? (
+                              item.result.ok ? (
+                                <HugeiconsIcon
+                                  icon={Tick02Icon}
+                                  className="size-4 shrink-0 text-green-600"
+                                  strokeWidth={2}
+                                />
+                              ) : (
+                                <HugeiconsIcon
+                                  icon={Cancel01Icon}
+                                  className="size-4 shrink-0 text-destructive"
+                                  strokeWidth={2}
+                                />
+                              )
+                            ) : null}
 
-                    <Input
-                      value={item.label}
-                      onChange={(e) => updateLabel(item.key, e.target.value)}
-                      disabled={status !== 'review'}
-                      className="flex-1 h-8 text-sm"
-                      placeholder="Label"
-                    />
+                            <Input
+                              value={item.label}
+                              onChange={(e) =>
+                                updateLabel(item.key, e.target.value)
+                              }
+                              disabled={status !== 'review'}
+                              className="flex-1 h-8 text-sm"
+                              placeholder="Label"
+                            />
 
-                    <Badge
-                      variant="secondary"
-                      className="shrink-0 tabular-nums"
-                    >
-                      {item.coordCount} pts
-                    </Badge>
+                            <Badge
+                              variant="secondary"
+                              className="shrink-0 tabular-nums"
+                            >
+                              {item.coordCount} pts
+                            </Badge>
 
-                    {!item.result && status === 'review' && (
-                      <button
-                        type="button"
-                        aria-label="Remove item"
-                        className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
-                        onClick={() => removeItem(item.key)}
-                      >
-                        <HugeiconsIcon
-                          icon={Cancel01Icon}
-                          className="size-4"
-                          strokeWidth={2}
-                        />
-                      </button>
-                    )}
-                  </li>
-                ))}
+                            {!item.result && status === 'review' && (
+                              <button
+                                type="button"
+                                aria-label="Remove item"
+                                className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                                onClick={() => removeItem(item.key)}
+                              >
+                                <HugeiconsIcon
+                                  icon={Cancel01Icon}
+                                  className="size-4"
+                                  strokeWidth={2}
+                                />
+                              </button>
+                            )}
+                          </div>
+
+                          {item.result &&
+                            !item.result.ok &&
+                            item.result.message && (
+                              <p className="text-xs text-destructive pl-6">
+                                {item.result.message}
+                              </p>
+                            )}
+                        </li>
+                      ))}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -651,13 +836,11 @@ export default function GeneralGeomUploaderDialog({
 function mapPendingFeatures(args: {
   pending: PendingItem<GeneralGeomRecord>[];
   mapper: GeneralGeomFeatureImportMapper;
-  collectionLabelField: string;
   collectionLabelFallback: string;
 }):
   | { ok: true; items: MappedUploadFeature[] }
   | { ok: false; errors: string[] } {
-  const { pending, mapper, collectionLabelField, collectionLabelFallback } =
-    args;
+  const { pending, mapper, collectionLabelFallback } = args;
   const items: MappedUploadFeature[] = [];
   const errors: string[] = [];
 
@@ -665,46 +848,13 @@ function mapPendingFeatures(args: {
     const item = pending[index];
     const props = (item.record.properties ?? {}) as Record<string, unknown>;
 
-    const mappedType = readMappedString(
-      props,
-      mapper.type.field,
-      mapper.type.fallback
-    );
-    if (!mappedType) {
-      errors.push(`${item.label || `Feature ${index + 1}`}: Type is required.`);
-      continue;
-    }
-
-    const mappedVisibility = readMappedString(
+    const rawVisibility = readMappedString(
       props,
       mapper.visibility.field,
       mapper.visibility.fallback
     );
-    if (!mappedVisibility || !VISIBILITY_VALUES.has(mappedVisibility)) {
-      errors.push(
-        `${item.label || `Feature ${index + 1}`}: Visibility is required and must be public/private/shared.`
-      );
-      continue;
-    }
 
-    const mappedLabel = item.label.trim();
-    if (!mappedLabel) {
-      errors.push(
-        `${item.label || `Feature ${index + 1}`}: Label is required.`
-      );
-      continue;
-    }
-
-    const collectionLabelBase = readMappedString(
-      props,
-      collectionLabelField,
-      collectionLabelFallback
-    );
-
-    if (!collectionLabelBase) {
-      errors.push(`${mappedLabel}: Collection label is required.`);
-      continue;
-    }
+    const collectionLabelBase = collectionLabelFallback;
 
     const subtype = readMappedString(
       props,
@@ -722,6 +872,29 @@ function mapPendingFeatures(args: {
           .join('\n')
       : descriptionBase;
 
+    // Validate mapped feature properties with Valibot.
+    const featureProps = {
+      type: readMappedString(props, mapper.type.field, mapper.type.fallback),
+      subtype: subtype || null,
+      visibility: rawVisibility,
+      label: item.label.trim(),
+      description: description || null,
+    };
+
+    const result = v.safeParse(MappedFeaturePropsSchema, featureProps);
+    if (!result.success) {
+      const label = item.label || `Feature ${index + 1}`;
+      for (const issue of result.issues) {
+        errors.push(`${label}: ${issue.message}`);
+      }
+      continue;
+    }
+
+    if (!collectionLabelBase) {
+      errors.push(`${result.output.label}: Collection label is required.`);
+      continue;
+    }
+
     items.push({
       key: item.key,
       collectionLabelBase,
@@ -729,13 +902,7 @@ function mapPendingFeatures(args: {
       feature: {
         type: 'Feature',
         geometry: item.record.geometry,
-        properties: {
-          type: mappedType,
-          subtype: subtype || null,
-          visibility: mappedVisibility as 'public' | 'private' | 'shared',
-          label: mappedLabel,
-          description: description || null,
-        },
+        properties: result.output,
       },
     });
   }

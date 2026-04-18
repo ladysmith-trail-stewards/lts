@@ -1,6 +1,7 @@
 import { Plus } from 'lucide-react';
 import { MAP_STYLES, type StyleKey } from '@/lib/map/config';
 import type { GeneralGeomCollectionOption } from '@/hooks/useGeneralGeom';
+import { Checkbox } from '@/components/ui/checkbox';
 
 interface MapControlPanelProps {
   currentStyle: StyleKey;
@@ -84,28 +85,30 @@ export default function MapControlPanel({
         {generalCollections.length === 0 ? (
           <p className="text-xs text-slate-500">No imported collections</p>
         ) : (
-          generalCollections.map((collection) => (
-            <label
-              key={collection.id}
-              className="flex items-start gap-2 cursor-pointer"
-            >
-              <input
-                type="checkbox"
-                checked={visibleSet.has(collection.id)}
-                onChange={(e) =>
-                  onToggleCollectionVisibility(collection.id, e.target.checked)
-                }
-                className="mt-0.5 w-3.5 h-3.5 text-green-600 focus:ring-green-500"
-              />
-              <span className="text-xs text-slate-700 leading-snug">
-                {collection.label}
-                <span className="text-slate-500">
-                  {' '}
-                  ({collection.featureCollectionType}, {collection.count})
+          generalCollections.map((collection) => {
+            const checked = visibleSet.has(collection.id);
+            return (
+              <label
+                key={collection.id}
+                className="flex items-center gap-2 cursor-pointer"
+              >
+                <Checkbox
+                  checked={checked}
+                  onCheckedChange={(next) =>
+                    onToggleCollectionVisibility(collection.id, next === true)
+                  }
+                  className="shrink-0"
+                />
+                <span className="text-xs text-slate-700 leading-tight">
+                  {collection.label}
+                  <span className="text-slate-500">
+                    {' '}
+                    ({collection.featureCollectionType}, {collection.count})
+                  </span>
                 </span>
-              </span>
-            </label>
-          ))
+              </label>
+            );
+          })
         )}
       </div>
 

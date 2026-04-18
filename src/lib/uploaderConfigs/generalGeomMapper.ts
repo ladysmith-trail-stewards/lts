@@ -6,18 +6,18 @@ export interface GeneralGeomRawFeature {
 }
 
 export const DEFAULT_GENERAL_GEOM_MAPPER: GeneralGeomFeatureImportMapper = {
-  type: { field: 'type', fallback: 'feature' },
-  subtype: { field: 'subtype', fallback: '' },
-  visibility: { field: 'visibility', fallback: 'public' },
+  type: { field: '', fallback: 'feature' },
+  subtype: { field: '', fallback: '' },
+  visibility: { field: '', fallback: 'public' },
   description: {
-    field: 'description',
+    field: '',
     fallback: '',
     include_props_json: false,
   },
   label: {
-    field: 'name',
+    field: '',
     fallback: '',
-    auto_increment_suffix: 'Feature ',
+    auto_increment_suffix: 'feat',
   },
 };
 
@@ -41,7 +41,7 @@ export function mapFeatureLabel(
 
   if (mapper.label.fallback.trim()) return mapper.label.fallback.trim();
 
-  return `${mapper.label.auto_increment_suffix || 'Feature '}${index + 1}`;
+  return `${(mapper.label.auto_increment_suffix || 'Feature').trim()}-${index + 1}`;
 }
 
 function readAsString(value: unknown): string {

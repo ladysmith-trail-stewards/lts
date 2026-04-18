@@ -250,39 +250,47 @@ begin
 
   -- 2) Insert the features.
   return query
-    insert into public.general_geom (
-      collection_id, region_id, type, subtype, visibility,
-      label, description, geometry
-    )
-    select
-      v_collection_id,
-      v_region_id,
-      coalesce(nullif(trim(props ->> 'type'),       ''), 'feature'),
-      nullif(trim(props ->> 'subtype'), ''),
-      coalesce(nullif(trim(props ->> 'visibility'), ''), 'public'),
-      coalesce(nullif(trim(props ->> 'label'),      ''), 'Unnamed'),
-      nullif(trim(props ->> 'description'), ''),
-      public.st_force2d(
-        case
-          when coalesce(p_source_epsg, 4326) = 4326 then
-            public.st_setsrid(
-              public.st_geomfromgeojson((f.feat -> 'geometry')::text),
-              4326
-            )
-          else
-            public.st_transform(
+    with parsed as (
+      select
+        coalesce(f.feat -> 'properties', '{}'::jsonb) as props,
+        public.st_force2d(
+          case
+            when coalesce(p_source_epsg, 4326) = 4326 then
               public.st_setsrid(
                 public.st_geomfromgeojson((f.feat -> 'geometry')::text),
-                coalesce(p_source_epsg, 4326)
-              ),
-              4326
-            )
-        end
+                4326
+              )
+            else
+              public.st_transform(
+                public.st_setsrid(
+                  public.st_geomfromgeojson((f.feat -> 'geometry')::text),
+                  coalesce(p_source_epsg, 4326)
+                ),
+                4326
+              )
+          end
+        ) as geom
+      from jsonb_array_elements(p_features) as f(feat)
+    ),
+    inserted as (
+      insert into public.general_geom (
+        collection_id, region_id, type, subtype, visibility,
+        label, description, geometry
       )
-    from jsonb_array_elements(p_features) as f(feat),
-         lateral (select coalesce(f.feat -> 'properties', '{}'::jsonb)) as p(props)
-    where f.feat -> 'geometry' is not null
-    returning true, general_geom.id, null::text;
+      select
+        v_collection_id,
+        v_region_id,
+        coalesce(nullif(trim(parsed.props ->> 'type'),       ''), 'feature'),
+        nullif(trim(parsed.props ->> 'subtype'), ''),
+        coalesce(nullif(trim(parsed.props ->> 'visibility'), ''), 'public'),
+        coalesce(nullif(trim(parsed.props ->> 'label'),      ''), 'Unnamed'),
+        nullif(trim(parsed.props ->> 'description'), ''),
+        parsed.geom
+      from parsed
+      where parsed.geom is not null
+      returning general_geom.id
+    )
+    select true, inserted.id, null::text from inserted;
 end;
 $$;
 

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/supabase/database.types';
+import { toJson } from '@/lib/utils';
 
 export interface GeneralGeomCollectionImportInput {
   label: string;
@@ -7,6 +8,7 @@ export interface GeneralGeomCollectionImportInput {
   visibility: 'public' | 'private' | 'shared';
   feature_collection_type: string;
   style?: Record<string, unknown>;
+  region_id?: number | null;
 }
 
 export interface GeneralGeomFeatureImportMapper {
@@ -25,8 +27,11 @@ export interface GeneralGeomFeatureImportMapper {
   };
 }
 
+type RpcRow =
+  Database['public']['Functions']['import_general_geom_collection']['Returns'][number];
+
 export interface ImportGeneralGeomCollectionDbResult {
-  results: Array<{ ok: boolean; id: number | null; message: string | null }>;
+  results: RpcRow[];
   allOk: boolean;
   error: Error | null;
 }
@@ -39,21 +44,9 @@ export async function importGeneralGeomCollectionDb(
     sourceEpsg?: number;
   }
 ): Promise<ImportGeneralGeomCollectionDbResult> {
-  const rpc = client.rpc as unknown as (
-    fn: string,
-    params: Record<string, unknown>
-  ) => Promise<{
-    data: Array<{
-      ok: boolean;
-      id: number | null;
-      message: string | null;
-    }> | null;
-    error: { message: string } | null;
-  }>;
-
-  const { data, error } = await rpc('import_general_geom_collection', {
-    p_collection: args.collection,
-    p_features: args.features,
+  const { data, error } = await client.rpc('import_general_geom_collection', {
+    p_collection: toJson(args.collection),
+    p_features: toJson(args.features),
     p_source_epsg: args.sourceEpsg ?? 4326,
   });
 

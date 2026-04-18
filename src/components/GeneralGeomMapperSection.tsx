@@ -15,8 +15,13 @@ interface GeneralGeomMapperSectionProps {
   onFieldChange: (value: string) => void;
   onFallbackChange: (value: string) => void;
   disabled: boolean;
+  fallbackPlaceholder?: string;
 }
 
+/**
+ * Renders a single <tr> row for the Feature Mapper table.
+ * Must be placed inside a <tbody>.
+ */
 export default function GeneralGeomMapperSection({
   label,
   fields,
@@ -25,36 +30,58 @@ export default function GeneralGeomMapperSection({
   onFieldChange,
   onFallbackChange,
   disabled,
+  fallbackPlaceholder = 'Fallback',
 }: GeneralGeomMapperSectionProps) {
   return (
-    <div className="grid grid-cols-2 gap-2">
-      <Select
-        value={fieldValue}
-        onValueChange={(value) => onFieldChange(value ?? '')}
-        disabled={disabled}
-      >
-        <SelectTrigger>
-          <SelectValue placeholder={`${label} field`} />
-        </SelectTrigger>
-        <SelectContent>
-          {fields.length === 0 && (
-            <div className="px-2 py-1 text-xs text-muted-foreground">
-              No fields found
-            </div>
-          )}
-          {fields.map((field) => (
-            <SelectItem key={field} value={field}>
-              {field}
+    <tr>
+      {/* Target parameter */}
+      <td className="py-1.5 pr-3 text-sm font-medium whitespace-nowrap align-middle w-24">
+        {label}
+      </td>
+
+      {/* Input parameter dropdown */}
+      <td className="py-1.5 pr-2 align-middle">
+        <Select
+          value={fieldValue || '__none__'}
+          onValueChange={(value) =>
+            onFieldChange(value == null || value === '__none__' ? '' : value)
+          }
+          disabled={disabled}
+        >
+          <SelectTrigger className="h-8 text-sm">
+            {fieldValue ? (
+              <SelectValue />
+            ) : (
+              <span className="text-muted-foreground truncate">
+                Select {label} from input
+              </span>
+            )}
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__none__">
+              <span className="italic text-muted-foreground">
+                None (use fallback)
+              </span>
             </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <Input
-        value={fallbackValue}
-        onChange={(e) => onFallbackChange(e.target.value)}
-        disabled={disabled}
-        placeholder={`${label} fallback`}
-      />
-    </div>
+            {fields.map((field) => (
+              <SelectItem key={field} value={field}>
+                {field}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </td>
+
+      {/* Fallback value */}
+      <td className="py-1.5 align-middle">
+        <Input
+          value={fallbackValue}
+          onChange={(e) => onFallbackChange(e.target.value)}
+          disabled={disabled}
+          placeholder={fallbackPlaceholder}
+          className="h-8 text-sm"
+        />
+      </td>
+    </tr>
   );
 }
