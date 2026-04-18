@@ -21,8 +21,31 @@
 > The `block_deleted_at_update` trigger enforces this per-table; the DELETE column reflects hard-delete RLS only.
 > `super_admin` always has full soft-delete access. Database-level roles (`service_role`, `postgres`) bypass the trigger entirely.
 > Per-table permissions (from live DB trigger args):
+> `general_geom`: admin=rows in own region, super_user=rows in own region, user=none
+> `general_geom_collection`: admin=rows in own region, super_user=rows in own region, user=none
 > `profiles`: admin=rows in own region, super_user=own row only, user=own row only
+> `regions`: admin=none, super_user=none, user=none
 > `trails`: admin=rows in own region, super_user=rows in own region, user=none
+
+### `general_geom`
+
+| Role        | SELECT | INSERT | UPDATE | DELETE | Soft-D |
+| ----------- | :----: | :----: | :----: | :----: | :----: |
+| Anon        |   ✅   |   —    |   —    |   —    |   —    |
+| User        |   ✅   |   —    |   —    |   —    |   —    |
+| Super User  |   ✅   |   📍   |   📍   |   —    |   📍   |
+| Admin       |   ✅   |   📍   |   📍   |   —    |   📍   |
+| Super Admin |   ✅   |   ✅   |   ✅   |   ✅   |   ✅   |
+
+### `general_geom_collection`
+
+| Role        | SELECT | INSERT | UPDATE | DELETE | Soft-D |
+| ----------- | :----: | :----: | :----: | :----: | :----: |
+| Anon        |   ✅   |   —    |   —    |   —    |   —    |
+| User        |   ✅   |   —    |   —    |   —    |   —    |
+| Super User  |   ✅   |   📍   |   📍   |   —    |   📍   |
+| Admin       |   ✅   |   📍   |   📍   |   —    |   📍   |
+| Super Admin |   ✅   |   ✅   |   ✅   |   ✅   |   ✅   |
 
 ### `profiles`
 
@@ -36,13 +59,13 @@
 
 ### `regions`
 
-| Role        | SELECT | INSERT | UPDATE | DELETE |
-| ----------- | :----: | :----: | :----: | :----: |
-| Anon        |   ✅   |   —    |   —    |   —    |
-| User        |   ✅   |   —    |   —    |   —    |
-| Super User  |   ✅   |   —    |   —    |   —    |
-| Admin       |   ✅   |   —    |   📍   |   —    |
-| Super Admin |   ✅   |   ✅   |   ✅   |   ✅   |
+| Role        | SELECT | INSERT | UPDATE | DELETE | Soft-D |
+| ----------- | :----: | :----: | :----: | :----: | :----: |
+| Anon        |   ✅   |   —    |   —    |   —    |   —    |
+| User        |   ✅   |   —    |   —    |   —    |   —    |
+| Super User  |   ✅   |   —    |   —    |   —    |   —    |
+| Admin       |   ✅   |   —    |   📍   |   —    |   —    |
+| Super Admin |   ✅   |   ✅   |   ✅   |   ✅   |   ✅   |
 
 ### `trail_elevations`
 
@@ -68,13 +91,15 @@
 
 ## RPCs
 
-| RPC                            | Callable by                             |  Security  | Notes                                                                                                                                                                                                                                                                                                             |
-| ------------------------------ | --------------------------------------- | :--------: | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `accept_policy`                | `anon`, `authenticated`, `service_role` | 🔒 DEFINER | Sets policy_accepted_at = now() and region_id = p_region_id for the calling pending user. Raises if the caller is not pending, has already accepted, or p_region_id is not a valid non-default region. SECURITY DEFINER — bypasses column-level UPDATE restrictions on policy_accepted_at.                        |
-| `assert_data_write_permission` | `authenticated`, `service_role`         | 🔒 DEFINER | Live-role guard for trail writes. Returns TRUE on success; raises on failure. Call from RLS policies as: (public.assert_data_write_permission(region_id) = true). Also callable as a direct RPC for pre-flight checks. Raises stale_jwt if the JWT role differs from the live profile role.                       |
-| `change_user_role`             | `authenticated`, `service_role`         | 🔒 DEFINER | —                                                                                                                                                                                                                                                                                                                 |
-| `set_region_bbox`              | `authenticated`, `service_role`         |  INVOKER   | Sets the bbox Polygon on a region from four required WGS84 scalar coordinates. All coordinates must be non-null and form a valid non-degenerate envelope (min_lng < max_lng, min_lat < max_lat, within WGS84 bounds). SECURITY INVOKER — RLS on public.regions is enforced: admin and super_admin may set a bbox. |
-| `upsert_trails`                | `anon`, `authenticated`, `service_role` |  INVOKER   | —                                                                                                                                                                                                                                                                                                                 |
+| RPC                              | Callable by                             |  Security  | Notes                                                                                                                                                                                                                                                                                                             |
+| -------------------------------- | --------------------------------------- | :--------: | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `accept_policy`                  | `anon`, `authenticated`, `service_role` | 🔒 DEFINER | Sets policy_accepted_at = now() and region_id = p_region_id for the calling pending user. Raises if the caller is not pending, has already accepted, or p_region_id is not a valid non-default region. SECURITY DEFINER — bypasses column-level UPDATE restrictions on policy_accepted_at.                        |
+| `assert_data_write_permission`   | `authenticated`, `service_role`         | 🔒 DEFINER | Live-role guard for trail writes. Returns TRUE on success; raises on failure. Call from RLS policies as: (public.assert_data_write_permission(region_id) = true). Also callable as a direct RPC for pre-flight checks. Raises stale_jwt if the JWT role differs from the live profile role.                       |
+| `change_user_role`               | `authenticated`, `service_role`         | 🔒 DEFINER | —                                                                                                                                                                                                                                                                                                                 |
+| `import_general_geom_collection` | `anon`, `authenticated`, `service_role` |  INVOKER   | Imports a geometry collection and its features in one call. SECURITY DEFINER — gates on assert_data_write_permission() up front, then inserts as function owner to avoid the RLS re-entrancy issue with assert_data_write_permission() inside the INSERT policy.                                                  |
+| `set_region_bbox`                | `authenticated`, `service_role`         |  INVOKER   | Sets the bbox Polygon on a region from four required WGS84 scalar coordinates. All coordinates must be non-null and form a valid non-degenerate envelope (min_lng < max_lng, min_lat < max_lat, within WGS84 bounds). SECURITY INVOKER — RLS on public.regions is enforced: admin and super_admin may set a bbox. |
+| `soft_delete_regions`            | `anon`, `authenticated`, `service_role` | 🔒 DEFINER | Sets deleted_at = now() on regions. SECURITY DEFINER. super_admin only.                                                                                                                                                                                                                                           |
+| `upsert_trails`                  | `anon`, `authenticated`, `service_role` |  INVOKER   | —                                                                                                                                                                                                                                                                                                                 |
 
 > ℹ️ **Security**: `INVOKER` = runs as the calling user (RLS applies normally). `🔒 DEFINER` = runs as the function owner, bypassing RLS — used only where a genuine privilege bypass is required (e.g. writing `deleted_at` past column-level security).
 > ℹ️ `authenticated` = any signed-in user. Individual RPCs may enforce additional role checks internally via `auth.jwt()` claims.

@@ -1,5 +1,7 @@
 import { Plus } from 'lucide-react';
 import { MAP_STYLES, type StyleKey } from '@/lib/map/config';
+import type { GeneralGeomCollectionOption } from '@/hooks/useGeneralGeom';
+import { Checkbox } from '@/components/ui/checkbox';
 
 interface MapControlPanelProps {
   currentStyle: StyleKey;
@@ -12,6 +14,9 @@ interface MapControlPanelProps {
   onStyleChange: (style: StyleKey) => void;
   onContourStrength: (value: number) => void;
   onAddTrail: () => void;
+  generalCollections: GeneralGeomCollectionOption[];
+  visibleCollectionIds: number[];
+  onToggleCollectionVisibility: (collectionId: number, next: boolean) => void;
 }
 
 export default function MapControlPanel({
@@ -25,10 +30,14 @@ export default function MapControlPanel({
   onStyleChange,
   onContourStrength,
   onAddTrail,
+  generalCollections,
+  visibleCollectionIds,
+  onToggleCollectionVisibility,
 }: MapControlPanelProps) {
+  const visibleSet = new Set(visibleCollectionIds);
+
   return (
-    <div className="bg-white rounded-lg shadow-lg border border-gray-200 p-3 min-w-[150px] space-y-3">
-      {/* Style */}
+    <div className="bg-white rounded-lg shadow-lg border border-gray-200 p-3 min-w-[200px] space-y-3 max-h-[80vh] overflow-y-auto">
       <div>
         <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
           Style
@@ -50,7 +59,6 @@ export default function MapControlPanel({
         </div>
       </div>
 
-      {/* Trail count + Add Trail button */}
       {!loading && !trailsError && (
         <div className="border-t pt-2 space-y-2">
           <p className="text-xs text-slate-500">
@@ -70,7 +78,40 @@ export default function MapControlPanel({
         </div>
       )}
 
-      {/* Contour controls */}
+      <div className="border-t pt-3 space-y-1.5">
+        <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
+          Feature Collections
+        </h3>
+        {generalCollections.length === 0 ? (
+          <p className="text-xs text-slate-500">No imported collections</p>
+        ) : (
+          generalCollections.map((collection) => {
+            const checked = visibleSet.has(collection.id);
+            return (
+              <label
+                key={collection.id}
+                className="flex items-center gap-2 cursor-pointer"
+              >
+                <Checkbox
+                  checked={checked}
+                  onCheckedChange={(next) =>
+                    onToggleCollectionVisibility(collection.id, next === true)
+                  }
+                  className="shrink-0"
+                />
+                <span className="text-xs text-slate-700 leading-tight">
+                  {collection.label}
+                  <span className="text-slate-500">
+                    {' '}
+                    ({collection.featureCollectionType}, {collection.count})
+                  </span>
+                </span>
+              </label>
+            );
+          })
+        )}
+      </div>
+
       <div className="border-t pt-3">
         <div className="flex items-center justify-between mb-1.5">
           <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">

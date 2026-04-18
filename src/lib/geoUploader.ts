@@ -271,7 +271,10 @@ export async function parseFiles<TRecord>(
 
       const coords = extractCoords(normalised);
 
-      if (coords.length < (config.geometryType === 'Point' ? 1 : 2)) {
+      const isPointGeom =
+        normalised.type === 'Point' || normalised.type === 'MultiPoint';
+      const minCoords = config.geometryType === 'Point' || isPointGeom ? 1 : 2;
+      if (coords.length < minCoords) {
         warnings.push(
           `${file.name}: skipped feature with too few coordinates.`
         );
