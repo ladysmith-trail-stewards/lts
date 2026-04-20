@@ -110,8 +110,13 @@ function HeaderMenu() {
         </NavigationMenu.Item>
       </NavigationMenu.List>
       <NavigationMenu.Portal>
-        <NavigationMenu.Positioner side="bottom" align="end" sideOffset={8}>
-          <NavigationMenu.Popup className="min-w-[240px] rounded-xl bg-white shadow-xl ring-1 ring-black/5 p-2 z-50">
+        <NavigationMenu.Positioner
+          side="bottom"
+          align="end"
+          sideOffset={8}
+          className="z-50"
+        >
+          <NavigationMenu.Popup className="min-w-[240px] rounded-xl bg-white shadow-xl ring-1 ring-black/5 p-2">
             <NavigationMenu.Viewport />
           </NavigationMenu.Popup>
         </NavigationMenu.Positioner>

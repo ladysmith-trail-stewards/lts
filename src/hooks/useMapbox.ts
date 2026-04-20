@@ -9,6 +9,7 @@ import mapboxgl from 'mapbox-gl';
 import { useSearchParams } from 'react-router-dom';
 import { useDrawTrail, type DrawTrailApi } from '@/hooks/useDrawTrail';
 import { type Trail } from '@/hooks/useTrails';
+import { type GeneralGeomRow } from '@/lib/db_services/general_geom/getGeneralGeomDb';
 import {
   MAP_STYLES,
   type StyleKey,
@@ -21,6 +22,7 @@ import {
   CONTOUR_STRENGTH_DEFAULT,
   ELEV_HOVER_SOURCE,
   ELEV_HOVER_LAYER,
+  GENERAL_GEOM_SOURCE,
 } from '@/lib/map/config';
 import {
   SELECTED_LAYER_CONFIG,
@@ -28,6 +30,9 @@ import {
   TRAILS_LABELS_CONFIG,
   TRAILS_START_CONFIG,
   TRAILS_END_CONFIG,
+  GENERAL_GEOM_POINTS_CONFIG,
+  GENERAL_GEOM_LINES_CONFIG,
+  GENERAL_GEOM_POLYGONS_CONFIG,
 } from '@/lib/map/layers';
 
 // Layer ID shorthand for hover/click handlers
@@ -54,8 +59,32 @@ function trailToFeature(t: Trail): GeoJSON.Feature {
   };
 }
 
+function generalGeomGroup(type: GeoJSON.Geometry['type']): string {
+  if (type === 'Point' || type === 'MultiPoint') return 'Point';
+  if (type === 'LineString' || type === 'MultiLineString') return 'LineString';
+  if (type === 'Polygon' || type === 'MultiPolygon') return 'Polygon';
+  return 'Other';
+}
+
+function generalGeomToFeature(row: GeneralGeomRow): GeoJSON.Feature {
+  const group = generalGeomGroup(row.geometry_geojson.type);
+  return {
+    type: 'Feature',
+    id: row.id,
+    geometry: row.geometry_geojson,
+    properties: {
+      id: row.id,
+      label: row.label,
+      visibility: row.visibility,
+      geometry_group: group,
+    },
+  };
+}
+
 export interface UseMapboxOptions {
   trails: Trail[];
+  generalGeom: GeneralGeomRow[];
+  visibleGeneralGeomCollectionIds: Set<number>;
   onTrailClick?: (trailId: number) => void;
   selectedTrailId?: number | null;
   searchParams?: URLSearchParams;
@@ -85,6 +114,8 @@ export interface UseMapboxReturn {
 
 export function useMapbox({
   trails,
+  generalGeom,
+  visibleGeneralGeomCollectionIds,
   onTrailClick,
   selectedTrailId = null,
   searchParams,
@@ -176,6 +207,16 @@ export function useMapbox({
       features: trails.map(trailToFeature),
     }),
     [trails]
+  );
+
+  const buildGeneralGeomGeoJSON = useCallback(
+    (): GeoJSON.FeatureCollection => ({
+      type: 'FeatureCollection',
+      features: generalGeom
+        .filter((row) => visibleGeneralGeomCollectionIds.has(row.collection_id))
+        .map((row) => generalGeomToFeature(row)),
+    }),
+    [generalGeom, visibleGeneralGeomCollectionIds]
   );
 
   const buildEndpointsGeoJSON = useCallback(
@@ -300,6 +341,23 @@ export function useMapbox({
     [buildGeoJSON, buildEndpointsGeoJSON]
   );
 
+  const addGeneralGeomLayers = useCallback(
+    (map: mapboxgl.Map) => {
+      const geojson = buildGeneralGeomGeoJSON();
+      if (map.getSource(GENERAL_GEOM_SOURCE)) {
+        (map.getSource(GENERAL_GEOM_SOURCE) as mapboxgl.GeoJSONSource).setData(
+          geojson
+        );
+      } else {
+        map.addSource(GENERAL_GEOM_SOURCE, { type: 'geojson', data: geojson });
+        map.addLayer(GENERAL_GEOM_POLYGONS_CONFIG);
+        map.addLayer(GENERAL_GEOM_LINES_CONFIG);
+        map.addLayer(GENERAL_GEOM_POINTS_CONFIG);
+      }
+    },
+    [buildGeneralGeomGeoJSON]
+  );
+
   // ── Contour layer IDs (discovered from the loaded style) ─────────────────────
 
   const contourLineIdsRef = useRef<string[]>([]);
@@ -401,7 +459,8 @@ export function useMapbox({
     const map = mapRef.current;
     if (!mapReady || !map) return;
     addTrailsLayer(map);
-  }, [mapReady, addTrailsLayer]);
+    addGeneralGeomLayers(map);
+  }, [mapReady, addTrailsLayer, addGeneralGeomLayers]);
 
   const isEditingRef = useRef(false);
   useEffect(() => {

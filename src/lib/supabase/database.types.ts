@@ -9,6 +9,123 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      general_geom: {
+        Row: {
+          collection_id: number;
+          created_at: string;
+          deleted_at: string | null;
+          description: string | null;
+          geometry: unknown;
+          id: number;
+          label: string;
+          region_id: number;
+          subtype: string | null;
+          type: string;
+          updated_at: string;
+          visibility: string;
+        };
+        Insert: {
+          collection_id: number;
+          created_at?: string;
+          deleted_at?: string | null;
+          description?: string | null;
+          geometry: unknown;
+          id?: number;
+          label: string;
+          region_id: number;
+          subtype?: string | null;
+          type: string;
+          updated_at?: string;
+          visibility?: string;
+        };
+        Update: {
+          collection_id?: number;
+          created_at?: string;
+          deleted_at?: string | null;
+          description?: string | null;
+          geometry?: unknown;
+          id?: number;
+          label?: string;
+          region_id?: number;
+          subtype?: string | null;
+          type?: string;
+          updated_at?: string;
+          visibility?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'general_geom_collection_id_fkey';
+            columns: ['collection_id'];
+            isOneToOne: false;
+            referencedRelation: 'general_geom_collection';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'general_geom_region_id_fkey';
+            columns: ['region_id'];
+            isOneToOne: false;
+            referencedRelation: 'regions';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      general_geom_collection: {
+        Row: {
+          added_by: number | null;
+          created_at: string;
+          deleted_at: string | null;
+          description: string | null;
+          feature_collection_type: string;
+          id: number;
+          label: string;
+          region_id: number;
+          style: Json;
+          updated_at: string;
+          visibility: string;
+        };
+        Insert: {
+          added_by?: number | null;
+          created_at?: string;
+          deleted_at?: string | null;
+          description?: string | null;
+          feature_collection_type: string;
+          id?: number;
+          label: string;
+          region_id: number;
+          style?: Json;
+          updated_at?: string;
+          visibility?: string;
+        };
+        Update: {
+          added_by?: number | null;
+          created_at?: string;
+          deleted_at?: string | null;
+          description?: string | null;
+          feature_collection_type?: string;
+          id?: number;
+          label?: string;
+          region_id?: number;
+          style?: Json;
+          updated_at?: string;
+          visibility?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'general_geom_collection_added_by_fkey';
+            columns: ['added_by'];
+            isOneToOne: false;
+            referencedRelation: 'profiles';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'general_geom_collection_region_id_fkey';
+            columns: ['region_id'];
+            isOneToOne: false;
+            referencedRelation: 'regions';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
       profiles: {
         Row: {
           auth_user_id: string;
@@ -21,6 +138,7 @@ export type Database = {
           policy_accepted_at: string | null;
           region_id: number;
           role: Database['public']['Enums']['app_role'];
+          updated_at: string;
         };
         Insert: {
           auth_user_id: string;
@@ -33,6 +151,7 @@ export type Database = {
           policy_accepted_at?: string | null;
           region_id: number;
           role?: Database['public']['Enums']['app_role'];
+          updated_at?: string;
         };
         Update: {
           auth_user_id?: string;
@@ -45,6 +164,7 @@ export type Database = {
           policy_accepted_at?: string | null;
           region_id?: number;
           role?: Database['public']['Enums']['app_role'];
+          updated_at?: string;
         };
         Relationships: [
           {
@@ -62,18 +182,21 @@ export type Database = {
           deleted_at: string | null;
           id: number;
           name: string;
+          updated_at: string;
         };
         Insert: {
           bbox?: unknown;
           deleted_at?: string | null;
           id?: number;
           name: string;
+          updated_at?: string;
         };
         Update: {
           bbox?: unknown;
           deleted_at?: string | null;
           id?: number;
           name?: string;
+          updated_at?: string;
         };
         Relationships: [];
       };
@@ -222,6 +345,42 @@ export type Database = {
       };
     };
     Views: {
+      general_geom_view: {
+        Row: {
+          collection_id: number | null;
+          collection_label: string | null;
+          collection_visibility: string | null;
+          created_at: string | null;
+          deleted_at: string | null;
+          description: string | null;
+          feature_collection_type: string | null;
+          geometry_geojson: Json | null;
+          geometry_type: string | null;
+          id: number | null;
+          label: string | null;
+          region_id: number | null;
+          subtype: string | null;
+          type: string | null;
+          updated_at: string | null;
+          visibility: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'general_geom_collection_id_fkey';
+            columns: ['collection_id'];
+            isOneToOne: false;
+            referencedRelation: 'general_geom_collection';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'general_geom_collection_region_id_fkey';
+            columns: ['region_id'];
+            isOneToOne: false;
+            referencedRelation: 'regions';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
       geography_columns: {
         Row: {
           coord_dimension: number | null;
@@ -637,6 +796,14 @@ export type Database = {
       };
       get_utm_epsg: { Args: { geom: unknown }; Returns: number };
       gettransactionid: { Args: never; Returns: unknown };
+      import_general_geom_collection: {
+        Args: { p_collection: Json; p_features: Json; p_source_epsg?: number };
+        Returns: {
+          id: number;
+          message: string;
+          ok: boolean;
+        }[];
+      };
       longtransactionsenabled: { Args: never; Returns: boolean };
       populate_geometry_columns:
         | { Args: { tbl_oid: unknown; use_typmod?: boolean }; Returns: number }
@@ -688,6 +855,7 @@ export type Database = {
         };
         Returns: undefined;
       };
+      soft_delete_regions: { Args: { ids: number[] }; Returns: undefined };
       st_3dclosestpoint: {
         Args: { geom1: unknown; geom2: unknown };
         Returns: unknown;
