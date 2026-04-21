@@ -3,7 +3,7 @@
  * db-reset.js
  *
  * Full local database reset: drops all data, re-runs all migrations, seeds,
- * then regenerates database.types.ts and POLICIES.md.
+ * then regenerates database.types.ts, POLICIES.md, and SCHEMA_VIEW.sql.
  *
  * Usage:
  *   node scripts/db-reset.js
@@ -13,6 +13,7 @@
  *   --no-seed      Skip seed data (migrations only)
  *   --no-types     Skip database.types.ts regeneration
  *   --no-policies  Skip POLICIES.md regeneration
+ *   --no-schema    Skip SCHEMA_VIEW.sql regeneration
  *   --help         Show this help
  *
  * ⚠️  Destructive — all local data will be lost.
@@ -38,6 +39,11 @@ const argv = yargs(hideBin(process.argv))
     type: 'boolean',
     default: true,
     description: 'Regenerate POLICIES.md',
+  })
+  .option('schema', {
+    type: 'boolean',
+    default: true,
+    description: 'Regenerate SCHEMA_VIEW.sql',
   })
   .help().argv;
 
@@ -96,6 +102,10 @@ if (argv.types) {
 
 if (argv.policies) {
   run('node scripts/extract-db-policies.js', 'Regenerate POLICIES.md');
+}
+
+if (argv.schema) {
+  run('node scripts/extract-db-schema-view.js', 'Regenerate SCHEMA_VIEW.sql');
 }
 
 // Run prettier and summarise — suppress per-file output

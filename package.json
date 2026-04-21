@@ -17,6 +17,7 @@
     "db:studio": "open http://127.0.0.1:54323",
     "db:types": "supabase gen types typescript --local --schema public > src/lib/supabase/database.types.ts",
     "db:policies": "node scripts/extract-db-policies.js",
+    "db:schema-view": "node scripts/extract-db-schema-view.js",
     "db:lint": "node scripts/db-lint.js",
     "elevation:update-trail": "elevation/.venv/bin/python elevation/main.py update-trail",
     "elevation:update-all": "elevation/.venv/bin/python elevation/main.py update-all",

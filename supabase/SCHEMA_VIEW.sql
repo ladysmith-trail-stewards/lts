@@ -1,0 +1,5 @@
+-- SCHEMA VIEW (LLM-friendly local snapshot)
+-- Auto-generated. Re-run: pnpm db:schema-view
+--
+-- Includes SQL schema objects used to reason about access behavior:
+-- tables, views, indexes, policies, grants, and RPCs (functions).

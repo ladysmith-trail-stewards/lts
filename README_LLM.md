@@ -56,10 +56,11 @@ pnpm format            # Prettier
 # Database (requires Supabase CLI + Docker)
 pnpm db:start          # Start local Supabase (API :54321, DB :54322, Studio :54323)
 pnpm db:stop           # Stop local Supabase
-pnpm db:reset          # ⚠️  Full reset — drops all data, re-runs migrations + seed, regenerates types + POLICIES.md
-pnpm db:migrate        # Apply pending migrations only (no data loss), regenerates types + POLICIES.md
+pnpm db:reset          # ⚠️  Full reset — drops all data, re-runs migrations + seed, regenerates types + POLICIES.md + SCHEMA_VIEW.sql
+pnpm db:migrate        # Apply pending migrations only (no data loss), regenerates types + POLICIES.md + SCHEMA_VIEW.sql
 pnpm db:types          # Regenerate database.types.ts from local schema
 pnpm db:policies       # Regenerate supabase/POLICIES.md from live DB
+pnpm db:schema-view    # Regenerate supabase/SCHEMA_VIEW.sql from live DB
 # Backup / restore — see supabase/BACKUP.md (uses supabase db dump / pg_dump; works on free tier)
 
 # Testing

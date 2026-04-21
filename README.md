@@ -150,10 +150,11 @@ pnpm format             # Prettier
 # Database
 pnpm db:start           # start local Supabase (API :54321, Studio :54323)
 pnpm db:stop            # stop containers
-pnpm db:reset           # ⚠️  full reset — drops all data, re-runs migrations + seed, regenerates types + POLICIES.md
-pnpm db:migrate         # apply pending migrations only (no data loss), regenerates types + POLICIES.md
+pnpm db:reset           # ⚠️  full reset — drops all data, re-runs migrations + seed, regenerates types + POLICIES.md + SCHEMA_VIEW.sql
+pnpm db:migrate         # apply pending migrations only (no data loss), regenerates types + POLICIES.md + SCHEMA_VIEW.sql
 pnpm db:types           # regenerate src/lib/supabase/database.types.ts
 pnpm db:policies        # regenerate supabase/POLICIES.md from live DB
+pnpm db:schema-view     # regenerate supabase/SCHEMA_VIEW.sql from live DB
 
 # Backup / restore — see supabase/BACKUP.md for full instructions
 # Uses `supabase db dump` (CLI) or `pg_dump` directly; works on free tier
@@ -179,6 +180,7 @@ src/
 supabase/
   migrations/       # SQL migrations (source of truth for schema + RLS)
   POLICIES.md       # Auto-generated RLS policy snapshot (pnpm db:policies)
+  SCHEMA_VIEW.sql   # Auto-generated schema snapshot for AI debugging (pnpm db:schema-view)
   seed.sql          # Local dev seed data
 scripts/            # Developer tooling (policy extraction, pre-PR docs)
 ```
