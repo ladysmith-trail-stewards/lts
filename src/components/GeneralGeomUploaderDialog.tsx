@@ -5,11 +5,8 @@ import {
   AlertCircleIcon,
   Tick02Icon,
   Cancel01Icon,
-  Location01Icon,
-  GeometricShapes02Icon,
-  Route01Icon,
 } from '@hugeicons/core-free-icons';
-import { HugeiconsIcon, type IconSvgElement } from '@hugeicons/react';
+import { HugeiconsIcon } from '@hugeicons/react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase/client';
 import {
@@ -58,6 +55,7 @@ import {
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import GeneralGeomMapperSection from '@/components/GeneralGeomMapperSection';
+import { GEOM_GROUP_META } from '@/lib/geomTypeMeta';
 
 type UploadStatus = 'idle' | 'parsing' | 'review' | 'uploading' | 'done';
 
@@ -100,17 +98,6 @@ const GEOM_GROUP_ORDER = [
   'Polygon',
   'Geometry',
 ] as const;
-type GeomGroupKey = (typeof GEOM_GROUP_ORDER)[number];
-
-const GEOM_GROUP_META: Record<
-  GeomGroupKey,
-  { icon: IconSvgElement; label: string }
-> = {
-  Point: { icon: Location01Icon, label: 'Points' },
-  LineString: { icon: Route01Icon, label: 'Lines' },
-  Polygon: { icon: GeometricShapes02Icon, label: 'Polygons' },
-  Geometry: { icon: GeometricShapes02Icon, label: 'Geometry' },
-};
 
 export interface GeneralGeomUploaderDialogProps {
   open: boolean;

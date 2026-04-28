@@ -349,6 +349,7 @@ export type Database = {
         Row: {
           collection_id: number | null;
           collection_label: string | null;
+          collection_style: Json | null;
           collection_visibility: string | null;
           created_at: string | null;
           deleted_at: string | null;

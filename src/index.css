@@ -148,3 +148,17 @@
   --color-pnw-pacific-mist: #9dbbb0;
   --color-pnw-storm-slate: #1e2d3d;
 }
+
+/* ── Mapbox popup overrides ─────────────────────────────────────────────────── */
+.geom-feature-popup .mapboxgl-popup-content {
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  padding: 0;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+}
+
+.geom-feature-popup .mapboxgl-popup-tip {
+  opacity: 0.75;
+}

@@ -1,5 +1,7 @@
 import 'mapbox-gl/dist/mapbox-gl.css';
 import mapboxgl from 'mapbox-gl';
+import { useCallback, useLayoutEffect, useRef } from 'react';
+import { createRoot } from 'react-dom/client';
 import { useSearchParams } from 'react-router-dom';
 import { useMapbox } from '@/hooks/useMapbox';
 import { useTrails } from '@/hooks/useTrails';
@@ -7,6 +9,10 @@ import { useGeneralGeom } from '@/hooks/useGeneralGeom';
 import { useAuth } from '@/contexts/AuthContext';
 import MapControlPanel from '@/components/MapControlPanel';
 import TrailDetailDrawer from '@/components/TrailDetailDrawer';
+import {
+  GeneralGeomPopup,
+  type GeneralGeomPopupFeature,
+} from '@/components/GeneralGeomPopup';
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN as
   | string
@@ -60,9 +66,26 @@ function MapPageInner() {
     visibleCollectionIds,
     visibleCollectionIdSet,
     setCollectionVisible,
+    updateCollectionStyle,
     error: generalGeomError,
     loading: generalGeomLoading,
   } = useGeneralGeom();
+
+  // ── General geom popup ───────────────────────────────────────────────────────
+  // Refs hold the live Popup and React root so we can close/replace them.
+  const geomPopupRef = useRef<mapboxgl.Popup | null>(null);
+  const geomPopupRootRef = useRef<ReturnType<typeof createRoot> | null>(null);
+
+  const closeGeomPopup = useCallback(() => {
+    geomPopupRef.current?.remove();
+    geomPopupRef.current = null;
+    geomPopupRootRef.current = null;
+  }, []);
+
+  // Stable indirection so we can call the real handler after mapRef is known.
+  const onGeomClickImplRef = useRef<
+    ((f: GeneralGeomPopupFeature) => void) | undefined
+  >(undefined);
 
   // ── Map ───────────────────────────────────────────────────────────────────────
 
@@ -81,6 +104,7 @@ function MapPageInner() {
   } = useMapbox({
     trails,
     generalGeom,
+    generalCollections,
     visibleGeneralGeomCollectionIds: visibleCollectionIdSet,
     selectedTrailId,
     searchParams,
@@ -91,6 +115,43 @@ function MapPageInner() {
         next.set('trailId', String(id));
         return next;
       }),
+    // Forward to the impl ref — stable identity, no mapRef needed at hook call time.
+    onGeneralGeomClick: (f) => onGeomClickImplRef.current?.(f),
+  });
+
+  // Now that mapRef is available, keep the impl ref up to date every render.
+  useLayoutEffect(() => {
+    onGeomClickImplRef.current = (feature: GeneralGeomPopupFeature) => {
+      const map = mapRef.current;
+      if (!map) return;
+
+      closeGeomPopup();
+
+      const container = document.createElement('div');
+      container.className = 'p-2';
+      const root = createRoot(container);
+      geomPopupRootRef.current = root;
+
+      const popup = new mapboxgl.Popup({
+        closeButton: false,
+        maxWidth: '290px',
+      })
+        .setLngLat([feature.lng, feature.lat])
+        .setDOMContent(container)
+        .addTo(map);
+      popup.addClassName('geom-feature-popup');
+      geomPopupRef.current = popup;
+
+      root.render(
+        <GeneralGeomPopup feature={feature} onClose={closeGeomPopup} />
+      );
+
+      popup.on('close', () => {
+        root.unmount();
+        geomPopupRef.current = null;
+        geomPopupRootRef.current = null;
+      });
+    };
   });
 
   // Wrap mutations so the map source is updated alongside useTrails state.
@@ -145,6 +206,7 @@ function MapPageInner() {
           onStyleChange={handleStyleChange}
           onContourStrength={handleContourStrength}
           onToggleCollectionVisibility={setCollectionVisible}
+          onSaveCollectionStyle={updateCollectionStyle}
           onAddTrail={() =>
             setSearchParams((prev) => {
               const next = new URLSearchParams(prev);

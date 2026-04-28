@@ -8,6 +8,7 @@ export interface GeneralGeomRow {
   feature_collection_type: string;
   region_id: number;
   collection_visibility: 'public' | 'private' | 'shared';
+  collection_style: Record<string, unknown>;
   type: string;
   subtype: string | null;
   visibility: 'public' | 'private' | 'shared';
@@ -37,7 +38,7 @@ export async function getGeneralGeomDb(
   const { data, error } = await typedClient
     .from('general_geom_view')
     .select(
-      'id, collection_id, collection_label, feature_collection_type, region_id, collection_visibility, type, subtype, visibility, label, description, geometry_geojson, geometry_type'
+      'id, collection_id, collection_label, feature_collection_type, region_id, collection_visibility, collection_style, type, subtype, visibility, label, description, geometry_geojson, geometry_type'
     );
 
   if (error) return { data: null, error: new Error(error.message) };

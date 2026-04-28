@@ -4,6 +4,11 @@ import {
   getGeneralGeomDb,
   type GeneralGeomRow,
 } from '@/lib/db_services/general_geom/getGeneralGeomDb';
+import { updateGeneralGeomCollectionStyleDb } from '@/lib/db_services/general_geom/updateGeneralGeomCollectionStyleDb';
+import {
+  parseCollectionStyle,
+  type CollectionStyle,
+} from '@/lib/map/generalGeomStyle';
 
 type State = {
   features: GeneralGeomRow[];
@@ -16,6 +21,13 @@ export interface GeneralGeomCollectionOption {
   label: string;
   featureCollectionType: string;
   count: number;
+  /** Parsed and validated style for this collection's map rendering. */
+  style: CollectionStyle;
+  /**
+   * Unique (type, subtype) combinations found in this collection.
+   * Used to build per-value colour maps in the style editor.
+   */
+  featureRows: Array<{ type: string; subtype: string | null; label: string }>;
 }
 
 export function useGeneralGeom() {
@@ -64,20 +76,44 @@ export function useGeneralGeom() {
 
   const collections = useMemo<GeneralGeomCollectionOption[]>(() => {
     const byCollection = new Map<number, GeneralGeomCollectionOption>();
+    // key: `${collectionId}::${type}::${subtype ?? ''}` → sample label
+    const rowKeys = new Map<string, string>();
 
     for (const feature of state.features) {
-      const current = byCollection.get(feature.collection_id);
+      const cid = feature.collection_id;
+      const current = byCollection.get(cid);
       if (current) {
         current.count += 1;
-        continue;
+      } else {
+        byCollection.set(cid, {
+          id: cid,
+          label: feature.collection_label,
+          featureCollectionType: feature.feature_collection_type,
+          count: 1,
+          style: parseCollectionStyle(feature.collection_style),
+          featureRows: [],
+        });
       }
 
-      byCollection.set(feature.collection_id, {
-        id: feature.collection_id,
-        label: feature.collection_label,
-        featureCollectionType: feature.feature_collection_type,
-        count: 1,
-      });
+      const rowKey = `${cid}::${feature.type}::${feature.subtype ?? ''}`;
+      if (!rowKeys.has(rowKey)) {
+        rowKeys.set(rowKey, feature.label);
+        byCollection.get(cid)!.featureRows.push({
+          type: feature.type,
+          subtype: feature.subtype,
+          label: feature.label,
+        });
+      }
+    }
+
+    // Sort rows: type → subtype → label
+    for (const opt of byCollection.values()) {
+      opt.featureRows.sort(
+        (a, b) =>
+          a.type.localeCompare(b.type) ||
+          (a.subtype ?? '').localeCompare(b.subtype ?? '') ||
+          a.label.localeCompare(b.label)
+      );
     }
 
     return Array.from(byCollection.values()).sort((a, b) =>
@@ -103,11 +139,43 @@ export function useGeneralGeom() {
     []
   );
 
+  const updateCollectionStyle = useCallback(
+    async (
+      collectionId: number,
+      style: CollectionStyle,
+      label?: string
+    ): Promise<Error | null> => {
+      const { error } = await updateGeneralGeomCollectionStyleDb(
+        supabase,
+        collectionId,
+        style as Record<string, unknown>,
+        label
+      );
+      if (error) return error;
+      // Optimistically update local feature state so the map re-renders
+      setState((prev) => ({
+        ...prev,
+        features: prev.features.map((f) =>
+          f.collection_id === collectionId
+            ? {
+                ...f,
+                collection_style: style as Record<string, unknown>,
+                ...(label !== undefined ? { collection_label: label } : {}),
+              }
+            : f
+        ),
+      }));
+      return null;
+    },
+    []
+  );
+
   return {
     ...state,
     collections,
     visibleCollectionIds,
     visibleCollectionIdSet,
     setCollectionVisible,
+    updateCollectionStyle,
   };
 }

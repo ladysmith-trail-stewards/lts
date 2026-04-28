@@ -34,6 +34,19 @@ import {
   GENERAL_GEOM_LINES_CONFIG,
   GENERAL_GEOM_POLYGONS_CONFIG,
 } from '@/lib/map/layers';
+import {
+  parseCollectionStyle,
+  buildLineColor,
+  buildLineWidth,
+  buildLineOpacity,
+  buildPolygonFillColor,
+  buildPolygonFillOpacity,
+  buildPolygonOutlineColor,
+  buildPointColor,
+  type StyleMap,
+} from '@/lib/map/generalGeomStyle';
+import type { GeneralGeomCollectionOption } from '@/hooks/useGeneralGeom';
+import type { GeneralGeomPopupFeature } from '@/components/GeneralGeomPopup';
 
 // Layer ID shorthand for hover/click handlers
 const TRAILS_LAYER = TRAILS_LAYER_CONFIG.id;
@@ -74,7 +87,12 @@ function generalGeomToFeature(row: GeneralGeomRow): GeoJSON.Feature {
     geometry: row.geometry_geojson,
     properties: {
       id: row.id,
+      collection_id: row.collection_id,
+      collection_label: row.collection_label,
+      type: row.type,
+      subtype: row.subtype ?? null,
       label: row.label,
+      description: row.description ?? null,
       visibility: row.visibility,
       geometry_group: group,
     },
@@ -84,8 +102,10 @@ function generalGeomToFeature(row: GeneralGeomRow): GeoJSON.Feature {
 export interface UseMapboxOptions {
   trails: Trail[];
   generalGeom: GeneralGeomRow[];
+  generalCollections: GeneralGeomCollectionOption[];
   visibleGeneralGeomCollectionIds: Set<number>;
   onTrailClick?: (trailId: number) => void;
+  onGeneralGeomClick?: (feature: GeneralGeomPopupFeature) => void;
   selectedTrailId?: number | null;
   searchParams?: URLSearchParams;
   setSearchParams?: ReturnType<typeof useSearchParams>[1];
@@ -115,8 +135,10 @@ export interface UseMapboxReturn {
 export function useMapbox({
   trails,
   generalGeom,
+  generalCollections,
   visibleGeneralGeomCollectionIds,
   onTrailClick,
+  onGeneralGeomClick,
   selectedTrailId = null,
   searchParams,
   setSearchParams,
@@ -358,6 +380,53 @@ export function useMapbox({
     [buildGeneralGeomGeoJSON]
   );
 
+  /** Build a StyleMap from the current generalCollections and apply it to the live layers. */
+  const applyGeneralGeomStyles = useCallback(
+    (map: mapboxgl.Map, collections: GeneralGeomCollectionOption[]) => {
+      if (!map.getLayer(GENERAL_GEOM_LINES_CONFIG.id)) return;
+      const styleMap: StyleMap = new Map(
+        collections.map((c) => [c.id, parseCollectionStyle(c.style)])
+      );
+      const set = (layer: string, prop: string, val: unknown) =>
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (map as unknown as any).setPaintProperty(layer, prop, val);
+
+      // Lines
+      set(GENERAL_GEOM_LINES_CONFIG.id, 'line-color', buildLineColor(styleMap));
+      set(GENERAL_GEOM_LINES_CONFIG.id, 'line-width', buildLineWidth(styleMap));
+      set(
+        GENERAL_GEOM_LINES_CONFIG.id,
+        'line-opacity',
+        buildLineOpacity(styleMap)
+      );
+
+      // Polygons
+      set(
+        GENERAL_GEOM_POLYGONS_CONFIG.id,
+        'fill-color',
+        buildPolygonFillColor(styleMap)
+      );
+      set(
+        GENERAL_GEOM_POLYGONS_CONFIG.id,
+        'fill-opacity',
+        buildPolygonFillOpacity(styleMap)
+      );
+      set(
+        GENERAL_GEOM_POLYGONS_CONFIG.id,
+        'fill-outline-color',
+        buildPolygonOutlineColor(styleMap)
+      );
+
+      // Points
+      set(
+        GENERAL_GEOM_POINTS_CONFIG.id,
+        'circle-color',
+        buildPointColor(styleMap)
+      );
+    },
+    []
+  );
+
   // ── Contour layer IDs (discovered from the loaded style) ─────────────────────
 
   const contourLineIdsRef = useRef<string[]>([]);
@@ -460,7 +529,21 @@ export function useMapbox({
     if (!mapReady || !map) return;
     addTrailsLayer(map);
     addGeneralGeomLayers(map);
-  }, [mapReady, addTrailsLayer, addGeneralGeomLayers]);
+    applyGeneralGeomStyles(map, generalCollections);
+  }, [
+    mapReady,
+    addTrailsLayer,
+    addGeneralGeomLayers,
+    applyGeneralGeomStyles,
+    generalCollections,
+  ]);
+
+  // Re-apply styles whenever collection styles change (e.g. after dialog save)
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!mapReady || !map) return;
+    applyGeneralGeomStyles(map, generalCollections);
+  }, [mapReady, generalCollections, applyGeneralGeomStyles]);
 
   const isEditingRef = useRef(false);
   useEffect(() => {
@@ -482,6 +565,10 @@ export function useMapbox({
   useEffect(() => {
     onTrailClickRef.current = onTrailClick;
   }, [onTrailClick]);
+  const onGeneralGeomClickRef = useRef(onGeneralGeomClick);
+  useEffect(() => {
+    onGeneralGeomClickRef.current = onGeneralGeomClick;
+  }, [onGeneralGeomClick]);
   const drawApiRef = useRef(drawApi);
   useEffect(() => {
     drawApiRef.current = drawApi;
@@ -514,12 +601,24 @@ export function useMapbox({
       [e.point.x + HIT_RADIUS, e.point.y + HIT_RADIUS],
     ];
 
+    const GEOM_LAYERS = [
+      GENERAL_GEOM_POINTS_CONFIG.id,
+      GENERAL_GEOM_LINES_CONFIG.id,
+      GENERAL_GEOM_POLYGONS_CONFIG.id,
+    ];
+
     const onMouseMove = (e: mapboxgl.MapMouseEvent) => {
-      if (!map.getLayer(TRAILS_LAYER)) return;
-      const features = map.queryRenderedFeatures(hitBox(e), {
-        layers: [TRAILS_LAYER],
-      });
-      if (features.length > 0 && !isEditingRef.current) {
+      const trailHit =
+        map.getLayer(TRAILS_LAYER) &&
+        map.queryRenderedFeatures(hitBox(e), { layers: [TRAILS_LAYER] })
+          .length > 0;
+      const geomHit =
+        GEOM_LAYERS.some((l) => map.getLayer(l)) &&
+        map.queryRenderedFeatures(e.point, {
+          layers: GEOM_LAYERS.filter((l) => map.getLayer(l)),
+        }).length > 0;
+
+      if ((trailHit || geomHit) && !isEditingRef.current) {
         map.getCanvas().style.cursor = 'pointer';
       } else {
         map.getCanvas().style.cursor = '';
@@ -527,18 +626,57 @@ export function useMapbox({
     };
 
     const onClick = (e: mapboxgl.MapMouseEvent) => {
-      if (!map.getLayer(TRAILS_LAYER)) return;
-      const features = map.queryRenderedFeatures(hitBox(e), {
-        layers: [TRAILS_LAYER],
-      });
-      if (features.length > 0) {
-        const id = features[0]?.properties?.id;
-        if (id != null) {
-          if (isEditingRef.current) {
-            drawApiRef.current.notifyOtherTrailClick(Number(id));
-          } else {
-            onTrailClickRef.current?.(Number(id));
+      // ── Trail click ────────────────────────────────────────────────────────
+      if (map.getLayer(TRAILS_LAYER)) {
+        const trailFeatures = map.queryRenderedFeatures(hitBox(e), {
+          layers: [TRAILS_LAYER],
+        });
+        if (trailFeatures.length > 0) {
+          const id = trailFeatures[0]?.properties?.id;
+          if (id != null) {
+            if (isEditingRef.current) {
+              drawApiRef.current.notifyOtherTrailClick(Number(id));
+            } else {
+              onTrailClickRef.current?.(Number(id));
+            }
           }
+          return; // trail takes priority
+        }
+      }
+
+      // ── General geom click ─────────────────────────────────────────────────
+      const activeLayers = GEOM_LAYERS.filter((l) => map.getLayer(l));
+      if (activeLayers.length > 0 && !isEditingRef.current) {
+        const geomFeatures = map.queryRenderedFeatures(e.point, {
+          layers: activeLayers,
+        });
+        if (geomFeatures.length > 0) {
+          const props = geomFeatures[0]?.properties ?? {};
+          // Sample terrain elevation synchronously (null when terrain not loaded)
+          const rawEl: number | null =
+            (
+              map as mapboxgl.Map & {
+                queryTerrainElevation?: (
+                  lngLat: mapboxgl.LngLatLike,
+                  options?: { exaggerated: boolean }
+                ) => number | null;
+              }
+            ).queryTerrainElevation?.(
+              { lng: e.lngLat.lng, lat: e.lngLat.lat },
+              { exaggerated: false }
+            ) ?? null;
+          onGeneralGeomClickRef.current?.({
+            id: Number(props.id),
+            collectionLabel: String(props.collection_label ?? ''),
+            label: String(props.label ?? ''),
+            type: String(props.type ?? ''),
+            subtype: props.subtype ?? null,
+            description: props.description ?? null,
+            geometryGroup: String(props.geometry_group ?? ''),
+            lat: e.lngLat.lat,
+            lng: e.lngLat.lng,
+            elevation: rawEl != null ? Math.round(rawEl) : null,
+          });
         }
       }
     };
